@@ -4,6 +4,7 @@ const pool = require('../db');
 const { authenticateJWT } = require('../middleware');
 const config = require('../config');
 const AgentRuntime = require('../core/AgentRuntime');
+const AIPathGenerator = require('../core/AIPathGenerator');
 const { writeVaultMarkdown } = require('../core/ObsidianQuestionSync');
 const llmGateway = require('../core/llm/LlmGateway');
 const agentRuntime = new AgentRuntime(pool);
@@ -1406,6 +1407,12 @@ router.get('/path/center', async (req, res, next) => {
              LIMIT 6`,
             [userId]
         ).catch(() => [[]]);
+        const pathGenerator = new AIPathGenerator();
+        const rawProfile = await pathGenerator.loadUserProfile(userId, pool);
+        const styleWeights = pathGenerator.getStyleWeights(rawProfile);
+        const dailyMinutes = pathGenerator.getDailyMinutes(rawProfile);
+        const attentionSpan = pathGenerator.getAttentionSpan(rawProfile);
+        const profileContext = pathGenerator.getProfileContext(rawProfile, styleWeights, dailyMinutes, attentionSpan);
 
         const pathNodes = points.map((point, index) => {
             const status = getPathStatus(point.mastery, point.taskDone);
@@ -1421,6 +1428,7 @@ router.get('/path/center', async (req, res, next) => {
                     : point.mastery < 60
                         ? `掌握度 ${point.mastery}% 低于安全线。`
                         : `掌握度较高，适合做迁移应用和间隔复习。`,
+                personalizedReason: `${profileContext.primaryStyleLabel}画像下，建议用${profileContext.learningStyle.join('、') || '读写'}资源推进；本节点预计 ${minutes} 分钟${minutes > attentionSpan ? '，建议拆分完成。' : '。'}`,
                 evidence: [
                     `掌握度 ${point.mastery}%`,
                     `${point.questionCount || 0} 道可练习题`,
@@ -1450,7 +1458,9 @@ router.get('/path/center', async (req, res, next) => {
             tasks,
             courses,
             notes,
+            profileContext,
             personalization: [
+                ...profileContext.evidence,
                 weakCount ? `你当前路径优先修复 ${weakCount} 个低掌握知识点。` : '当前路径以迁移应用和复习保持为主。',
                 tasks.length ? `今日已有 ${tasks.length} 个任务，其中 ${doneTasks} 个完成。` : '今日暂无路径任务，可点击生成路径。',
                 courses.length ? `系统会优先匹配低进度课程，避免只刷题不学课。` : '当前学科课程较少，可先从题目和笔记推进。'

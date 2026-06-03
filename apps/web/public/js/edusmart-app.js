@@ -5440,6 +5440,7 @@
         const tasks = center.tasks || [];
         const courses = center.courses || [];
         const summary = center.summary || {};
+        const profileContext = center.profileContext || {};
         const statusLabel = { priority: "优先修复", learning: "学习中", review: "复习迁移", done: "已完成" };
         const statusIcon = { priority: "bolt", learning: "play", review: "refresh", done: "check" };
         return `<main class="page path-page">
@@ -5449,6 +5450,12 @@
                 <div><label>学科范围</label><select data-path-subject><option value="all">全部学科</option>${subjects.map(s => `<option value="${escapeHtml(s.subject)}" ${state.data.pathSubject === s.subject ? "selected" : ""}>${escapeHtml(s.subject)} · ${s.mastery || 0}%</option>`).join("")}</select></div>
                 <div><label>学习强度</label><select data-path-intensity>${[["light","轻量"],["normal","标准"],["intense","冲刺"]].map(([key,label]) => `<option value="${key}" ${state.data.pathIntensity === key ? "selected" : ""}>${label}</option>`).join("")}</select></div>
                 <button class="btn primary" data-path-generate>${icon("route",17)}按画像重排</button>
+            </section>
+            <section class="path-control card">
+                <div><label>画像驱动依据</label><b>${escapeHtml(profileContext.primaryStyleLabel || "读写型")}</b><small>来源：${escapeHtml(profileContext.source || "student_profiles")}</small></div>
+                <div><label>每日可用时间</label><b>${escapeHtml(String(profileContext.dailyMinutes || 60))} 分钟</b><small>用于控制任务数量</small></div>
+                <div><label>专注时长</label><b>${escapeHtml(String(profileContext.attentionSpan || 30))} 分钟</b><small>超过时会建议拆分</small></div>
+                <div><label>推荐资源偏好</label><b>${escapeHtml((profileContext.learningStyle || []).join(" / ") || "reading")}</b><small>影响视频、文档、实验、练习比例</small></div>
             </section>
             <section class="major-direction-band">
                 <div class="band-copy"><span class="pill">计算机专业方向推荐</span><h2>先选方向，再让路径自己长出来</h2><p>同样是学习计算机，不同目标需要完全不同的知识顺序。系统会按职业目标、薄弱知识点和每天可用时间推荐路线。</p></div>
@@ -5471,7 +5478,7 @@
                     <div class="path-timeline">${nodes.map((node, i) => `<div class="path-node ${node.status}" style="--color:${node.status === "priority" ? "#ee4f65" : node.status === "learning" ? "#2f6bff" : node.status === "done" ? "#18b87a" : "#7c4dff"}">
                         <span class="node">${i + 1}</span>
                         <span class="task-icon">${icon(statusIcon[node.status] || "book",23)}</span>
-                        <div class="path-node-body"><div><b>${escapeHtml(node.title)}</b><small>${escapeHtml(node.phase)} · ${escapeHtml(node.subject)} · ${node.estimateMinutes} 分钟</small></div><p>${escapeHtml(node.reason)}</p><div class="tag-row">${(node.evidence || []).map(e => `<span class="pill">${escapeHtml(e)}</span>`).join("")}</div></div>
+                        <div class="path-node-body"><div><b>${escapeHtml(node.title)}</b><small>${escapeHtml(node.phase)} · ${escapeHtml(node.subject)} · ${node.estimateMinutes} 分钟</small></div><p>${escapeHtml(node.reason)}</p>${node.personalizedReason ? `<p>${escapeHtml(node.personalizedReason)}</p>` : ""}<div class="tag-row">${(node.evidence || []).map(e => `<span class="pill">${escapeHtml(e)}</span>`).join("")}</div></div>
                         <div class="path-node-score"><b>${node.mastery}%</b><div class="bar"><span style="width:${node.mastery || 0}%"></span></div><small>${escapeHtml(statusLabel[node.status] || "待学习")}</small></div>
                         <div class="path-node-actions"><button class="btn tiny primary" data-path-start="${node.id}">${icon("play",14)}开始</button><button class="btn tiny ghost" data-run-closed-loop="${escapeHtml(node.title)}">闭环</button></div>
                     </div>`).join("") || `<div class="empty-state compact"><p>暂无路径节点，点击生成路径。</p></div>`}</div>
@@ -12579,4 +12586,3 @@ zhaoliu,赵六"></textarea>
         };
     }
 })();
-

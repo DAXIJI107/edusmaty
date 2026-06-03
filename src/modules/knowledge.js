@@ -14,7 +14,8 @@ router.get('/', async (req, res) => {
             params.push(subject);
         }
         const [rows] = await pool.query(
-            `SELECT id, name, description, difficulty, type, subject, content_url, bvid, video_platform
+            `SELECT id, name, description, difficulty, type, subject,
+                    NULL AS content_url, NULL AS bvid, NULL AS video_platform
              FROM knowledge_nodes
              ${whereClause}
              ORDER BY id`
@@ -36,7 +37,8 @@ router.get('/:id', async (req, res) => {
     try {
         await ensureKnowledgeData(pool);
         const [rows] = await pool.query(
-            `SELECT id, name, description, difficulty, type, subject, content_url, bvid, video_platform
+            `SELECT id, name, description, difficulty, type, subject,
+                    NULL AS content_url, NULL AS bvid, NULL AS video_platform
              FROM knowledge_nodes
              WHERE id = ? AND is_active = 1`,
             [id]

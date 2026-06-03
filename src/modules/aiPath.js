@@ -23,19 +23,30 @@ async function ensureLearningListTable() {
 
 async function loadQuestionSet(subject, nodeId) {
   const params = [];
-  let whereClause = 'WHERE (is_active = 1 OR is_active IS NULL)';
+  let whereClause = 'WHERE (q.is_active = 1 OR q.is_active IS NULL)';
   if (nodeId) {
-    whereClause += ' AND node_id = ?';
+    whereClause += ' AND q.knowledge_id = ?';
     params.push(nodeId);
   }
   if (subject && subject !== 'all') {
-    whereClause += ' AND subject = ?';
+    whereClause += ' AND kp.subject = ?';
     params.push(subject);
   }
 
   let [rows] = await pool.query(
-    `SELECT id, content, type, options, difficulty, score, node_id
-     FROM questions
+    `SELECT q.id,
+            q.question AS content,
+            CASE
+              WHEN JSON_LENGTH(q.options_json) = 2 THEN 'judge'
+              WHEN JSON_LENGTH(q.options_json) > 0 THEN 'single'
+              ELSE 'essay'
+            END AS type,
+            q.options_json AS options,
+            q.difficulty,
+            5 AS score,
+            q.knowledge_id AS node_id
+     FROM questions q
+     LEFT JOIN knowledge_points kp ON kp.id = q.knowledge_id
      ${whereClause}
      ORDER BY RAND()
      LIMIT 5`,
@@ -44,15 +55,48 @@ async function loadQuestionSet(subject, nodeId) {
 
   if (rows.length < 5) {
     const [fallback] = await pool.query(
-      `SELECT id, content, type, options, difficulty, score, node_id
-       FROM questions
-       WHERE (is_active = 1 OR is_active IS NULL)
-       ${subject && subject !== 'all' ? 'AND subject = ?' : ''}
+      `SELECT q.id,
+              q.question AS content,
+              CASE
+                WHEN JSON_LENGTH(q.options_json) = 2 THEN 'judge'
+                WHEN JSON_LENGTH(q.options_json) > 0 THEN 'single'
+                ELSE 'essay'
+              END AS type,
+              q.options_json AS options,
+              q.difficulty,
+              5 AS score,
+              q.knowledge_id AS node_id
+       FROM questions q
+       LEFT JOIN knowledge_points kp ON kp.id = q.knowledge_id
+       WHERE (q.is_active = 1 OR q.is_active IS NULL)
+       ${subject && subject !== 'all' ? 'AND kp.subject = ?' : ''}
        ORDER BY RAND()
        LIMIT ?`,
       subject && subject !== 'all' ? [subject, 5 - rows.length] : [5 - rows.length]
     );
     rows = rows.concat(fallback);
+  }
+
+  if (rows.length < 5) {
+    const [anyRows] = await pool.query(
+      `SELECT q.id,
+              q.question AS content,
+              CASE
+                WHEN JSON_LENGTH(q.options_json) = 2 THEN 'judge'
+                WHEN JSON_LENGTH(q.options_json) > 0 THEN 'single'
+                ELSE 'essay'
+              END AS type,
+              q.options_json AS options,
+              q.difficulty,
+              5 AS score,
+              q.knowledge_id AS node_id
+       FROM questions q
+       WHERE (q.is_active = 1 OR q.is_active IS NULL)
+       ORDER BY RAND()
+       LIMIT ?`,
+      [5 - rows.length]
+    );
+    rows = rows.concat(anyRows);
   }
 
   return rows.slice(0, 5).map(row => ({
@@ -155,6 +199,7 @@ router.post('/learning-path', authenticateJWT, async (req, res) => {
         steps,
         links: result.links || [],
         subjects: result.subjects || [],
+        profileContext: result.profileContext || {},
         strategy: result.strategy || {},
         stats: {
           total,
@@ -222,7 +267,7 @@ router.get('/learning-list', authenticateJWT, async (req, res) => {
     await ensureLearningListTable();
     const [rows] = await pool.query(
       `SELECT ll.id, ll.knowledge_node_id, ll.card, ll.status, ll.created_at,
-              kn.node_name, kn.subject, kn.difficulty
+              kn.name AS node_name, kn.subject, kn.difficulty
        FROM learning_list ll
        LEFT JOIN knowledge_nodes kn ON ll.knowledge_node_id = kn.id
        WHERE ll.user_id = ?

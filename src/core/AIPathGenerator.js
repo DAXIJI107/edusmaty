@@ -67,11 +67,35 @@ class AIPathGenerator {
      * 从画像中提取学习风格权重
      */
     getStyleWeights(profile) {
-        const style = (profile.learningStyle || profile.learning_style || '').toLowerCase();
+        const style = [
+            profile.learningStyle,
+            profile.learning_style,
+            profile.cognitiveStyle?.type,
+            profile.q_learn_prefer
+        ].filter(Boolean).join(' ').toLowerCase();
         // 尝试映射：visual/auditory/reading/kinesthetic
         for (const [key, weights] of Object.entries(VARK_RESOURCE_WEIGHTS)) {
             if (style.includes(key)) return weights;
         }
+        const preferences = profile.multimodalPreferences || profile.multimodal_preferences || {};
+        const preferenceMap = {
+            '视觉': 'visual',
+            visual: 'visual',
+            '听觉': 'auditory',
+            auditory: 'auditory',
+            '阅读': 'reading',
+            reading: 'reading',
+            readwrite: 'reading',
+            '触觉': 'kinesthetic',
+            '互动': 'kinesthetic',
+            kinesthetic: 'kinesthetic',
+            experiment: 'kinesthetic'
+        };
+        const preferred = Object.entries(preferences)
+            .map(([key, value]) => ({ key: preferenceMap[key] || key, value: Number(value || 0) }))
+            .filter(item => VARK_RESOURCE_WEIGHTS[item.key])
+            .sort((a, b) => b.value - a.value)[0];
+        if (preferred) return VARK_RESOURCE_WEIGHTS[preferred.key];
         // 回退：检查概览风格字段
         const overview = profile.overview || profile.style || {};
         const mapped = String(overview.primaryStyle || overview.preferredStyle || '').toLowerCase();
@@ -101,10 +125,41 @@ class AIPathGenerator {
     getAttentionSpan(profile) {
         if (profile.attentionSpanMinutes) return Number(profile.attentionSpanMinutes);
         if (profile.attention_span_minutes) return Number(profile.attention_span_minutes);
+        if (profile.learningPatterns?.['注意力持续时间']) return Number(profile.learningPatterns['注意力持续时间']);
+        if (profile.learning_patterns?.['注意力持续时间']) return Number(profile.learning_patterns['注意力持续时间']);
         const habits = profile.habits || profile.learning_habits || {};
         if (habits.attentionSpan) return Number(habits.attentionSpan);
         if (habits.attention_span) return Number(habits.attention_span);
         return 30; // 默认 30 分钟
+    }
+
+    getProfileContext(profile, styleWeights, dailyMinutes, attentionSpan) {
+        const styleLabels = {
+            visual: '视觉型',
+            auditory: '听觉型',
+            reading: '读写型',
+            kinesthetic: '实践型'
+        };
+        const primaryStyle = Object.entries(VARK_RESOURCE_WEIGHTS)
+            .find(([, weights]) => weights === styleWeights)?.[0] || 'reading';
+        const preferredResources = Object.entries(styleWeights || DEFAULT_WEIGHTS)
+            .filter(([, weight]) => weight >= 1.3)
+            .map(([key]) => key);
+        return {
+            primaryStyle,
+            primaryStyleLabel: styleLabels[primaryStyle] || '读写型',
+            learningStyle: preferredResources,
+            dailyMinutes,
+            attentionSpan,
+            suggestedPerDay: null,
+            estimatedDays: null,
+            evidence: [
+                `学习风格：${styleLabels[primaryStyle] || '读写型'}`,
+                `每日可用：约 ${dailyMinutes} 分钟`,
+                `专注时长：约 ${attentionSpan} 分钟`
+            ],
+            source: profile.updatedAt || profile.updated_at ? 'student_profiles' : 'default'
+        };
     }
 
     /**
@@ -116,6 +171,7 @@ class AIPathGenerator {
         const styleWeights = this.getStyleWeights(profile);
         const dailyMinutes = this.getDailyMinutes(profile);
         const attentionSpan = this.getAttentionSpan(profile);
+        const profileContext = this.getProfileContext(profile, styleWeights, dailyMinutes, attentionSpan);
 
         const params = [];
         let whereClause = '';
@@ -244,7 +300,7 @@ class AIPathGenerator {
             // 专注时长分段：如果节点预估时间超过专注时长，拆分提示
             const estimateMinutes = DIFFICULTY_MINUTES[node.difficulty];
             const needsBreak = estimateMinutes > attentionSpan;
-            return {
+            const step = {
                 id: node.id,
                 name: node.name,
                 description: node.description || '',
@@ -262,6 +318,8 @@ class AIPathGenerator {
                 sessionIndex: Math.floor(index / suggestedPerDay) + 1,
                 resources: this.buildResources(node, index, styleWeights, profile)
             };
+            step.personalizedReason = `${profileContext.primaryStyleLabel}画像优先匹配${step.resources.filter(item => item.isPreferred).map(item => item.type).join('、') || '基础'}资源；按 ${attentionSpan} 分钟专注时长${needsBreak ? '建议拆分学习。' : '可一次完成。'}`;
+            return step;
         });
 
         // 从 prereqMap 构建图谱边
@@ -285,9 +343,7 @@ class AIPathGenerator {
             links,
             subjects,
             profileContext: {
-                learningStyle: Object.keys(styleWeights).filter(k => styleWeights[k] >= 1.3),
-                dailyMinutes,
-                attentionSpan,
+                ...profileContext,
                 suggestedPerDay,
                 estimatedDays
             },
