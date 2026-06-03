@@ -1,0 +1,23 @@
+node_modules/
+.env
+*.log
+
+# Runtime/browser automation output
+.codex-browser-profile*/
+.codex-screenshot-profile/
+.demo-chrome-profile/
+.video-frames/
+test-results/
+demo-walkthrough/
+
+# Local IDE metadata
+.idea/
+.vs/
+.codewhale/
+.deepseek/
+
+# Large local knowledge/runtime bundles
+Python/
+obsidian-vault/
+rag_software_engineering_bundle/
+

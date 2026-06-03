@@ -1,0 +1,14 @@
+node_modules/
+Python/
+obsidian-vault/
+rag_software_engineering_bundle/
+demo-walkthrough/
+.codewhale/
+.deepseek/
+.idea/
+.vs/
+*.log
+*.tmp
+*.webm
+*.png
+

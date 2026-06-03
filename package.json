@@ -1,0 +1,45 @@
+{
+  "name": "edusmart-rebuild",
+  "version": "2.0.0",
+  "description": "EduSmart 智能化学习平台重构版，前后端与旧项目独立运行。",
+  "main": "src/server/index.js",
+  "scripts": {
+    "start": "node src/server",
+    "dev": "nodemon src/server",
+    "check": "node --check server.js && node --check src/server/app.js && node --check src/modules/auth.js && node --check apps/web/public/js/edusmart-app.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:migrate:status": "node scripts/migrate.js status",
+    "db:migrate:down": "node scripts/migrate.js down",
+    "db:rebuild": "node scripts/rebuild-database.js",
+    "db:import-courses": "node scripts/import-real-course-resources.js",
+    "rag:import-bundle": "node scripts/import-rag-bundle.js",
+    "obsidian:sync": "node scripts/sync-obsidian-questions.js",
+    "obsidian:preview": "node scripts/sync-obsidian-questions.js --dry-run",
+    "obsidian:sync-rag": "node scripts/sync-obsidian-rag.js"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^9.8.0",
+    "bcryptjs": "^3.0.2",
+    "body-parser": "^2.2.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.14.1",
+    "node-cron": "^3.0.3",
+    "querystring": "^0.2.1",
+    "url": "^0.11.4",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "axios": "^1.16.1",
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "education",
+    "ai-learning",
+    "edusmart"
+  ],
+  "license": "ISC"
+}
