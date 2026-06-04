@@ -2368,6 +2368,13 @@ button {
     justify-content: space-between;
 }
 
+.login-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .login-story-nav a {
     color: #1f3b73;
     font-weight: 900;
@@ -2736,6 +2743,17 @@ button {
     color: var(--muted);
 }
 
+.auth-switch {
+    margin-top: 12px !important;
+    font-size: 13px;
+}
+
+.auth-switch a {
+    color: #2f6bff;
+    font-weight: 900;
+    text-decoration: none;
+}
+
 .login-modal-close {
     position: absolute;
     top: 14px;
@@ -2937,6 +2955,102 @@ button {
     box-shadow: 0 28px 72px rgba(16, 26, 55, 0.22);
     backdrop-filter: blur(18px);
 }
+
+.onboarding-modal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(16, 26, 55, 0.28);
+    backdrop-filter: blur(18px);
+}
+
+.onboarding-modal-card {
+    position: relative;
+    width: min(920px, 100%);
+    max-height: min(760px, 90vh);
+    overflow: auto;
+    display: grid;
+    grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr);
+    gap: 18px;
+    padding: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(47, 107, 255, 0.1), rgba(24, 184, 122, 0.08)), rgba(255, 255, 255, 0.96);
+    box-shadow: 0 34px 90px rgba(7, 18, 38, 0.28);
+}
+
+.onboarding-copy h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 10px;
+}
+
+.onboarding-copy p,
+.onboarding-steps p {
+    color: #66708a;
+}
+
+.onboarding-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.onboarding-steps article {
+    position: relative;
+    min-height: 188px;
+    padding: 16px;
+    border: 1px solid rgba(226, 232, 246, 0.9);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.82);
+}
+
+.onboarding-step-index {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    color: #2f6bff;
+    background: rgba(47, 107, 255, 0.1);
+    font-weight: 900;
+}
+
+.onboarding-steps b {
+    display: block;
+    margin-top: 12px;
+}
+
+.onboarding-dismiss {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    color: #66708a;
+    background: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+}
+
+.onboarding-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 4px;
+}
+
 .modal-card-legacy {
     width: min(720px, 94vw);
     max-height: 88vh;
@@ -20125,4 +20239,564 @@ button {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
 }
+
+@media (max-width: 860px) {
+    .onboarding-modal-card,
+    .onboarding-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .onboarding-modal-card {
+        padding: 22px;
+    }
+
+    .onboarding-footer {
+        flex-direction: column-reverse;
+    }
+}
 /* === End Vue 3 Styles === */
+
+/* ══════════════════════════════════════════════════════════════
+   Apple-inspired page polish: account, knowledge base, path
+   ══════════════════════════════════════════════════════════════ */
+.account-page-v2,
+.vault-page.rag-page,
+.path-page {
+    width: min(100%, 1500px);
+    margin: 0 auto;
+    padding-inline: clamp(22px, 4vw, 64px);
+    animation: pageFloatIn 0.48s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pageFloatIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.account-page-v2 .card,
+.vault-page.rag-page .card,
+.path-page .card,
+.account-page-v2 .stat-card,
+.account-page-v2 .course-card,
+.account-page-v2 .note-card,
+.vault-page.rag-page .agent-card,
+.path-page .path-proof-card,
+.path-page .path-json-card,
+.path-page .major-direction-band,
+.path-page .major-track {
+    border: 1px solid rgba(218, 225, 240, 0.82);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.92) inset,
+        0 18px 50px rgba(31, 45, 86, 0.08);
+    backdrop-filter: blur(24px) saturate(1.25);
+}
+
+.account-page-v2 .card:hover,
+.vault-page.rag-page .card:hover,
+.path-page .card:hover,
+.account-page-v2 .stat-card:hover,
+.account-page-v2 .course-card:hover,
+.account-page-v2 .note-card:hover,
+.vault-page.rag-page .agent-card:hover,
+.path-page .major-track:hover {
+    transform: translateY(-2px);
+    border-color: rgba(47, 107, 255, 0.2);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.95) inset,
+        0 24px 62px rgba(31, 45, 86, 0.12);
+}
+
+.account-page-v2 .btn,
+.vault-page.rag-page .btn,
+.path-page .btn,
+.vault-page.rag-page .btn-violet,
+.vault-page.rag-page .btn-teal,
+.vault-page.rag-page .btn-violet-outline {
+    border-radius: 12px;
+    transition:
+        transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+        box-shadow 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.account-page-v2 .btn:hover,
+.vault-page.rag-page .btn:hover,
+.path-page .btn:hover,
+.vault-page.rag-page .btn-violet:hover,
+.vault-page.rag-page .btn-teal:hover,
+.vault-page.rag-page .btn-violet-outline:hover {
+    transform: translateY(-1px) scale(1.01);
+}
+
+.account-hero-v2 {
+    position: relative;
+    overflow: hidden;
+    min-height: 190px;
+    border-radius: 26px;
+    background:
+        radial-gradient(circle at 10% 20%, rgba(47, 107, 255, 0.17), transparent 22rem),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(240, 245, 255, 0.84));
+    border-color: rgba(203, 215, 242, 0.9);
+}
+
+.account-hero-v2::after {
+    content: "";
+    position: absolute;
+    inset: auto -80px -120px auto;
+    width: 340px;
+    height: 260px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(95, 108, 255, 0.18), transparent 68%);
+    pointer-events: none;
+}
+
+.avatar-xl {
+    width: 108px;
+    height: 108px;
+    border-radius: 28px;
+    font-size: 44px;
+    box-shadow:
+        0 20px 42px rgba(47, 107, 255, 0.26),
+        0 1px 0 rgba(255, 255, 255, 0.42) inset;
+}
+
+.hero-name-row h1 {
+    font-size: clamp(30px, 4vw, 42px);
+    letter-spacing: 0;
+}
+
+.stage-badge,
+.account-page-v2 .pill,
+.vault-page.rag-page .pill,
+.path-page .pill {
+    border-radius: 999px;
+    border: 1px solid rgba(218, 225, 240, 0.78);
+    background: rgba(245, 248, 255, 0.86);
+    color: #2f5eea;
+    font-weight: 800;
+}
+
+.hero-actions-v2 {
+    position: relative;
+    z-index: 1;
+    min-width: 172px;
+}
+
+.account-tabs {
+    position: sticky;
+    top: 70px;
+    z-index: 12;
+    padding: 6px;
+    border: 1px solid rgba(218, 225, 240, 0.78);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.74);
+    backdrop-filter: blur(22px) saturate(1.2);
+    box-shadow: 0 14px 36px rgba(31, 45, 86, 0.07);
+}
+
+.account-tab {
+    border-radius: 13px;
+}
+
+.account-tab.active {
+    background: linear-gradient(180deg, #fff, #f7f9ff);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.95) inset,
+        0 10px 24px rgba(47, 107, 255, 0.11);
+}
+
+.account-tab-content > .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    align-items: start;
+}
+
+.dash-stats-row {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.dash-main {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.dash-side {
+    align-self: start;
+}
+
+.account-page-v2 .stat-card {
+    min-height: 108px;
+    align-items: flex-start;
+    padding: 20px;
+    border-radius: 18px;
+}
+
+.account-page-v2 .stat-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #eef4ff, #f5f7ff);
+    font-size: 22px;
+}
+
+.account-page-v2 .stat-card b {
+    font-size: 26px;
+}
+
+.subject-bar-row {
+    grid-template-columns: minmax(118px, 0.48fr) minmax(130px, 1fr) 52px;
+}
+
+.bar,
+.bar-wrap .bar,
+.course-progress .bar {
+    height: 9px;
+    border-radius: 999px;
+    background: rgba(226, 232, 246, 0.82);
+}
+
+.bar span,
+.bar-wrap .bar span,
+.course-progress .bar span {
+    border-radius: 999px;
+}
+
+.account-page-v2 .activity-item,
+.account-page-v2 .list-row,
+.vault-page.rag-page .list-row,
+.path-page .list-row {
+    border-radius: 14px;
+    transition:
+        transform 0.18s ease,
+        background 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.account-page-v2 .activity-item:hover,
+.account-page-v2 .list-row:hover,
+.vault-page.rag-page .list-row:hover,
+.path-page .list-row:hover {
+    transform: translateX(3px);
+    background: rgba(246, 248, 255, 0.9);
+    box-shadow: 0 10px 26px rgba(31, 45, 86, 0.07);
+}
+
+.course-grid,
+.notes-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.course-card,
+.note-card {
+    border-radius: 18px;
+}
+
+.vault-page.rag-page {
+    display: grid;
+    gap: 24px;
+}
+
+.vault-page.rag-page .vault-hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 230px;
+    display: grid;
+    align-content: center;
+    max-width: none;
+    padding: clamp(34px, 5vw, 58px);
+    border: 1px solid rgba(203, 215, 242, 0.9);
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at 86% 14%, rgba(22, 179, 148, 0.14), transparent 20rem),
+        radial-gradient(circle at 14% 14%, rgba(47, 107, 255, 0.16), transparent 24rem),
+        rgba(255, 255, 255, 0.84);
+    box-shadow: 0 22px 60px rgba(31, 45, 86, 0.09);
+    backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.vault-page.rag-page .vault-hero h1,
+.path-page .hero h1 {
+    font-size: clamp(34px, 4.4vw, 48px);
+    letter-spacing: 0;
+}
+
+.vault-page.rag-page .vault-hero p,
+.path-page .hero p {
+    max-width: 780px;
+    color: #64708b;
+    line-height: 1.8;
+}
+
+.vault-hero-actions {
+    gap: 12px;
+}
+
+.vault-page.rag-page .agent-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.vault-page.rag-page .agent-card {
+    min-height: 138px;
+    border-radius: 20px;
+    padding: 24px;
+}
+
+.vault-page.rag-page .agent-card-value {
+    font-size: 38px;
+    letter-spacing: 0;
+}
+
+.vault-page.rag-page .path-control,
+.path-page .path-control {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.8fr) auto;
+    align-items: end;
+    gap: 16px;
+    padding: 20px;
+    border-radius: 22px;
+}
+
+.path-page .path-control:nth-of-type(3) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+}
+
+.vault-page.rag-page .path-workbench,
+.path-page .path-workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 22px;
+    align-items: start;
+}
+
+.vault-page.rag-page .path-main,
+.path-page .path-main {
+    min-width: 0;
+}
+
+.vault-page.rag-page .grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vault-page.rag-page .grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.path-page .hero-row {
+    grid-template-columns: minmax(0, 1fr) minmax(520px, 0.9fr);
+    align-items: stretch;
+    padding: clamp(28px, 4vw, 48px);
+    border: 1px solid rgba(203, 215, 242, 0.84);
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at 78% 0%, rgba(139, 92, 246, 0.14), transparent 22rem),
+        radial-gradient(circle at 6% 18%, rgba(47, 107, 255, 0.14), transparent 24rem),
+        rgba(255, 255, 255, 0.82);
+    box-shadow: 0 22px 60px rgba(31, 45, 86, 0.09);
+    backdrop-filter: blur(24px) saturate(1.22);
+}
+
+.path-page .metric-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.path-page .metric-card {
+    min-height: 128px;
+    border-radius: 20px;
+}
+
+.path-proof-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1fr);
+    gap: 22px;
+    align-items: stretch;
+}
+
+.path-proof-card,
+.path-json-card,
+.major-direction-band {
+    border-radius: 22px;
+    padding: 26px;
+}
+
+.path-json-card pre {
+    max-height: 360px;
+    border-radius: 16px;
+    background: #0d1b2f;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.major-direction-band {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.3fr);
+    gap: 22px;
+    align-items: center;
+}
+
+.major-track-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.major-track {
+    min-height: 152px;
+    border-radius: 18px;
+    text-align: left;
+}
+
+.path-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.path-kpis .card {
+    min-height: 112px;
+    display: grid;
+    align-content: center;
+    border-radius: 20px;
+}
+
+.path-kpis .card b {
+    font-size: 32px;
+    letter-spacing: 0;
+}
+
+.path-timeline {
+    display: grid;
+    gap: 14px;
+}
+
+.path-page .path-node {
+    display: grid;
+    grid-template-columns: 34px 48px minmax(0, 1fr) 130px auto;
+    align-items: center;
+    gap: 14px;
+    margin: 0;
+    padding: 18px;
+    border: 1px solid rgba(218, 225, 240, 0.78);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 10px 30px rgba(31, 45, 86, 0.06);
+    transition:
+        transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.path-page .path-node:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--color) 30%, #dbe4f6);
+    box-shadow: 0 18px 46px rgba(31, 45, 86, 0.1);
+}
+
+.path-page .path-node .node {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--color);
+    font-weight: 900;
+}
+
+.path-page .path-node-body p {
+    margin: 8px 0 0;
+    color: #66708a;
+    line-height: 1.6;
+}
+
+.path-node-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+@media (max-width: 1180px) {
+    .account-tab-content > .dashboard-grid,
+    .vault-page.rag-page .path-workbench,
+    .path-page .path-workbench,
+    .path-proof-panel,
+    .major-direction-band,
+    .path-page .hero-row {
+        grid-template-columns: 1fr;
+    }
+
+    .dash-stats-row,
+    .vault-page.rag-page .agent-cards,
+    .path-kpis,
+    .major-track-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .path-page .path-node {
+        grid-template-columns: 34px 48px minmax(0, 1fr);
+    }
+
+    .path-node-score,
+    .path-node-actions {
+        grid-column: 3;
+    }
+}
+
+@media (max-width: 760px) {
+    .account-page-v2,
+    .vault-page.rag-page,
+    .path-page {
+        padding-inline: 14px;
+    }
+
+    .account-hero-v2 {
+        grid-template-columns: 1fr;
+        text-align: left;
+        padding: 24px;
+    }
+
+    .hero-actions-v2 {
+        width: 100%;
+    }
+
+    .dash-stats-row,
+    .vault-page.rag-page .agent-cards,
+    .path-kpis,
+    .major-track-grid,
+    .path-page .metric-row,
+    .vault-page.rag-page .grid-2,
+    .vault-page.rag-page .path-control,
+    .path-page .path-control,
+    .path-page .path-control:nth-of-type(3) {
+        grid-template-columns: 1fr;
+    }
+
+    .account-tabs {
+        top: 62px;
+    }
+
+    .path-page .path-node {
+        grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .path-page .path-node .task-icon,
+    .path-node-score,
+    .path-node-actions {
+        grid-column: 2;
+    }
+
+    .path-node-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}

@@ -145,6 +145,8 @@
             diagnosticMode: "",
             diagnosticStep: 0,
             diagnosticAnswers: {},
+            quickDiagnosticResult: null,
+            questionnaireDiagnosticResult: null,
             diagnosticResult: null,
             diagnosticQuestionnaire: null,
             diagnosticLoading: false,
@@ -285,6 +287,83 @@
         } catch {
             return null;
         }
+    }
+
+    function shouldShowOnboarding() {
+        return isOnboardingRequired() && state.view === "home";
+    }
+
+    function completeOnboarding() {
+        if (state.user?.username) {
+            localStorage.setItem(`edusmart_onboarding_done_${state.user.username}`, "1");
+        }
+        state.user = { ...state.user, isNewUser: false };
+        localStorage.setItem("edusmart_user", JSON.stringify(state.user));
+    }
+
+    function onboardingProgressKey() {
+        return `edusmart_onboarding_progress_${state.user?.username || "user"}`;
+    }
+
+    function onboardingProgress() {
+        try {
+            return JSON.parse(localStorage.getItem(onboardingProgressKey())) || {};
+        } catch {
+            return {};
+        }
+    }
+
+    function updateOnboardingProgress(patch) {
+        const next = { ...onboardingProgress(), ...patch };
+        next.diagnosticDone = Boolean(next.quickDone && next.questionnaireDone && next.subjectDone);
+        localStorage.setItem(onboardingProgressKey(), JSON.stringify(next));
+        if (next.diagnosticDone && next.pathDone) completeOnboarding();
+        return next;
+    }
+
+    function isOnboardingRequired() {
+        if (!state.user?.isNewUser) return false;
+        return !localStorage.getItem(`edusmart_onboarding_done_${state.user.username || "user"}`);
+    }
+
+    function onboardingAllowedViews() {
+        const progress = onboardingProgress();
+        const diagnosticViews = [
+            "home",
+            "diagnostic",
+            "diagnosticText",
+            "diagnosticCat",
+            "diagnosticVark",
+            "diagnosticReport"
+        ];
+        if (!progress.diagnosticDone) return diagnosticViews;
+        return [
+            ...diagnosticViews,
+            "profile",
+            "profileCognitive",
+            "profileKnowledge",
+            "profileMisconceptions",
+            "path",
+            "studyPlan"
+        ];
+    }
+
+    function onboardingBlockedMessage() {
+        const progress = onboardingProgress();
+        if (!progress.quickDone) return "请先完成快速文本诊断，再继续结构化问卷和学科测试。";
+        if (!progress.questionnaireDone) return "请继续完成结构化问卷诊断，之后再进行一门学科测试。";
+        if (!progress.subjectDone) return "请完成一门学科测试诊断，三段诊断完成后才会生成画像。";
+        return progress.diagnosticDone
+            ? "请先完成个性化学习路径匹配，再进入其他功能。"
+            : "请先完成智能诊断，生成个人画像后再进入其他功能。";
+    }
+
+    function guardOnboardingView(view, showMessage = true) {
+        const target = normalizeTargetView(view);
+        if (!isOnboardingRequired()) return target;
+        if (onboardingAllowedViews().includes(target)) return target;
+        if (showMessage) toast(onboardingBlockedMessage());
+        return "home";
     }
 
     function routeToView(pathname) {
@@ -591,14 +670,20 @@
         if (state.data._skipDiagnosticReload) return null;
         if (state.data.diagnosticResult && !force) return state.data.diagnosticResult;
         const json = await request("/api/diagnostic/result");
+        if (isOnboardingRequired() && !onboardingProgress().subjectDone) {
+            state.data.diagnosticResult = null;
+            return null;
+        }
         state.data.diagnosticResult = json.data;
         return json.data;
     }
 
     async function submitQuickDiagnosis(text) {
         const json = await request("/api/diagnostic/quick", { method: "POST", body: JSON.stringify({ text }) });
-        state.data.diagnosticResult = json.data;
+        state.data.quickDiagnosticResult = json.data;
+        state.data.diagnosticResult = null;
         state.data.diagnosticMode = "text";
+        updateOnboardingProgress({ quickDone: true });
         return json.data;
     }
 
@@ -607,8 +692,10 @@
             method: "POST",
             body: JSON.stringify({ answers, freeText })
         });
-        state.data.diagnosticResult = json.data;
+        state.data.questionnaireDiagnosticResult = json.data;
+        state.data.diagnosticResult = null;
         state.data._skipDiagnosticReload = false;
+        updateOnboardingProgress({ questionnaireDone: true });
         return json.data;
     }
 
@@ -633,7 +720,9 @@
             body: JSON.stringify({ subject, answers })
         });
         state.data.diagnosticSubjectResult = json.data;
+        state.data.diagnosticResult = state.data.questionnaireDiagnosticResult || state.data.quickDiagnosticResult;
         state.data._skipDiagnosticReload = false;
+        updateOnboardingProgress({ subjectDone: true });
         return json.data;
     }
 
@@ -1472,17 +1561,17 @@
     }
 
     function setView(view) {
-        state.view = view;
+        state.view = guardOnboardingView(view);
         const route =
-            view === "codeLab"
+            state.view === "codeLab"
                 ? "/code-lab"
-                : view === "teamCode"
+                : state.view === "teamCode"
                   ? "/team-code"
-                  : view === "agentResearch"
+                  : state.view === "agentResearch"
                     ? "/agent-research"
-                    : view === "home"
+                    : state.view === "home"
                       ? "/home"
-                      : `/${view}`;
+                      : `/${state.view}`;
         history.pushState({}, "", route);
         render();
     }
@@ -1858,11 +1947,82 @@
         return `<main class="page">
             <section class="hero-row"><div class="hero"><h1>早上好，${escapeHtml(state.user.username)} 👋</h1><p>AI 驱动的个性化学习，让每一次努力都更有价值</p>
                 <div class="hero-actions"><button class="btn primary glow" data-view="studyPlan">${icon("play", 17)}进入今日学习计划</button><button class="btn ghost" data-run-closed-loop="${escapeHtml(state.data.weakPoints[0]?.title || "Node.js")}">${icon("robot", 17)}AI 生成今日闭环</button></div></div>${metricCards()}</section>
+            ${newUserOnboarding()}
             ${roleCockpit()}
             ${closedLoopPanel()}
             <section class="grid-2">${planCard()}${activityCard()}</section>
             <section class="grid-2 dashboard-lower">${`<article class="card"><div class="card-head"><h2 class="section-title">${icon("bolt", 18)}快速入口</h2></div>${quickTiles()}</article>`}${achievementCard()}</section>
         </main>`;
+    }
+
+    function newUserOnboarding() {
+        if (!shouldShowOnboarding()) return "";
+        const progress = onboardingProgress();
+        const primaryView = progress.diagnosticDone ? "path" : "diagnostic";
+        const primaryText = progress.diagnosticDone
+            ? "生成学习路径"
+            : progress.questionnaireDone
+              ? "进行学科测试"
+              : progress.quickDone
+                ? "继续问卷诊断"
+                : "开始文本诊断";
+        const steps = [
+            [
+                "pen",
+                "快速文本诊断",
+                "先收集专业、目标、薄弱点和可投入时间，不直接生成最终画像。",
+                progress.quickDone ? "已完成" : "开始填写",
+                "diagnostic"
+            ],
+            [
+                "list",
+                "结构化问卷诊断",
+                "继续校准学习习惯、认知偏好、节奏和资源偏好。",
+                progress.questionnaireDone ? "已完成" : progress.quickDone ? "继续问卷" : "文本后开放",
+                "diagnostic"
+            ],
+            [
+                "exam",
+                "一门学科测试",
+                "用真实题目校准知识掌握度，完成后才生成个人画像。",
+                progress.subjectDone ? "已完成" : progress.questionnaireDone ? "开始测试" : "问卷后开放",
+                "diagnostic"
+            ],
+            [
+                "route",
+                "路径与计划匹配",
+                "根据完整画像生成个性化路径，再拆成今日学习计划。",
+                progress.pathDone ? "已完成" : "生成路径",
+                "path"
+            ]
+        ];
+        return `<section class="onboarding-modal-layer show" aria-label="新用户学习引导" role="dialog" aria-modal="true">
+            <div class="onboarding-modal-card">
+                <button class="onboarding-dismiss" data-onboarding-dismiss aria-label="提示初始化要求">${icon("x", 16)}</button>
+                <div class="onboarding-copy">
+                    <span class="eyebrow">新用户引导</span>
+                    <h2>${icon("target", 20)}先认识你，再安排学习</h2>
+                    <p>新用户需要先完成“快速文本诊断 → 结构化问卷 → 一门学科测试”，三段证据齐全后才生成个人画像。画像生成前，其它学习模块会保持锁定。</p>
+                </div>
+                <div class="onboarding-steps">
+                    ${steps
+                        .map(
+                            ([ic, title, text, action, view], index) => `<article>
+                        <span class="onboarding-step-index">${index + 1}</span>
+                        <span class="round-icon">${icon(ic, 18)}</span>
+                        <b>${title}</b>
+                        <p>${text}</p>
+                        <button class="btn tiny ${index === 0 ? "primary" : "ghost"}" data-onboarding-go="${view}">${action}</button>
+                    </article>`
+                        )
+                        .join("")}
+                </div>
+                <div class="onboarding-footer">
+                    <button class="btn ghost" data-onboarding-dismiss>为什么锁定？</button>
+                    <button class="btn primary glow" data-onboarding-go="${primaryView}">${icon("play", 17)}${primaryText}</button>
+                </div>
+            </div>
+        </section>`;
     }
 
     function formatPlanDuration(minutes) {
@@ -3241,14 +3401,14 @@
         return `<main class="page diagnostic-page">
             <section class="diagnostic-loading-hero">
                 <div class="loading-spinner large"></div>
-                <h2>正在分析你的学习画像</h2>
-                <p>系统正在从你提供的信息中提取学习风格、能力水平和目标方向...</p>
+                <h2>正在记录本阶段诊断证据</h2>
+                <p>系统会先保存当前阶段结果，待文本、问卷和学科测试都完成后再生成最终学习画像。</p>
                 <div class="loading-steps">
                     <span class="step active">提取关键信息</span>
-                    <span class="step active">评估学习风格</span>
-                    <span class="step">分析能力水平</span>
-                    <span class="step">匹配学习路径</span>
-                    <span class="step">生成个性画像</span>
+                    <span class="step active">保存阶段证据</span>
+                    <span class="step">等待问卷校准</span>
+                    <span class="step">等待学科测试</span>
+                    <span class="step">生成最终画像</span>
                 </div>
             </section>
         </main>`;
@@ -10181,12 +10341,12 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         ];
         return `<main class="login-story-page">
             <section class="login-story-hero">
-                <nav class="login-story-nav"><div class="brand">${logo()}<span>EduSmart</span></div><a class="login-nav-button" href="#login-panel">${icon("user", 15)}登录</a></nav>
+                <nav class="login-story-nav"><div class="brand">${logo()}<span>EduSmart</span></div><div class="login-nav-actions"><a class="login-nav-button" href="#register-panel">${icon("plus", 15)}注册</a><a class="login-nav-button" href="#login-panel">${icon("user", 15)}登录</a></div></nav>
                 <div class="login-story-copy">
                     <span class="eyebrow">面向学生的 AI 学习驾驶舱</span>
                     <h1>从一次登录开始，系统先理解学生，再安排学习</h1>
                     <p>EduSmart 围绕学生的真实学习过程工作：诊断画像、课堂知识、练习结果、笔记复盘和教师反馈都会进入同一条学习证据链。</p>
-                    <div class="login-story-actions"><a class="btn primary glow" href="#login-panel">${icon("play", 17)}立即登录</a><a class="btn ghost" href="#personalized-proof">${icon("route", 17)}查看路径逻辑</a></div>
+                    <div class="login-story-actions"><a class="btn primary glow" href="#register-panel">${icon("plus", 17)}创建账号</a><a class="btn ghost" href="#login-panel">${icon("user", 17)}已有账号登录</a><a class="btn ghost" href="#personalized-proof">${icon("route", 17)}查看路径逻辑</a></div>
                 </div>
                 <div class="login-dashboard-illustration" aria-label="EduSmart 个性化学习驾驶舱插图">
                     <img class="dash-photo" src="/images/login/hero-learning-dashboard.png" alt="无脸学生学习桌面和 AI 学习驾驶舱插图">
@@ -10208,7 +10368,23 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                 <article><img src="/images/login/focused-study-plan.png" alt="无脸专注自学和学习计划插图"><h2>长线学习靠的不是一次推荐</h2><p>今日计划会从路径节点生成，练习后更新掌握度，笔记和费曼复述进入长期记忆，下一次路径会按新证据重排。</p></article>
                 <article><img src="/images/login/teacher-guidance-board.png" alt="无脸课堂白板和教师指导插图"><h2>教师能看到干预原因</h2><p>教师端不是只看分数，而是看到薄弱知识点、风险状态、画像摘要和推荐干预动作。</p></article>
             </section>
-            <section class="login-cta-strip"><h2>准备进入你的学习驾驶舱</h2><p>登录后查看画像、今日计划、个性化路径和知识库证据。</p><a class="btn primary glow" href="#login-panel">${icon("user", 17)}打开登录框</a></section>
+            <section class="login-cta-strip"><h2>准备进入你的学习驾驶舱</h2><p>注册后会先引导你完成诊断，再生成画像、个性化路径和学习计划。</p><a class="btn primary glow" href="#register-panel">${icon("plus", 17)}注册并开始诊断</a></section>
+            <section class="login-modal" id="register-panel" aria-label="注册弹层">
+                <a class="login-modal-backdrop" href="#" aria-label="关闭注册框"></a>
+                <form class="login-card auth-form login-modal-card" id="register-form">
+                    <a class="login-modal-close" href="#" aria-label="关闭">×</a>
+                    <span class="eyebrow">New learner</span>
+                    <h2 class="section-title">${icon("plus", 20)}注册 EduSmart</h2>
+                    <p>注册后将进入首页，并提示你完成智能诊断、生成画像和个性化学习路径。</p>
+                    <label>用户名<input name="username" autocomplete="username" placeholder="例如：student2026"></label>
+                    <label>昵称<input name="nickname" autocomplete="nickname" placeholder="例如：小明同学"></label>
+                    <label>邮箱<input name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+                    <label>密码<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="至少 6 位"></label>
+                    <button class="btn primary glow" type="submit">${icon("play", 17)}注册并进入学习平台</button>
+                    <div class="message" id="register-message"></div>
+                    <p class="auth-switch">已有账号？<a href="#login-panel">返回登录</a></p>
+                </form>
+            </section>
             <section class="login-modal" id="login-panel" aria-label="登录弹层">
                 <a class="login-modal-backdrop" href="#" aria-label="关闭登录框"></a>
                 <form class="login-card auth-form login-modal-card" id="login-form">
@@ -10220,6 +10396,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     <label>密码<input name="password" type="password" value="123456" autocomplete="current-password"></label>
                     <button class="btn primary glow" type="submit">${icon("play", 17)}进入学习平台</button>
                     <div class="message" id="login-message"></div>
+                    <p class="auth-switch">还没有账号？<a href="#register-panel">立即注册</a></p>
                 </form>
             </section>
         </main>`;
@@ -10358,7 +10535,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         });
 
         // 诊断模式选择
-        document.querySelectorAll("[data-diagnostic-start]").forEach(btn => {
+        document.querySelectorAll("[data-diagnostic-start-legacy]").forEach(btn => {
             btn.addEventListener("click", () => {
                 const mode = btn.dataset.diagnosticStart;
                 state.data.diagnosticMode = mode;
@@ -10378,7 +10555,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         });
 
         // 返回诊断模式选择
-        document.querySelectorAll("[data-diagnostic-switch-mode]").forEach(btn => {
+        document.querySelectorAll("[data-diagnostic-switch-mode-legacy]").forEach(btn => {
             btn.addEventListener("click", () => {
                 state.view = "diagnostic";
                 history.pushState({}, "", "/diagnostic");
@@ -10397,20 +10574,28 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
 
         // 开始智能分析
         document.querySelectorAll("[data-profile-analyze]").forEach(btn => {
-            btn.addEventListener("click", () => {
+            btn.addEventListener("click", async event => {
+                event.stopImmediatePropagation();
+                const text =
+                    document.querySelector("[data-profile-input]")?.value?.trim() || state.data.profileInput || "";
+                if (!text) return toast("先输入你的学习状态");
+                state.data.profileInput = text;
                 state.data.diagnosticLoading = true;
                 render();
-                // 模拟分析过程
-                setTimeout(() => {
+                try {
+                    await submitQuickDiagnosis(text);
                     state.data.diagnosticLoading = false;
-                    // 生成模拟诊断报告
-                    state.data.smartReport = getMockSmartReport();
-                    // 直接跳转到学习画像页面
-                    state.view = "profile";
-                    history.pushState({}, "", "/profile");
-                    toast("智能分析完成！");
+                    state.data.diagnosticMode = "questionnaire";
+                    state.data.diagnosticStep = 0;
+                    state.data.diagnosticAnswers = {};
+                    await loadDiagnosticQuestionnaire(true);
+                    toast("文本诊断已记录，请继续完成结构化问卷");
                     render();
-                }, 2000);
+                } catch (e) {
+                    state.data.diagnosticLoading = false;
+                    toast("诊断失败: " + (e.message || "网络错误"));
+                    render();
+                }
             });
         });
 
@@ -12188,6 +12373,7 @@ zhaoliu,赵六"></textarea>
                     state.data.pathCenter = null;
                     await loadData(true);
                     await loadPathCenter(true);
+                    updateOnboardingProgress({ pathDone: true });
                     render();
                     toast(`已生成 ${result.generated} 个路径任务`);
                 } catch (error) {
@@ -12252,7 +12438,7 @@ zhaoliu,赵六"></textarea>
                 render();
                 try {
                     await submitQuickDiagnosis(text);
-                    toast("画像诊断完成");
+                    toast("文本诊断已记录，请继续完成结构化问卷");
                 } catch (e) {
                     toast("诊断失败: " + (e.message || "网络错误"));
                 } finally {
@@ -12264,6 +12450,13 @@ zhaoliu,赵六"></textarea>
         document.querySelectorAll("[data-diagnostic-switch-mode]").forEach(el =>
             el.addEventListener("click", async () => {
                 const mode = el.dataset.diagnosticSwitchMode;
+                const progress = onboardingProgress();
+                if (isOnboardingRequired() && mode === "questionnaire" && !progress.quickDone) {
+                    return toast("请先完成快速文本诊断，再进入结构化问卷。");
+                }
+                if (isOnboardingRequired() && mode === "subject" && !progress.questionnaireDone) {
+                    return toast("请先完成结构化问卷诊断，再进行一门学科测试。");
+                }
                 if (mode === "questionnaire") {
                     state.data.diagnosticMode = "questionnaire";
                     state.data.diagnosticStep = 0;
@@ -12307,6 +12500,13 @@ zhaoliu,赵六"></textarea>
         document.querySelectorAll("[data-diagnostic-start]").forEach(el =>
             el.addEventListener("click", async () => {
                 const mode = el.dataset.diagnosticStart;
+                const progress = onboardingProgress();
+                if (isOnboardingRequired() && mode === "questionnaire" && !progress.quickDone) {
+                    return toast("请先完成快速文本诊断，再进入结构化问卷。");
+                }
+                if (isOnboardingRequired() && mode === "subject" && !progress.questionnaireDone) {
+                    return toast("请先完成结构化问卷诊断，再进行一门学科测试。");
+                }
                 if (mode === "questionnaire") {
                     state.data.diagnosticMode = "questionnaire";
                     state.data.diagnosticStep = 0;
@@ -12400,7 +12600,14 @@ zhaoliu,赵六"></textarea>
                 render();
                 try {
                     await submitDiagnostic(state.data.diagnosticAnswers, state.data.profileInput);
-                    toast("问卷诊断完成！查看你的学习画像");
+                    state.data.diagnosticMode = "subject";
+                    state.data.diagnosticStep = 0;
+                    state.data.diagnosticSubjectResult = null;
+                    state.data.diagnosticSubjectTest = null;
+                    state.data.diagnosticSubjectAnswers = {};
+                    state.data._skipDiagnosticReload = true;
+                    await loadDiagnosticSubjects();
+                    toast("问卷诊断完成，请继续选择一门学科完成测试");
                 } catch (e) {
                     toast("提交失败: " + (e.message || "网络错误"));
                 } finally {
@@ -12421,6 +12628,7 @@ zhaoliu,赵六"></textarea>
                 state.data.diagnosticSubjectTest = null;
                 state.data.diagnosticSubjectAnswers = {};
                 state.data.diagnosticActiveSubject = "";
+                if (state.user?.username) localStorage.removeItem(onboardingProgressKey());
                 toast("已清除诊断结果，可重新开始");
                 render();
             })
@@ -12470,7 +12678,7 @@ zhaoliu,赵六"></textarea>
                 render();
                 try {
                     await submitSubjectDiagnostic(test.subject, answers);
-                    toast("学科诊断完成！查看分析报告");
+                    toast("三段诊断完成，已生成个人画像");
                 } catch (e) {
                     toast("提交失败: " + (e.message || "网络错误"));
                 } finally {
@@ -14285,6 +14493,52 @@ zhaoliu,赵六"></textarea>
                 }
             });
         }
+        const registerForm = document.getElementById("register-form");
+        if (registerForm) {
+            registerForm.addEventListener("submit", async event => {
+                event.preventDefault();
+                const message = document.getElementById("register-message");
+                message.textContent = "正在创建账号...";
+                try {
+                    const payload = Object.fromEntries(new FormData(registerForm));
+                    const json = await request("/api/auth/register", { method: "POST", body: JSON.stringify(payload) });
+                    state.user = {
+                        username: json.user?.nickname || json.user?.username || payload.username,
+                        role: json.user?.role || "student",
+                        isNewUser: json.isNewUser === true
+                    };
+                    localStorage.setItem("edusmart_user", JSON.stringify(state.user));
+                    state.loaded = false;
+                    history.replaceState({}, "", "/home");
+                    state.view = "home";
+                    render();
+                    toast("注册成功，先完成诊断来生成你的学习画像");
+                } catch (error) {
+                    message.textContent = error.message;
+                }
+            });
+        }
+        document.querySelectorAll("[data-onboarding-go]").forEach(el =>
+            el.addEventListener("click", () => {
+                const view = el.dataset.onboardingGo;
+                const progress = onboardingProgress();
+                if (view === "diagnostic") {
+                    if (progress.questionnaireDone) {
+                        state.data.diagnosticMode = "subject";
+                    } else if (progress.quickDone) {
+                        state.data.diagnosticMode = "questionnaire";
+                    } else {
+                        state.data.diagnosticMode = "text";
+                    }
+                }
+                setView(view);
+            })
+        );
+        document.querySelectorAll("[data-onboarding-dismiss]").forEach(el =>
+            el.addEventListener("click", () => {
+                toast(onboardingBlockedMessage());
+            })
+        );
         const logout = document.querySelector("[data-logout]");
         if (logout) {
             logout.addEventListener("dblclick", async () => {
@@ -15739,6 +15993,12 @@ zhaoliu,赵六"></textarea>
             app.innerHTML = loginView();
             bindEvents();
             return;
+        }
+        const guardedView = guardOnboardingView(state.view, false);
+        if (guardedView !== state.view) {
+            state.view = guardedView;
+            history.replaceState({}, "", "/home");
+            setTimeout(() => toast(onboardingBlockedMessage()), 80);
         }
         try {
             await loadData();

@@ -69,12 +69,12 @@ function publicUser(user) {
         avatar: user.avatar || "",
         role: user.role || "student",
         studyStats: {
-            studyHours: user.study_hours || 15.6,
-            completedCourses: user.completed_courses || 6,
-            knowledgeMastery: user.knowledge_mastery || 82,
-            correctAnswers: user.correct_answers || 148,
-            studyEfficiency: user.study_efficiency || 77,
-            continuousDays: user.continuous_days || 13
+            studyHours: user.study_hours ?? 0,
+            completedCourses: user.completed_courses ?? 0,
+            knowledgeMastery: user.knowledge_mastery ?? 0,
+            correctAnswers: user.correct_answers ?? 0,
+            studyEfficiency: user.study_efficiency ?? 0,
+            continuousDays: user.continuous_days ?? 0
         }
     };
 }
@@ -128,9 +128,12 @@ router.post("/bootstrap-admin", async (req, res) => {
 // 注册
 router.post("/register", async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const { username, email, password, nickname } = req.body;
         if (!username || !email || !password) {
             return res.status(400).json({ success: false, message: "请提供所有必填字段" });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ success: false, message: "密码至少需要6位" });
         }
         const [userRows] = await pool.query("SELECT id FROM users WHERE username = ?", [username]);
         if (userRows.length > 0) {
@@ -141,12 +144,32 @@ router.post("/register", async (req, res) => {
             return res.status(400).json({ success: false, message: "邮箱已存在" });
         }
         const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", [
+        const displayName = String(nickname || username).trim();
+        const [result] = await pool.query(
+            "INSERT INTO users (username, nickname, name, email, password, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [username, displayName, displayName, email, hashedPassword, "student", "active"]
+        );
+        const user = {
+            id: result.insertId,
             username,
+            name: displayName,
+            nickname: displayName,
             email,
-            hashedPassword
-        ]);
-        res.json({ success: true, message: "用户注册成功" });
+            role: "student"
+        };
+        const token = signUser(user);
+        setAuthCookie(res, token);
+        res.json({
+            success: true,
+            message: "用户注册成功",
+            token,
+            isNewUser: true,
+            onboarding: {
+                nextStep: "diagnostic",
+                steps: ["diagnostic", "profile", "path-plan"]
+            },
+            user: publicUser(user)
+        });
     } catch (error) {
         console.error("注册错误:", error);
         res.status(500).json({ success: false, message: "服务器错误" });
