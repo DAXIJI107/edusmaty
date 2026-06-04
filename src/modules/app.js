@@ -107,6 +107,52 @@ function inferTags(text, subject) {
     return Array.from(tags).filter(Boolean).slice(0, 6);
 }
 
+function normalizeText(value) {
+    return String(value || '').toLowerCase();
+}
+
+function goalMatchScore(point, goal) {
+    const text = normalizeText(`${point.title || ''} ${point.subject || ''} ${point.summary || ''}`);
+    const keywords = normalizeText(goal)
+        .split(/[,\s，、。；;:/|]+/)
+        .map(item => item.trim())
+        .filter(item => item.length >= 2);
+    if (!keywords.length) return 0;
+    return Math.min(22, keywords.reduce((score, keyword) => score + (text.includes(keyword) ? 7 : 0), 0));
+}
+
+function intensityMinutes(intensity, mastery, attentionSpan) {
+    const base = Number(mastery || 0) < 45 ? 35 : Number(mastery || 0) < 70 ? 25 : 15;
+    const factor = intensity === 'light' ? 0.75 : intensity === 'intense' ? 1.25 : 1;
+    return Math.max(8, Math.round(Math.min(Number(attentionSpan || 30) + 10, base * factor)));
+}
+
+function personalizedPathScore(point, { goal, intensity, profileContext }) {
+    const mastery = Number(point.mastery || 0);
+    const wrongCount = Number(point.wrongCount || 0);
+    const questionCount = Number(point.questionCount || 0);
+    const noteCount = Number(point.noteCount || 0);
+    const weakScore = Math.max(0, 100 - mastery) * 1.1;
+    const wrongScore = Math.min(36, wrongCount * 7);
+    const questionScore = Math.min(12, questionCount / 8);
+    const noteGapScore = noteCount ? 0 : 10;
+    const targetScore = goalMatchScore(point, goal);
+    const intensityScore = intensity === 'light' && mastery < 45 ? -12 : intensity === 'intense' && questionCount > 20 ? 10 : 0;
+    const profileScore = (profileContext.learningStyle || []).some(style => /practice|interactive|视觉|互动|diagram|video/.test(String(style)))
+        ? (questionCount > 0 ? 6 : 0)
+        : 0;
+    return Math.round(weakScore + wrongScore + questionScore + noteGapScore + targetScore + intensityScore + profileScore);
+}
+
+function rankPathPoints(points, options) {
+    return points
+        .map(point => ({
+            ...point,
+            pathScore: personalizedPathScore(point, options)
+        }))
+        .sort((a, b) => b.pathScore - a.pathScore || Number(a.mastery || 0) - Number(b.mastery || 0) || Number(b.wrongCount || 0) - Number(a.wrongCount || 0));
+}
+
 function maskSecret(value) {
     const text = String(value || '');
     if (!text) return '';
@@ -237,12 +283,12 @@ async function getOverview(req, res) {
     );
     const [[taskStats]] = await pool.query(
         `SELECT COUNT(*) AS total, SUM(status = 'done') AS done, COALESCE(SUM(estimated_minutes), 0) AS minutes
-         FROM study_tasks WHERE user_id = ? AND task_date = CURDATE()`,
+         FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source IN ('agent-runtime', 'custom-agent')`,
         [userId]
     );
     const [tasks] = await pool.query(
-        `SELECT id, icon, title, subtitle, estimated_minutes, status, color, soft_color
-         FROM study_tasks WHERE user_id = ? AND task_date = CURDATE()
+        `SELECT id, icon, title, subtitle, estimated_minutes, status, color, soft_color, source
+         FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source IN ('agent-runtime', 'custom-agent')
          ORDER BY sort_order, id LIMIT 8`,
         [userId]
     );
@@ -878,10 +924,97 @@ router.post('/practice/answer', async (req, res, next) => {
 
 router.get('/practice/set', async (req, res, next) => {
     try {
+        const userId = req.user.id || 1;
         const mode = String(req.query.mode || 'practice');
         const subject = String(req.query.subject || 'all');
+        const goal = String(req.query.goal || '系统掌握计算机核心能力').trim();
+        const intensity = String(req.query.intensity || 'normal');
         const limitMap = { practice: 6, test: 10, exam: 20 };
         const limit = Math.max(3, Math.min(30, Number(req.query.limit || limitMap[mode] || 8)));
+        if (mode === 'test') {
+            await ensureNotesSchema();
+            const pathGenerator = new AIPathGenerator();
+            const rawProfile = await pathGenerator.loadUserProfile(userId, pool);
+            const styleWeights = pathGenerator.getStyleWeights(rawProfile);
+            const dailyMinutes = pathGenerator.getDailyMinutes(rawProfile);
+            const attentionSpan = pathGenerator.getAttentionSpan(rawProfile);
+            const profileContext = pathGenerator.getProfileContext(rawProfile, styleWeights, dailyMinutes, attentionSpan);
+            const params = [userId, userId];
+            const where = [];
+            if (subject !== 'all') {
+                where.push('kp.subject = ?');
+                params.push(subject);
+            }
+            const [candidatePoints] = await pool.query(
+                `SELECT kp.id, kp.title, kp.subject, kp.summary, kp.mastery,
+                        COUNT(DISTINCT q.id) AS questionCount,
+                        COUNT(DISTINCT CASE WHEN ua.user_id = ? AND ua.is_correct = 0 THEN q.id END) AS wrongCount,
+                        COUNT(DISTINCT n.id) AS noteCount
+                 FROM knowledge_points kp
+                 JOIN questions q ON q.knowledge_id = kp.id
+                 LEFT JOIN user_answers ua ON ua.question_id = q.id
+                 LEFT JOIN notes n ON n.knowledge_id = kp.id AND n.user_id = ?
+                 ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+                 GROUP BY kp.id, kp.title, kp.subject, kp.summary, kp.mastery
+                 ORDER BY kp.id`,
+                params
+            );
+            const focusPoints = rankPathPoints(candidatePoints, { goal, intensity, profileContext }).slice(0, 6);
+            const focusIds = focusPoints.map(point => Number(point.id)).filter(Boolean);
+            if (focusIds.length) {
+                const placeholders = focusIds.map(() => '?').join(',');
+                const [rows] = await pool.query(
+                    `SELECT q.id, q.question, q.options_json, q.difficulty, q.source_name,
+                            kp.title AS knowledge_title, kp.subject, kp.mastery, kp.id AS knowledge_id
+                     FROM questions q
+                     JOIN knowledge_points kp ON kp.id = q.knowledge_id
+                     WHERE kp.id IN (${placeholders})
+                     ORDER BY FIELD(kp.id, ${placeholders}), q.difficulty, q.id
+                     LIMIT ${limit}`,
+                    [...focusIds, ...focusIds]
+                );
+                return res.json({
+                    success: true,
+                    mode,
+                    subject,
+                    goal,
+                    intensity,
+                    duration: Math.min(35, Math.max(15, Math.ceil((Number(profileContext.attentionSpan || 25) + limit) / 5) * 5)),
+                    generatedBy: 'path_profile_stage_test',
+                    blueprint: {
+                        title: '路径画像阶段测试',
+                        profileStyle: profileContext.primaryStyleLabel,
+                        dailyMinutes: profileContext.dailyMinutes,
+                        attentionSpan: profileContext.attentionSpan,
+                        focusPoints: focusPoints.map(point => ({
+                            id: point.id,
+                            title: point.title,
+                            subject: point.subject,
+                            mastery: point.mastery,
+                            wrongCount: point.wrongCount,
+                            noteCount: point.noteCount,
+                            pathScore: point.pathScore
+                        })),
+                        evidence: [
+                            `来自当前学习路径目标：${goal}`,
+                            `优先覆盖 ${focusPoints.length} 个路径节点`,
+                            `画像：${profileContext.primaryStyleLabel}，专注时长 ${profileContext.attentionSpan} 分钟`
+                        ]
+                    },
+                    questions: rows.map(row => ({
+                        id: row.id,
+                        question: row.question,
+                        options: parseOptions(row.options_json),
+                        difficulty: row.difficulty,
+                        sourceName: row.source_name,
+                        knowledgeTitle: row.knowledge_title,
+                        subject: row.subject,
+                        mastery: row.mastery,
+                        knowledgeId: row.knowledge_id
+                    }))
+                });
+            }
+        }
         const difficultyOrder = mode === 'practice'
             ? 'kp.mastery ASC, q.id'
             : mode === 'exam'
@@ -1346,67 +1479,9 @@ router.get('/path/center', async (req, res, next) => {
         const userId = req.user.id || 1;
         const goal = String(req.query.goal || '系统掌握计算机核心能力').trim();
         const subject = String(req.query.subject || 'all');
+        const intensity = String(req.query.intensity || 'normal');
+        await ensureNotesSchema();
 
-        const subjectParams = [];
-        const subjectWhere = subject !== 'all' ? 'WHERE kp.subject = ?' : '';
-        if (subject !== 'all') subjectParams.push(subject);
-
-        const [subjects] = await pool.query(
-            `SELECT kp.subject, ROUND(AVG(kp.mastery)) AS mastery, COUNT(*) AS knowledgeCount,
-                    SUM(kp.mastery < 60) AS weakCount
-             FROM knowledge_points kp
-             GROUP BY kp.subject
-             ORDER BY weakCount DESC, mastery ASC`
-        );
-        const [points] = await pool.query(
-            `SELECT kp.id, kp.title, kp.subject, kp.summary, kp.mastery, kp.source_name, kp.source_url,
-                    COUNT(q.id) AS questionCount,
-                    COALESCE(SUM(ua.user_id = ? AND ua.is_correct = 0), 0) AS wrongCount,
-                    MAX(st.status = 'done') AS taskDone,
-                    MAX(st.id) AS taskId,
-                    MAX(st.estimated_minutes) AS taskMinutes
-             FROM knowledge_points kp
-             LEFT JOIN questions q ON q.knowledge_id = kp.id
-             LEFT JOIN user_answers ua ON ua.question_id = q.id
-             LEFT JOIN study_tasks st ON st.knowledge_id = kp.id AND st.user_id = ? AND st.task_date = CURDATE()
-             ${subjectWhere}
-             GROUP BY kp.id, kp.title, kp.subject, kp.summary, kp.mastery, kp.source_name, kp.source_url
-             ORDER BY kp.mastery ASC, wrongCount DESC, questionCount DESC, kp.id
-             LIMIT 12`,
-            [userId, userId, ...subjectParams]
-        );
-        const [tasks] = await pool.query(
-            `SELECT id, knowledge_id, title, subtitle, icon, estimated_minutes, status, source, sort_order
-             FROM study_tasks
-             WHERE user_id = ? AND task_date = CURDATE()
-             ORDER BY status = 'done', sort_order, id
-             LIMIT 12`,
-            [userId]
-        );
-        const [courses] = await pool.query(
-            `SELECT id, title, provider, subject, progress, source_url
-             FROM courses
-             ${subject !== 'all' ? 'WHERE subject = ?' : ''}
-             ORDER BY progress ASC, id
-             LIMIT 8`,
-            subject !== 'all' ? [subject] : []
-        );
-        const [[answerStats]] = await pool.query(
-            `SELECT COUNT(*) AS total, SUM(is_correct = 1) AS correct,
-                    ROUND(SUM(is_correct = 1) / NULLIF(COUNT(*), 0) * 100) AS accuracy
-             FROM user_answers
-             WHERE user_id = ?`,
-            [userId]
-        );
-        const [notes] = await pool.query(
-            `SELECT subject, COUNT(*) AS total
-             FROM notes
-             WHERE user_id = ?
-             GROUP BY subject
-             ORDER BY total DESC
-             LIMIT 6`,
-            [userId]
-        ).catch(() => [[]]);
         const pathGenerator = new AIPathGenerator();
         const rawProfile = await pathGenerator.loadUserProfile(userId, pool);
         const styleWeights = pathGenerator.getStyleWeights(rawProfile);
@@ -1414,57 +1489,130 @@ router.get('/path/center', async (req, res, next) => {
         const attentionSpan = pathGenerator.getAttentionSpan(rawProfile);
         const profileContext = pathGenerator.getProfileContext(rawProfile, styleWeights, dailyMinutes, attentionSpan);
 
-        const pathNodes = points.map((point, index) => {
-            const status = getPathStatus(point.mastery, point.taskDone);
-            const minutes = Number(point.taskMinutes || (point.mastery < 45 ? 35 : point.mastery < 70 ? 25 : 15));
+        const [agentTasks] = await pool.query(
+            `SELECT st.id, st.knowledge_id, st.title, st.subtitle, st.icon, st.estimated_minutes,
+                    st.status, st.sort_order, st.source,
+                    kp.title AS knowledge_title, kp.subject, kp.mastery, kp.summary
+             FROM study_tasks st
+             LEFT JOIN knowledge_points kp ON kp.id = st.knowledge_id
+             WHERE st.user_id = ? AND st.task_date = CURDATE() AND st.source IN ('agent-runtime', 'custom-agent')
+             ORDER BY st.sort_order, st.id`,
+            [userId]
+        );
+
+        if (!agentTasks.length) {
+            return res.json({
+                success: true,
+                generatedByAgent: false,
+                goal,
+                selectedSubject: subject,
+                intensity,
+                summary: {
+                    nodes: 0,
+                    weakCount: 0,
+                    todayTasks: 0,
+                    doneTasks: 0,
+                    totalMinutes: 0,
+                    accuracy: 0,
+                    noteSubjects: 0
+                },
+                subjects: [],
+                pathNodes: [],
+                tasks: [],
+                courses: [],
+                notes: [],
+                profileContext,
+                personalization: [
+                    '当前未调用 Agent 个性化学习，因此不展示任何规则路径或学习资源。',
+                    `画像已就绪：${profileContext.primaryStyleLabel || '待校准'}，每日可用 ${profileContext.dailyMinutes || dailyMinutes} 分钟，专注时长 ${profileContext.attentionSpan || attentionSpan} 分钟。`,
+                    '点击“调用 Agent 个性化学习”后，系统才会写入路径和今日计划。'
+                ],
+                debug: {
+                    personalized: false,
+                    reason: 'path/center 不再生成规则路径；只读取 AgentRuntime 写入的 study_tasks.source=agent-runtime。'
+                }
+            });
+        }
+
+        const pathNodes = agentTasks.map((task, index) => {
+            const mastery = Number(task.mastery || 0);
+            const status = task.status === 'done' ? 'done' : mastery < 45 ? 'priority' : mastery < 70 ? 'learning' : 'review';
+            const minutes = Number(task.estimated_minutes || intensityMinutes(intensity, mastery, attentionSpan));
             return {
-                ...point,
+                id: task.knowledge_id || task.id,
+                taskId: task.id,
+                title: task.knowledge_title || task.title,
+                taskTitle: task.title,
+                subject: task.subject || subject || 'Agent 生成',
+                mastery,
+                summary: task.summary || task.subtitle || '',
                 status,
                 action: pathActionFor({ status }),
                 estimateMinutes: minutes,
-                phase: index < 3 ? '修复基础' : index < 7 ? '强化迁移' : '综合应用',
-                reason: point.wrongCount > 0
-                    ? `最近有 ${point.wrongCount} 次相关错题，优先修复。`
-                    : point.mastery < 60
-                        ? `掌握度 ${point.mastery}% 低于安全线。`
-                        : `掌握度较高，适合做迁移应用和间隔复习。`,
-                personalizedReason: `${profileContext.primaryStyleLabel}画像下，建议用${profileContext.learningStyle.join('、') || '读写'}资源推进；本节点预计 ${minutes} 分钟${minutes > attentionSpan ? '，建议拆分完成。' : '。'}`,
+                phase: index < 3 ? 'Agent 先导' : index < 7 ? 'Agent 强化' : 'Agent 迁移',
+                reason: task.subtitle || '由 AgentRuntime 根据画像、目标、薄弱点和资源匹配生成。',
+                personalizedReason: `Agent 个性化学习已写入本任务；${profileContext.primaryStyleLabel}画像下预计 ${minutes} 分钟${minutes > attentionSpan ? '，建议拆分完成。' : '。'}`,
                 evidence: [
-                    `掌握度 ${point.mastery}%`,
-                    `${point.questionCount || 0} 道可练习题`,
-                    point.source_name || '公开知识库'
+                    task.source === 'custom-agent' ? '用户自定义追加' : 'AgentRuntime 写入',
+                    `任务源 ${task.source}`,
+                    `排序 ${task.sort_order || index + 1}`,
+                    `画像 ${profileContext.primaryStyleLabel || '待校准'}`
                 ]
             };
         });
+        const tasks = agentTasks;
         const doneTasks = tasks.filter(task => task.status === 'done').length;
         const totalMinutes = pathNodes.reduce((sum, node) => sum + Number(node.estimateMinutes || 0), 0);
         const weakCount = pathNodes.filter(node => Number(node.mastery || 0) < 60).length;
 
         res.json({
             success: true,
+            generatedByAgent: true,
             goal,
             selectedSubject: subject,
+            intensity,
             summary: {
                 nodes: pathNodes.length,
                 weakCount,
                 todayTasks: tasks.length,
                 doneTasks,
                 totalMinutes,
-                accuracy: Number(answerStats.accuracy || 0),
-                noteSubjects: notes.length
+                accuracy: 0,
+                noteSubjects: 0
             },
-            subjects,
+            subjects: [],
             pathNodes,
             tasks,
-            courses,
-            notes,
+            courses: [],
+            notes: [],
             profileContext,
             personalization: [
                 ...profileContext.evidence,
-                weakCount ? `你当前路径优先修复 ${weakCount} 个低掌握知识点。` : '当前路径以迁移应用和复习保持为主。',
-                tasks.length ? `今日已有 ${tasks.length} 个任务，其中 ${doneTasks} 个完成。` : '今日暂无路径任务，可点击生成路径。',
-                courses.length ? `系统会优先匹配低进度课程，避免只刷题不学课。` : '当前学科课程较少，可先从题目和笔记推进。'
-            ]
+                `Agent 已按目标「${goal}」和强度「${intensity}」写入 ${tasks.length} 个今日任务。`,
+                weakCount ? `当前 Agent 路径包含 ${weakCount} 个低掌握节点。` : '当前 Agent 路径以巩固和迁移为主。',
+                `${doneTasks} / ${tasks.length} 个 Agent 任务已完成。`
+            ],
+            debug: {
+                personalized: true,
+                reason: 'path/center 只展示 AgentRuntime 或用户自定义写入的 Agent 计划任务。',
+                rawProfile,
+                styleWeights,
+                dailyMinutes,
+                attentionSpan,
+                selectedWeakNodes: pathNodes.slice(0, 5).map(node => ({
+                    id: node.id,
+                    title: node.title,
+                    subject: node.subject,
+                    mastery: node.mastery,
+                    status: node.status,
+                    reason: node.reason,
+                    personalizedReason: node.personalizedReason,
+                    evidence: node.evidence,
+                    pathScore: node.pathScore,
+                    goalMatch: node.goalMatch,
+                    noteGap: node.noteGap
+                }))
+            }
         });
     } catch (error) {
         next(error);
@@ -1538,6 +1686,65 @@ router.post('/path/node/:id/start', async (req, res, next) => {
             payload: { title: point.title, mastery: point.mastery, reused: false }
         });
         res.json({ success: true, taskId: result.insertId, message: '已加入今日路径' });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/path/custom-task', async (req, res, next) => {
+    try {
+        const userId = req.user.id || 1;
+        const {
+            title = '',
+            subject = '自定义',
+            reason = '',
+            minutes = 25,
+            icon: taskIcon = 'book',
+            knowledgeTitle = ''
+        } = req.body || {};
+        const cleanTitle = String(title || '').trim().slice(0, 160);
+        if (!cleanTitle) {
+            return res.status(400).json({ success: false, message: '请输入自定义路径任务标题' });
+        }
+        const [[orderRow]] = await pool.query(
+            `SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder
+             FROM study_tasks
+             WHERE user_id = ? AND task_date = CURDATE() AND source IN ('agent-runtime', 'custom-agent')`,
+            [userId]
+        );
+        const subtitle = [
+            String(subject || '自定义').trim(),
+            knowledgeTitle ? `关联：${String(knowledgeTitle).trim()}` : '',
+            reason ? String(reason).trim() : '用户手动追加到 Agent 个性化计划'
+        ].filter(Boolean).join(' · ').slice(0, 260);
+        const [result] = await pool.query(
+            `INSERT INTO study_tasks
+                (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+             VALUES (?, NULL, ?, ?, ?, ?, 'pending', CURDATE(), ?, '#7c4dff', 'rgba(124,77,255,.12)', 'custom-agent')`,
+            [
+                userId,
+                cleanTitle,
+                subtitle,
+                String(taskIcon || 'book').slice(0, 40),
+                Math.max(5, Math.min(120, Number(minutes || 25))),
+                Number(orderRow?.nextOrder || 1)
+            ]
+        );
+        await agentRuntime.ensureSchema();
+        await agentRuntime.recordEvent({
+            userId,
+            eventType: 'custom_agent_path_task_added',
+            subject: String(subject || '自定义').trim(),
+            targetType: 'study_task',
+            targetId: result.insertId,
+            payload: { title: cleanTitle, subject, reason, minutes, knowledgeTitle, source: 'custom-agent' }
+        });
+        await pool.query(
+            `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+             VALUES (?, 'plus', ?, '刚刚', '自定义路径', '#7c4dff', 'rgba(124,77,255,.12)')`,
+            [userId, `追加了自定义 Agent 路径任务「${cleanTitle}」`]
+        ).catch(() => {});
+        res.json({ success: true, taskId: result.insertId, title: cleanTitle, source: 'custom-agent' });
     } catch (error) {
         next(error);
     }
@@ -2069,8 +2276,8 @@ router.post('/practice/submit-set', async (req, res, next) => {
                 '复盘模板：错因是什么？正确解法的关键一步是什么？下次看到相似题如何识别？'
             ].join('\n\n'),
             subject: rows[0]?.subject || details[0]?.subject || '练测复盘',
-            sourceType: mode === 'exam' ? 'exam' : 'practice',
-            tags: [mode === 'exam' ? '考试' : '练习', '错题', '复盘']
+            sourceType: mode === 'exam' ? 'exam' : mode === 'test' ? 'test' : 'practice',
+            tags: [mode === 'exam' ? '考试' : mode === 'test' ? '阶段测试' : '练习', '错题', '复盘']
         });
         res.json({ success: true, mode, total: rows.length, correct, score, details });
     } catch (error) {

@@ -18,6 +18,7 @@ const appRoutes = [
     '/path',
     '/ai-path',
     '/learning-path',
+    '/knowledge-base',
     '/asset',
     '/my-notes',
     '/smart-notes',

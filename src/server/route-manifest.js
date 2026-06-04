@@ -26,6 +26,7 @@ module.exports = [
     ['/api/learning-events', '../modules/learning-events'],
     ['/api/report', '../modules/report'],
     ['/api/knowledge', '../modules/knowledge'],
+    ['/api/knowledge-base', '../modules/knowledge-base'],
     ['/api/knowledge-graph', '../modules/knowledge-graph'],
     ['/api/course', '../modules/course'],
     ['/api/user', '../modules/user'],

@@ -45,6 +45,7 @@ class StudyPlanEngine {
         const map = {
             programming: '编程',
             computer: '计算机',
+            software_engineering: '软件工程',
             math: '数学',
             english: '英语',
             chinese: '语文'
@@ -54,6 +55,31 @@ class StudyPlanEngine {
 
     defaultMaterials(topic) {
         const normalized = topic || '动态规划';
+        const softwareMaterials = {
+            '软件工程基础概念': [
+                { title: '软件工程基础概念讲义', type: 'concept', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=软件工程基础概念', instruction: '先理解软件危机、工程化和质量保证之间的关系。' },
+                { title: '软件生命周期总览', type: 'diagram', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=生命周期', instruction: '画出需求、设计、实现、测试、维护的顺序和反馈关系。' },
+                { title: '软件工程基础练习', type: 'practice-set', source: 'EduSmart 题库', url: '/practice?subject=software_engineering', instruction: '完成基础概念选择题，并把错因写成一句话。' }
+            ],
+            '软件过程模型': [
+                { title: '软件过程模型案例', type: 'case', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=过程模型', instruction: '比较瀑布、原型、迭代和敏捷的适用场景。' },
+                { title: '过程模型场景判断', type: 'practice-set', source: 'EduSmart 题库', url: '/practice?subject=software_engineering', instruction: '用项目特征判断适合的过程模型。' }
+            ],
+            '需求分析': [
+                { title: '需求分析入门', type: 'concept', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=需求分析', instruction: '区分功能需求、非功能需求、用户故事和验收标准。' },
+                { title: '需求规格说明模板', type: 'template', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=SRS', instruction: '按模板写出一个校园系统的小需求。' },
+                { title: '需求分析练习', type: 'practice-set', source: 'EduSmart 题库', url: '/practice?subject=software_engineering', instruction: '完成需求类型判断题并订正。' }
+            ],
+            '软件设计与建模': [
+                { title: '从需求到设计', type: 'diagram', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=软件设计', instruction: '把一个用例拆成模块、接口和数据对象。' },
+                { title: '模块拆分练习', type: 'lab', source: 'EduSmart 实验', url: '/practice?subject=software_engineering', instruction: '围绕高内聚、低耦合检查设计。' }
+            ],
+            '软件测试基础': [
+                { title: '软件测试基础讲义', type: 'concept', source: 'EduSmart 默认知识库', url: '/knowledge-base?subject=software_engineering&q=软件测试', instruction: '对比黑盒测试、白盒测试和测试用例结构。' },
+                { title: '测试方法选择练习', type: 'practice-set', source: 'EduSmart 题库', url: '/practice?subject=software_engineering', instruction: '根据需求描述选择合适测试方法。' }
+            ]
+        };
+        if (softwareMaterials[normalized]) return softwareMaterials[normalized];
         return [
             {
                 title: `${normalized} 概念导学`,
@@ -299,6 +325,13 @@ class StudyPlanEngine {
     }
 
     async collectSignals(pool, userId) {
+        try {
+            const { ensureKnowledgeData } = require('./DemoDataSeeder');
+            await ensureKnowledgeData(pool);
+        } catch (error) {
+            // 计划生成不能因为种子数据补齐失败而中断。
+        }
+
         let weakNodes = [];
         try {
             [weakNodes] = await pool.query(
@@ -349,30 +382,51 @@ class StudyPlanEngine {
             recentPractice = [];
         }
 
+        if (weakNodes.length === 0 && errorNodes.length === 0) {
+            try {
+                [weakNodes] = await pool.query(
+                    `SELECT id AS node_id, name, subject, 35 AS mastery, 0 AS error_count
+                     FROM knowledge_nodes
+                     WHERE is_active = 1
+                       AND subject IN ('software_engineering', 'computer', 'programming')
+                     ORDER BY
+                       CASE
+                         WHEN subject = 'software_engineering' THEN 0
+                         WHEN subject = 'computer' THEN 1
+                         ELSE 2
+                       END,
+                       id
+                     LIMIT 5`
+                );
+            } catch (error) {
+                weakNodes = [];
+            }
+        }
+
         return { weakNodes, errorNodes, recentPractice };
     }
 
     buildTasks(signals) {
         const focus = signals.weakNodes[0] || signals.errorNodes[0] || {
             node_id: null,
-            name: '动态规划',
-            subject: 'programming',
-            mastery: 24,
+            name: '软件工程基础概念',
+            subject: 'software_engineering',
+            mastery: 35,
             error_count: 0
         };
-        const topic = focus.name || '动态规划';
-        const mastery = Math.round(Number(focus.mastery || 24));
-        const subject = focus.subject || 'programming';
+        const topic = focus.name || '软件工程基础概念';
+        const mastery = Math.round(Number(focus.mastery || 35));
+        const subject = focus.subject || 'software_engineering';
         const node = { ...focus, name: topic, subject, mastery };
-        const courseTitle = topic === '动态规划'
-            ? '《数据结构（C 语言描述）》动态规划入门'
+        const courseTitle = subject === 'software_engineering'
+            ? '《软件工程导论》知识库课程'
             : `${topic} 核心课程`;
 
         return [
             this.attachLearningSession({
                 time: '08:30',
-                title: '预习先修：基础概念',
-                task: '预习先修：基础概念',
+                title: `预习：${topic}`,
+                task: `预习：${topic}`,
                 subject,
                 subjectName: this.normalizeSubject(subject),
                 nodeId: focus.node_id || null,
@@ -576,20 +630,20 @@ class StudyPlanEngine {
 
         const tasks = [];
         const focus = signals.weakNodes[0] || signals.errorNodes[0] || {
-            node_id: null, name: '核心概念', subject: 'general', mastery: 30
+            node_id: null, name: '软件工程基础概念', subject: 'software_engineering', mastery: 35
         };
-        const topic = focus.name || '核心概念';
-        const mastery = Math.round(Number(focus.mastery || 30));
-        const subject = focus.subject || 'general';
+        const topic = focus.name || '软件工程基础概念';
+        const mastery = Math.round(Number(focus.mastery || 35));
+        const subject = focus.subject || 'software_engineering';
         const node = { ...focus, name: topic, subject, mastery };
 
         tasks.push(this.attachLearningSession({
-            time: '08:30', title: '预习：基础概念', task: '预习：基础概念',
+            time: '08:30', title: `预习：${topic}`, task: `预习：${topic}`,
             subject, subjectName: this.normalizeSubject(subject),
             nodeId: focus.node_id || null, nodeName: topic, mastery,
             reason: '补足前置知识',
             duration: Math.min(attentionSpan, 20), type: 'prelearn', priority: 'high',
-            icon: 'book', actionLabel: '打开学习材料', actionUrl: '/learn',
+            icon: 'book', actionLabel: '打开学习材料', actionUrl: this.defaultMaterials(topic)[0].url,
             deliverable: '写出3个关键词和1个问题',
             steps: ['阅读概念导学', '标出关键概念', '写下最不懂的一个点'],
             successCriteria: ['能说出概念', '能提出一个问题'],
@@ -709,9 +763,9 @@ class StudyPlanEngine {
         // === 任务2: 概念学习 (认知偏好适配) ===
         const learnNode = weakNodes[1] || weakNodes[0] || {
             knowledgeId: null,
-            title: profile?.basicInfo?.interests?.[0] || '核心概念',
-            subject: 'general',
-            mastery: 0.3
+            title: profile?.basicInfo?.interests?.[0] || '软件工程基础概念',
+            subject: 'software_engineering',
+            mastery: 0.35
         };
 
         tasks.push(this.attachLearningSession({

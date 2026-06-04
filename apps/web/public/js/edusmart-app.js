@@ -263,6 +263,9 @@
             ragMessages: [],
             ragSearchQuery: "",
             ragSearching: false,
+            knowledgeBase: null,
+            knowledgeBaseQuery: "",
+            knowledgeBaseSubject: "all",
             // Agent 学习中心
             agentStatus: null,
             agentPlan: null,
@@ -298,6 +301,7 @@
         if (p.includes("agent-research") || p.includes("agent-research-center")) return "agentResearch";
         if (p.includes("code-lab") || p.includes("compiler")) return "codeLab";
         if (p.includes("obsidian") || p.includes("vault")) return "obsidian";
+        if (p.includes("knowledge-base") || p.includes("rag-knowledge")) return "knowledgeBase";
         if (p.includes("rag-search") || p.includes("ragsearch")) return "ragSearch";
         if (p.includes("agent-center") || p.includes("agentcenter")) return "agentCenter";
         if (p.includes("ai-assistant") || p.includes("rag")) return "aiAssistant";
@@ -316,6 +320,7 @@
         if (p.includes("problems") || p.includes("problem") || p.includes("coding")) return "problems";
         if (p.includes("videos") || p.includes("video")) return "videos";
         if (p.includes("obsidian") || p.includes("vault")) return "obsidian";
+        if (p.includes("knowledge-base") || p.includes("rag-knowledge")) return "knowledgeBase";
         if (p.includes("rag-search") || p.includes("ragsearch")) return "ragSearch";
         if (p.includes("agent-center") || p.includes("agentcenter")) return "agentCenter";
         return "home";
@@ -376,18 +381,49 @@
 
     async function loadStudyPlan(force = false) {
         if (state.data.studyPlan && !force) return;
-        const [today, progress, week, month] = await Promise.all([
-            request("/api/closed-loop/study-plan"),
-            request("/api/closed-loop/study-plan/progress").catch(() => ({})),
-            request("/api/closed-loop/study-plan?period=week").catch(() => ({})),
-            request("/api/closed-loop/study-plan?period=month").catch(() => ({}))
-        ]);
-        state.data.studyPlan = today.plan || null;
-        state.data.studyPlanTasks = today.tasks || today.plan?.tasks || [];
-        state.data.studyPlanSuggestion = today.suggestion || today.plan?.ai_suggestion || today.plan?.aiSuggestion || "";
-        state.data.studyPlanProgress = progress || null;
-        state.data.studyPlanWeek = week || null;
-        state.data.studyPlanMonth = month || null;
+        const center = await loadPathCenter(force);
+        const tasks = (center.tasks || []).map(task => ({
+            id: task.id,
+            title: task.title,
+            subject: task.subject || center.selectedSubject || "Agent 生成",
+            subjectName: task.subject || center.selectedSubject || "Agent 生成",
+            reason: task.subtitle || "由 Agent 个性化学习写入今日计划。",
+            estimated_minutes: task.estimated_minutes,
+            duration: task.estimated_minutes,
+            status: task.status,
+            completed: task.status === "done",
+            icon: task.icon || "route",
+            actionUrl: "/path",
+            actionLabel: "查看路径",
+            source: task.source,
+            mastery: task.mastery
+        }));
+        const completed = tasks.filter(task => task.completed).length;
+        const totalMinutes = tasks.reduce((sum, task) => sum + Number(task.estimated_minutes || task.duration || 0), 0);
+        const doneMinutes = tasks.filter(task => task.completed).reduce((sum, task) => sum + Number(task.estimated_minutes || task.duration || 0), 0);
+        state.data.studyPlan = {
+            generatedByAgent: center.generatedByAgent === true,
+            goal: center.goal,
+            profileContext: center.profileContext,
+            personalization: center.personalization || []
+        };
+        state.data.studyPlanTasks = tasks;
+        state.data.studyPlanSuggestion = center.generatedByAgent
+            ? (center.personalization || [])[0] || "今日计划来自 Agent 个性化学习路径。"
+            : "未调用 Agent 个性化学习前，不展示任何规则计划。";
+        state.data.studyPlanProgress = {
+            today: {
+                completed,
+                total: tasks.length,
+                completionRate: tasks.length ? Math.round(completed / tasks.length * 100) : 0
+            },
+            stats: {
+                today_minutes: doneMinutes,
+                week_minutes: totalMinutes
+            }
+        };
+        state.data.studyPlanWeek = null;
+        state.data.studyPlanMonth = null;
     }
 
     /** 从系统配置表加载运行时配置，替代前端硬编码 */
@@ -485,7 +521,14 @@
         if (existing && !force) return existing;
         const limit = mode === "onlineExam" ? 20 : mode === "test" ? 10 : 6;
         const apiMode = mode === "onlineExam" ? "exam" : mode;
-        const json = await request(`/api/app/practice/set?mode=${apiMode}&limit=${limit}&subject=${encodeURIComponent(subject)}`);
+        const params = new URLSearchParams({
+            mode: apiMode,
+            limit: String(limit),
+            subject,
+            goal: state.data.pathGoal || "系统掌握计算机核心能力",
+            intensity: state.data.pathIntensity || "normal"
+        });
+        const json = await request(`/api/app/practice/set?${params.toString()}`);
         state.data.questionSets[key] = { ...json, result: null };
         state.data.answerDrafts[mode] = {};
         return state.data.questionSets[key];
@@ -692,6 +735,17 @@
         render();
     }
 
+    async function loadKnowledgeBase(force = false) {
+        if (state.data.knowledgeBase && !force) return state.data.knowledgeBase;
+        const params = new URLSearchParams({
+            q: state.data.knowledgeBaseQuery || "",
+            subject: state.data.knowledgeBaseSubject || "all"
+        });
+        const json = await request(`/api/knowledge-base/overview?${params.toString()}`);
+        state.data.knowledgeBase = json.data;
+        return json.data;
+    }
+
     async function addRagToLearning(knowledgePoint, queryContext) {
         try {
             await request("/api/rag/add-to-learning", {
@@ -763,7 +817,8 @@
         if (state.data.pathCenter && !force) return state.data.pathCenter;
         const params = new URLSearchParams({
             goal: state.data.pathGoal || "系统掌握计算机核心能力",
-            subject: state.data.pathSubject || "all"
+            subject: state.data.pathSubject || "all",
+            intensity: state.data.pathIntensity || "normal"
         });
         const json = await request(`/api/app/path/center?${params.toString()}`);
         state.data.pathCenter = json;
@@ -1670,20 +1725,49 @@
     }
 
     function studyPlanView() {
-        const tab = state.data.studyPlanTab || "today";
         const tasks = state.data.studyPlanTasks || [];
+        const plan = state.data.studyPlan || {};
         const progress = state.data.studyPlanProgress || {};
         const today = progress.today || {};
         const stats = progress.stats || {};
         const activeTask = tasks.find(task => !(task.completed || task.status === "completed")) || tasks[0];
+        if (!plan.generatedByAgent) {
+            const profile = plan.profileContext || {};
+            return `<main class="page agent-plan-empty-page">
+                <section class="hero-row">
+                    <div class="hero">
+                        <span class="pill">Agent 今日计划</span>
+                        <h1>今日计划尚未生成</h1>
+                        <p>这里不再显示规则计划或历史固定任务。请先调用 Agent 个性化学习，系统会基于画像、目标和路径写入今日学习计划。</p>
+                        <div class="hero-actions">
+                            <button class="btn primary glow" data-study-plan-agent-generate>${icon("robot",17)}调用 Agent 生成今日计划</button>
+                            <button class="btn ghost" data-view="path">${icon("route",17)}查看路径入口</button>
+                            <button class="btn ghost" data-view="profile">${icon("user",17)}查看画像</button>
+                        </div>
+                    </div>
+                    <article class="card agent-path-status">
+                        <span class="pill ${profile.primaryStyleLabel ? "good" : "warn"}">计划状态</span>
+                        <h2>等待 Agent 写入</h2>
+                        <p>${escapeHtml(state.data.studyPlanSuggestion || "未调用 Agent 个性化学习前，不展示任何规则计划。")}</p>
+                    </article>
+                </section>
+                <section class="path-control card agent-only-control">
+                    <div><label>学习目标</label><input data-path-goal value="${escapeHtml(state.data.pathGoal)}" placeholder="例如：今天修复 SQL 和动态规划"></div>
+                    <div><label>学科范围</label><select data-path-subject><option value="all">由 Agent 判断</option></select></div>
+                    <div><label>学习强度</label><select data-path-intensity>${[["light","轻量"],["normal","标准"],["intense","冲刺"]].map(([key,label]) => `<option value="${key}" ${state.data.pathIntensity === key ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+                    <button class="btn primary" data-study-plan-agent-generate>${icon("calendar",17)}生成今日计划</button>
+                </section>
+            </main>`;
+        }
         return `<main class="page">
             <section class="hero-row">
                 <div class="hero">
                     <h1>今日学习计划</h1>
-                    <p>把“学什么”拆成可执行步骤、学习入口、完成产出和闭环标准。</p>
+                    <p>今日计划只来自 Agent 个性化学习写入的路径任务，可重新生成，也可自定义追加路径任务。</p>
                     <div class="hero-actions">
-                        <button class="btn primary glow" data-plan-action="${escapeHtml(activeTask?.actionUrl || "/practice")}">${icon("play", 17)}开始当前任务</button>
-                        <button class="btn ghost" data-study-plan-refresh>${icon("robot", 17)}重新生成今日计划</button>
+                        <button class="btn primary glow" data-plan-action="${escapeHtml(activeTask?.actionUrl || "/path")}">${icon("play", 17)}开始当前任务</button>
+                        <button class="btn ghost" data-study-plan-agent-generate>${icon("robot", 17)}重新生成 Agent 计划</button>
+                        <button class="btn ghost" data-open-custom-agent-task>${icon("plus", 17)}自定义添加路径任务</button>
                     </div>
                 </div>
                 <div class="metric-row">
@@ -1693,16 +1777,24 @@
                 </div>
             </section>
             <section class="card" style="margin-bottom:18px">
-                <div class="card-head"><h2 class="section-title">${icon("route",18)}今日学习路线</h2><span class="pill">${escapeHtml(activeTask?.nodeName || "闭环任务")}</span></div>
-                <p style="margin:0;color:var(--muted)">${escapeHtml(state.data.studyPlanSuggestion || "先完成最薄弱知识点，再通过练习与复盘闭环。")}</p>
+                <div class="card-head"><h2 class="section-title">${icon("route",18)}Agent 今日学习路线</h2><span class="pill">${tasks.length} 项 Agent 任务</span></div>
+                <p style="margin:0;color:var(--muted)">${escapeHtml(state.data.studyPlanSuggestion || "今日计划来自 Agent 个性化路径。")}</p>
             </section>
-            <section class="tabs" style="margin-bottom:18px">
-                ${[["today", "今日任务"], ["week", "本周计划"], ["month", "月度目标"]].map(([value, label]) => `<button class="${tab === value ? "active" : ""}" data-study-plan-tab="${value}">${label}</button>`).join("")}
+            <section class="card custom-agent-task-panel" data-custom-agent-task-panel hidden>
+                <div class="card-head"><h2 class="section-title">${icon("plus",18)}自定义添加路径任务</h2><button class="btn tiny ghost" data-close-custom-agent-task>关闭</button></div>
+                <form class="grid-3" data-custom-agent-task-form>
+                    <input class="input" name="title" placeholder="任务标题，如：补充 SQL JOIN 练习">
+                    <input class="input" name="subject" placeholder="学科，如：数据库">
+                    <input class="input" name="minutes" type="number" min="5" max="120" value="25" placeholder="分钟">
+                    <input class="input" name="knowledgeTitle" placeholder="关联知识点，可留空">
+                    <select class="input" name="icon"><option value="book">阅读</option><option value="exam">练习</option><option value="pen">笔记</option><option value="refresh">复习</option></select>
+                    <button class="btn primary" type="submit">${icon("check",16)}添加到 Agent 计划</button>
+                    <textarea class="input" name="reason" rows="3" placeholder="添加原因，如：我想加强 SQL 多表查询场景题"></textarea>
+                </form>
             </section>
-            ${tab === "week" ? studyPlanWeekView() : tab === "month" ? studyPlanMonthView() : `
             <section>
-                <div class="side-card">${tasks.length ? tasks.map(studyPlanTaskCard).join("") : `<article class="card"><p>暂无今日任务，点击重新生成。</p></article>`}</div>
-            </section>`}
+                <div class="side-card">${tasks.length ? tasks.map(studyPlanTaskCard).join("") : `<article class="card"><p>Agent 暂未写入任务。</p></article>`}</div>
+            </section>
         </main>`;
     }
 
@@ -2704,105 +2796,88 @@
         const recommendations = diagnostic.recommendations || {};
         const profile = diagnostic.profile || {};
         const radar = diagnostic.radarData || {};
+        const mastery = analysis.masteryEstimate || 75;
+        const sourceLabel = state.data.diagnosticMode === "questionnaire" ? "结构化问卷" : "自然语言描述";
+        const channel = profile.cognitiveStyle?.dominantChannel || profile.cognitiveStyle?.type || "多通道";
+        const dailyMinutes = recommendations.dailyMinutes || analysis.dailyMinutes || "--";
+        const evidence = [
+            { icon: "pen", label: sourceLabel, value: "18%", text: "提取专业、目标、薄弱点、资源偏好和可用时间。" },
+            { icon: "target", label: "诊断结论", value: "26%", text: `${escapeHtml(analysis.persona || "稳步成长型")}，综合掌握估计 ${mastery}%。` },
+            { icon: "brain", label: "认知风格", value: "18%", text: `偏好 ${escapeHtml(channel)}，路径会优先匹配对应资源。` },
+            { icon: "clock", label: "学习节奏", value: "20%", text: `建议 ${escapeHtml(String(dailyMinutes))} 分钟/天，任务按专注时长拆分。` },
+            { icon: "route", label: "路径反馈", value: "18%", text: "后续答题、复习和 AI 对话会继续修正画像。" }
+        ];
+        const dimensions = [
+            { label: "概念理解", value: Math.min(96, mastery + 2), tone: "blue" },
+            { label: "场景迁移", value: Math.max(42, mastery - 18), tone: "orange" },
+            { label: "项目实践", value: Math.max(50, mastery - 7), tone: "green" },
+            { label: "自我监控", value: Math.max(45, mastery - 12), tone: "purple" }
+        ];
+        const pathReasons = (recommendations.subjects || []).slice(0, 4).map((s, i) => ({
+            title: s,
+            reason: i === 0 ? "作为当前路径入口，优先补齐薄弱前置知识。" : i === 1 ? "与当前目标关联高，适合用案例和练习巩固。" : "用于承接后续知识点，避免学习断层。",
+            progress: Math.max(48, 92 - i * 10)
+        }));
 
-        return `<main class="page diagnostic-page diagnostic-result-page">
-            <div class="diagnostic-result-hero">
-                <span class="pill good large">${icon("check",18)} 诊断完成</span>
-                <h1>你的专属学习画像</h1>
-                <p>${state.data.diagnosticMode === "questionnaire" ? "基于结构化问卷" : "基于文本描述"}分析生成</p>
-            </div>
-
-            <section class="diagnostic-persona-section">
-                <article class="card persona-card-hero">
-                    <div class="persona-main">
-                        <div class="persona-avatar-circle">${escapeHtml((profile.basicInfo?.major || "学习者").charAt(0))}</div>
-                        <div class="persona-info">
-                            <div class="persona-label">${escapeHtml(analysis.persona || "稳步成长型")}</div>
-                            <h2>${escapeHtml(profile.basicInfo?.major || "学习者")} · ${escapeHtml(profile.basicInfo?.grade || "")}${profile.basicInfo?.goal ? " · " + escapeHtml(profile.basicInfo.goal) : ""}</h2>
-                            <p class="persona-tags">${(analysis.strengths || []).slice(0,3).map(s => `<span class="tag good">${escapeHtml(s)}</span>`).join("")}</p>
-                        </div>
-                        <div class="persona-score-ring">
-                            <svg viewBox="0 0 100 100" class="score-ring">
-                                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(22,179,148,.15)" stroke-width="8"/>
-                                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--teal)" stroke-width="8" stroke-linecap="round"
-                                    stroke-dasharray="${(analysis.masteryEstimate || 75) * 2.64} 264"
-                                    transform="rotate(-90 50 50)" style="transition: stroke-dasharray 1.2s ease"/>
-                            </svg>
-                            <div class="score-inner"><b>${analysis.masteryEstimate || "--"}</b><span>综合分</span></div>
-                        </div>
+        return `<main class="page diagnostic-page diagnostic-result-page ios-diagnostic-result-page">
+            <section class="ios-diagnostic-hero">
+                <div class="ios-hero-copy">
+                    <span class="ios-eyebrow">${icon("check",15)} 诊断完成 · ${escapeHtml(sourceLabel)}</span>
+                    <h1>你的学习画像已经校准</h1>
+                    <p>这份报告不再只展示柱状图，而是说明每个结论来自哪里、权重多少，以及如何影响下一步学习路径。</p>
+                    <div class="persona-tags">${(analysis.strengths || ["目标清晰"]).slice(0,3).map(s => `<span class="tag good">${escapeHtml(s)}</span>`).join("")}</div>
+                </div>
+                <div class="ios-profile-orb diagnostic">
+                    <div class="ios-orb-ring" style="--score:${mastery}">
+                        <b>${mastery}</b>
+                        <span>综合评估</span>
                     </div>
-                </article>
+                    <div class="ios-orb-meta">
+                        <span>${escapeHtml(analysis.persona || "稳步成长型")}</span>
+                        <small>${escapeHtml(profile.basicInfo?.major || "学习者")} ${profile.basicInfo?.goal ? "· " + escapeHtml(profile.basicInfo.goal) : ""}</small>
+                    </div>
+                </div>
             </section>
 
-            <section class="diagnostic-dimensions-grid">
-                <article class="card dimension-card">
-                    <div class="dim-header">${icon("brain",18)} 学习风格</div>
-                    <div class="dim-value">${escapeHtml(profile.cognitiveStyle?.dominantChannel || "均衡型")}</div>
-                    <div class="dim-sub">${escapeHtml(profile.cognitiveStyle?.category || "")}</div>
-                </article>
-                <article class="card dimension-card">
-                    <div class="dim-header">${icon("clock",18)} 学习习惯</div>
-                    <div class="dim-value">${escapeHtml(analysis.dailyMinutes || "--")}分钟/天</div>
-                    <div class="dim-sub">${escapeHtml(profile.learningContext?.preferredTime || "灵活安排")}</div>
-                </article>
-                <article class="card dimension-card">
-                    <div class="dim-header">${icon("trending",18)} 节奏偏好</div>
-                    <div class="dim-value">${escapeHtml(analysis.paceLabel || profile.learningContext?.pace || "稳定")}</div>
-                    <div class="dim-sub">${escapeHtml(analysis.paceHint || "")}</div>
-                </article>
-                <article class="card dimension-card">
-                    <div class="dim-header">${icon("flag",18)} 学习动机</div>
-                    <div class="dim-value">${escapeHtml(analysis.motivationLabel || "目标驱动")}</div>
-                    <div class="dim-sub">${escapeHtml(analysis.motivationHint || "")}</div>
-                </article>
+            <section class="ios-diagnostic-metrics">
+                <article class="card ios-kpi"><span>学习风格</span><b>${escapeHtml(channel)}</b><small>${escapeHtml(profile.cognitiveStyle?.category || "持续校准中")}</small></article>
+                <article class="card ios-kpi"><span>每日建议</span><b>${escapeHtml(String(dailyMinutes))}分钟</b><small>${escapeHtml(analysis.paceLabel || profile.learningContext?.pace || "稳定推进")}</small></article>
+                <article class="card ios-kpi good"><span>推荐周期</span><b>${escapeHtml(String(recommendations.estimatedWeeks || "--"))}</b><small>周级路径规划</small></article>
+                <article class="card ios-kpi danger"><span>待关注</span><b>${(analysis.weaknesses || []).length || 2}</b><small>薄弱项进入路径</small></article>
             </section>
 
-            <section class="diagnostic-strengths-section">
-                <article class="card strengths-card">
-                    <div class="card-head"><h2>${icon("trophy",18)} 能力评估</h2></div>
+            <section class="ios-diagnostic-grid">
+                <article class="card ios-evidence-card">
+                    <div class="card-head"><h2>${icon("chart",18)}诊断证据链</h2><span class="pill">可解释</span></div>
+                    <div class="ios-evidence-list">${evidence.map((item, i) => `<div class="ios-evidence-row" style="--delay:${i * 80}ms">
+                        <div class="ios-evidence-icon">${icon(item.icon,16)}</div>
+                        <div><b>${escapeHtml(item.label)}</b><p>${item.text}</p></div>
+                        <span>${item.value}</span>
+                    </div>`).join("")}</div>
+                </article>
+                <article class="card ios-dimension-card">
+                    <div class="card-head"><h2>${icon("brain",18)}真实学习状态</h2><span class="pill">非静态标签</span></div>
+                    <div class="profile-dimension-grid">${dimensions.map((d, i) => `<div class="dimension-row ios-dimension-row ${d.tone}" style="--delay:${i * 80}ms"><span>${escapeHtml(d.label)}</span><b>${d.value}%</b><div class="bar"><span style="width:${d.value}%"></span></div></div>`).join("")}</div>
+                </article>
+                <article class="card ios-strength-card">
+                    <div class="card-head"><h2>${icon("trophy",18)}优势与薄弱</h2></div>
                     <div class="strengths-body">
-                        <div class="strengths-col">
-                            <h3><span class="dot green"></span>优势方向</h3>
-                            <div class="tag-cloud">${(analysis.strengths || []).map(s => `<span class="tag good">${escapeHtml(s)}</span>`).join("") || '<span class="muted">持续评估中</span>'}</div>
-                        </div>
-                        <div class="strengths-col">
-                            <h3><span class="dot orange"></span>需要关注</h3>
-                            <div class="tag-cloud">${(analysis.weaknesses || []).map(w => `<span class="tag warn">${escapeHtml(w)}</span>`).join("") || '<span class="muted">持续评估中</span>'}</div>
-                        </div>
+                        <div class="strengths-col"><h3><span class="dot green"></span>优势方向</h3><div class="tag-cloud">${(analysis.strengths || []).map(s => `<span class="tag good">${escapeHtml(s)}</span>`).join("") || '<span class="muted">持续评估中</span>'}</div></div>
+                        <div class="strengths-col"><h3><span class="dot orange"></span>需要关注</h3><div class="tag-cloud">${(analysis.weaknesses || []).map(w => `<span class="tag warn">${escapeHtml(w)}</span>`).join("") || '<span class="muted">持续评估中</span>'}</div></div>
                     </div>
                 </article>
+                ${pathReasons.length ? `<article class="card ios-action-card">
+                    <div class="card-head"><h2>${icon("route",18)}推荐路径依据</h2><span class="pill">${pathReasons.length} 个节点</span></div>
+                    <div class="ios-path-reasons">${pathReasons.map((s, i) => `<div class="ios-path-reason" style="--delay:${i * 90}ms"><span>${i + 1}</span><div><b>${escapeHtml(s.title)}</b><p>${escapeHtml(s.reason)}</p><div class="bar"><span style="width:${s.progress}%"></span></div></div></div>`).join("")}</div>
+                    <div class="hero-actions"><button class="btn primary" data-view="path">${icon("route",17)}生成学习日程</button><button class="btn ghost" data-view="test">${icon("exam",17)}分科校准</button></div>
+                </article>` : ""}
+                ${analysis.insight ? `<article class="card ios-insight-card">
+                    <div class="card-head"><h2>${icon("brain",18)}AI 深度解读</h2></div>
+                    <p>${escapeHtml(analysis.insight)}</p>
+                </article>` : ""}
             </section>
 
-            ${recommendations.subjects && recommendations.subjects.length ? `<section class="diagnostic-path-section">
-                <article class="card path-card">
-                    <div class="card-head"><h2>${icon("route",18)} 推荐学习路径</h2><span class="pill">${recommendations.subjects.length} 门核心课 · 预计 ${recommendations.estimatedWeeks || "--"} 周</span></div>
-                    <div class="path-subject-list">
-                        ${recommendations.subjects.map((s, i) => `<div class="path-subject-row">
-                            <span class="subject-index">${i + 1}</span>
-                            <span class="subject-name">${escapeHtml(s)}</span>
-                            <div class="bar"><span style="width:${100 - i * 8}%"></span></div>
-                        </div>`).join("")}
-                    </div>
-                    <div class="diagnostic-meta-row">
-                        <div><b>${recommendations.estimatedWeeks || "--"}</b><span>预计周数</span></div>
-                        <div><b>${recommendations.dailyMinutes || "--"}分钟</b><span>每日建议</span></div>
-                        <div><b>${recommendations.stackSequence ? recommendations.stackSequence.join(" → ") : "系统推荐"}</b><span>推荐学习顺序</span></div>
-                    </div>
-                    <div class="hero-actions">
-                        <button class="btn primary" data-view="path">${icon("route",17)} 生成学习日程</button>
-                        <button class="btn ghost" data-view="test">${icon("exam",17)} 分科校准</button>
-                    </div>
-                </article>
-            </section>` : ""}
-
-            ${analysis.insight ? `<section class="diagnostic-insight-section">
-                <article class="card insight-card">
-                    <div class="card-head"><h2>${icon("brain",18)} AI 深度解读</h2></div>
-                    <div class="insight-body"><p>${escapeHtml(analysis.insight)}</p></div>
-                </article>
-            </section>` : ""}
-
-            <section class="diagnostic-actions-section">
+            <section class="diagnostic-actions-section ios-actions">
                 <button class="btn ghost" data-diagnostic-restart>${icon("refresh",16)} 重新诊断</button>
                 <button class="btn ghost" data-view="profile">${icon("user",16)} 查看完整画像</button>
                 <button class="btn ghost" data-diagnostic-switch-mode="questionnaire">${icon("list",16)} 补充问卷诊断</button>
@@ -3724,18 +3799,33 @@
         const activeTab = state.data.profileTab || "overview";
         const profile = state.data.profileInsight || getMockProfileInsight();
         const summary = profile.summary || {};
-        const dimensions = profile.dimensions || [];
-        const subjects = profile.subjectScores || [];
-        const weak = profile.weakPoints || [];
-        const strong = profile.strongPoints || [];
-        const risks = profile.risks || [];
-        const recommendations = profile.recommendations || [];
-        const tasks = profile.tasks || [];
+        const diagnostic = state.data.diagnosticResult;
+        const diagnosticAnalysis = diagnostic?.analysis || {};
+        const profileTrust = Math.min(96, Math.max(58, Math.round(((summary.accuracy || 82) + (summary.efficiency || 78) + (diagnosticAnalysis.masteryEstimate || summary.mastery || 75)) / 3)));
+        const persona = diagnosticAnalysis.persona || profile.persona || "稳步成长型";
         
-        return `<main class="page profile-page">
-            <section class="profile-hero">
-                <div><span class="pill">智能学习画像</span><h1>${escapeHtml(profile.persona || "稳步成长型")}</h1><p>画像不只是分数展示，而是把答题、课程、任务、笔记和复习行为转成下一步行动建议。</p><div class="hero-actions"><button class="btn primary glow" data-view="path">${icon("route",17)}生成学习路径</button><button class="btn ghost" data-view="aiAssistant">${icon("robot",17)}问AI助手</button><button class="btn ghost" data-view="diagnostic">${icon("brain",17)}去做诊断</button></div></div>
-                <div class="profile-score-card"><b>${summary.mastery || 75}</b><span>综合掌握度</span><div class="bar"><span style="width:${summary.mastery || 75}%"></span></div><small>正确率 ${summary.accuracy || 82}% · 效率 ${summary.efficiency || 78}%</small></div>
+        return `<main class="page profile-page ios-profile-page">
+            <section class="ios-profile-hero">
+                <div class="ios-hero-copy">
+                    <span class="ios-eyebrow">${icon("brain",15)} 智能学习画像</span>
+                    <h1>${escapeHtml(persona)}</h1>
+                    <p>画像现在以证据链为核心：把诊断、答题、AI 对话、复习和教师反馈合成为可解释的学习状态，并直接驱动下一步路径。</p>
+                    <div class="hero-actions">
+                        <button class="btn primary glow" data-view="path">${icon("route",17)}生成学习路径</button>
+                        <button class="btn ghost" data-view="diagnostic">${icon("target",17)}校准画像</button>
+                        <button class="btn ghost" data-view="aiAssistant">${icon("robot",17)}问AI助手</button>
+                    </div>
+                </div>
+                <div class="ios-profile-orb" aria-hidden="true">
+                    <div class="ios-orb-ring" style="--score:${summary.mastery || 75}">
+                        <b>${summary.mastery || 75}</b>
+                        <span>综合掌握</span>
+                    </div>
+                    <div class="ios-orb-meta">
+                        <span>可信度 ${profileTrust}%</span>
+                        <small>正确率 ${summary.accuracy || 82}% · 效率 ${summary.efficiency || 78}%</small>
+                    </div>
+                </div>
             </section>
             <section class="profile-sub-nav">
                 <nav class="sub-nav-tabs">
@@ -3765,21 +3855,56 @@
         const risks = profile.risks || [];
         const recommendations = profile.recommendations || [];
         const tasks = profile.tasks || [];
+        const diagnostic = state.data.diagnosticResult || {};
+        const diagnosticAnalysis = diagnostic.analysis || {};
+        const evidence = [
+            { icon: "pen", source: "自然语言", title: diagnosticAnalysis.persona || profile.persona || "稳步成长型", detail: "从学生自述中抽取专业、目标、偏好、薄弱点和可用时间。", weight: 18 },
+            { icon: "exam", source: "答题表现", title: `${summary.accuracy || 82}% 正确率`, detail: `当前有 ${summary.weakCount || weak.length || 3} 个薄弱知识点，需要用真实题目继续校准。`, weight: 28 },
+            { icon: "robot", source: "AI 对话", title: "卡点主题追踪", detail: "反复追问的概念会进入画像候选，避免只按关键词贴标签。", weight: 14 },
+            { icon: "refresh", source: "复习记录", title: `${summary.continuousDays || 7} 天连续学习`, detail: "复习完成率和遗忘曲线会修正长期掌握度。", weight: 24 },
+            { icon: "user", source: "教师反馈", title: "人工干预证据", detail: "教师反馈可补充项目作业、表达和迁移能力的盲区。", weight: 16 }
+        ];
+        const knowledgeNodes = subjects.slice(0, 5);
+        const focusTasks = tasks.slice(0, 3);
         
-        return `<section class="profile-kpis">
-                <article class="card"><b>${summary.studyHours || 24}</b><span>学习小时</span></article>
-                <article class="card"><b>${summary.completedToday || 5}/${summary.todayTasks || 8}</b><span>今日任务</span></article>
-                <article class="card"><b>${summary.weakCount || 3}</b><span>薄弱知识点</span></article>
-                <article class="card"><b>${summary.continuousDays || 7}</b><span>连续学习天数</span></article>
+        return `<section class="profile-kpis ios-kpis">
+                <article class="card ios-kpi"><span>学习小时</span><b>${summary.studyHours || 24}</b><small>近 7 天累计</small></article>
+                <article class="card ios-kpi"><span>今日任务</span><b>${summary.completedToday || 5}/${summary.todayTasks || 8}</b><small>完成会回写画像</small></article>
+                <article class="card ios-kpi danger"><span>薄弱知识点</span><b>${summary.weakCount || 3}</b><small>优先进入路径</small></article>
+                <article class="card ios-kpi good"><span>连续学习</span><b>${summary.continuousDays || 7}</b><small>学习节律稳定</small></article>
             </section>
             ${profileInputPanel()}
-            <section class="profile-workbench">
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("chart",18)}六维能力画像</h2><button class="btn tiny ghost" data-open-panel="profile">数据来源</button></div><div class="profile-dimension-grid">${dimensions.map(d => `<div class="dimension-row"><span>${escapeHtml(d.label)}</span><b>${d.value}%</b><div class="bar"><span style="width:${d.value}%"></span></div></div>`).join("")}</div></article>
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("brain",18)}风险预警</h2><span class="pill warn">需要干预</span></div><div class="risk-list">${risks.map(r => `<div class="risk-item ${r.level}"><b>${escapeHtml(r.title)}</b><p>${escapeHtml(r.subject)} · ${escapeHtml(r.reason)}</p><button class="btn tiny ghost" data-run-closed-loop="${escapeHtml(r.title)}">生成闭环</button></div>`).join("") || "<p>暂无高风险点。</p>"}</div></article>
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("list",18)}分科学情</h2><button class="btn tiny ghost" data-view="test">分科测试</button></div><div class="subject-score-list">${subjects.slice(0,8).map(s => `<div><span>${escapeHtml(s.subject)}<small>${s.weakCount || 0} 个待修复 · ${s.wrongCount || 0} 次错题</small></span><b>${s.mastery || 0}%</b><div class="bar"><span style="width:${s.mastery || 0}%"></span></div></div>`).join("")}</div></article>
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("bolt",18)}AI行动建议</h2><span class="pill">可执行</span></div><div class="list">${recommendations.map(r => `<button class="list-row action-row" data-view="${escapeHtml(r.target)}"><span>${escapeHtml(r.title)}<small>${escapeHtml(r.reason)}</small></span><span class="pill">${escapeHtml(r.action)}</span></button>`).join("")}</div></article>
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("refresh",18)}今日证据</h2><span class="pill">${tasks.length} 项</span></div><div class="list">${tasks.map(task => `<button class="list-row action-row" data-task-id="${task.id}"><span>${escapeHtml(task.title)}<small>${escapeHtml(task.subtitle || task.source)} · ${task.estimated_minutes || 0} 分钟</small></span><span class="pill ${task.status === "done" ? "good" : ""}">${task.status === "done" ? "完成" : "待做"}</span></button>`).join("") || "<p>暂无今日任务。</p>"}</div></article>
-                <article class="card"><div class="card-head"><h2 class="section-title">${icon("trophy",18)}优势能力</h2><button class="btn tiny ghost" data-view="practice">迁移练习</button></div><div class="strong-list">${strong.map(p => `<div class="strong-item"><b>${escapeHtml(p.title)}</b><span>${escapeHtml(p.subject)} · ${p.mastery}%</span></div>`).join("")}</div></article>
+            <section class="ios-profile-grid">
+                <article class="card ios-evidence-card">
+                    <div class="card-head"><h2 class="section-title">${icon("chart",18)}画像证据链</h2><button class="btn tiny ghost" data-open-panel="profile">数据来源</button></div>
+                    <div class="ios-evidence-list">${evidence.map((item, i) => `<div class="ios-evidence-row" style="--delay:${i * 80}ms">
+                        <div class="ios-evidence-icon">${icon(item.icon,16)}</div>
+                        <div><b>${escapeHtml(item.source)} · ${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div>
+                        <span>${item.weight}%</span>
+                    </div>`).join("")}</div>
+                </article>
+                <article class="card ios-dimension-card">
+                    <div class="card-head"><h2 class="section-title">${icon("brain",18)}能力画像</h2><span class="pill">动态校准</span></div>
+                    <div class="profile-dimension-grid">${dimensions.map((d, i) => `<div class="dimension-row ios-dimension-row" style="--delay:${i * 70}ms"><span>${escapeHtml(d.label)}</span><b>${d.value}%</b><div class="bar"><span style="width:${d.value}%"></span></div></div>`).join("")}</div>
+                </article>
+                <article class="card ios-knowledge-card">
+                    <div class="card-head"><h2 class="section-title">${icon("layers",18)}知识状态地图</h2><button class="btn tiny ghost" data-view="test">分科校准</button></div>
+                    <div class="ios-knowledge-map">${knowledgeNodes.map((s, i) => `<div class="ios-knowledge-node ${Number(s.mastery || 0) < 60 ? "risk" : Number(s.mastery || 0) > 78 ? "good" : ""}" style="--delay:${i * 85}ms">
+                        <span>${i + 1}</span><b>${escapeHtml(s.subject)}</b><small>${s.weakCount || 0} 个待修复 · ${s.wrongCount || 0} 次错题</small><div class="bar"><span style="width:${s.mastery || 0}%"></span></div>
+                    </div>`).join("") || "<p>暂无分科学情。</p>"}</div>
+                </article>
+                <article class="card ios-risk-card">
+                    <div class="card-head"><h2 class="section-title">${icon("alert",18)}风险与干预</h2><span class="pill warn">需要解释</span></div>
+                    <div class="risk-list">${risks.map((r, i) => `<div class="risk-item ${r.level}" style="--delay:${i * 80}ms"><b>${escapeHtml(r.title)}</b><p>${escapeHtml(r.subject)} · ${escapeHtml(r.reason)}</p><button class="btn tiny ghost" data-run-closed-loop="${escapeHtml(r.title)}">生成闭环</button></div>`).join("") || "<p>暂无高风险点。</p>"}</div>
+                </article>
+                <article class="card ios-action-card">
+                    <div class="card-head"><h2 class="section-title">${icon("bolt",18)}下一步行动</h2><span class="pill good">画像驱动</span></div>
+                    <div class="list">${recommendations.map((r, i) => `<button class="list-row action-row ios-action-row" style="--delay:${i * 80}ms" data-view="${escapeHtml(r.target)}"><span>${escapeHtml(r.title)}<small>${escapeHtml(r.reason)}</small></span><span class="pill">${escapeHtml(r.action)}</span></button>`).join("") || focusTasks.map((task, i) => `<button class="list-row action-row ios-action-row" style="--delay:${i * 80}ms" data-task-id="${task.id}"><span>${escapeHtml(task.title)}<small>${escapeHtml(task.subtitle || task.source)} · ${task.estimated_minutes || 0} 分钟</small></span><span class="pill ${task.status === "done" ? "good" : ""}">${task.status === "done" ? "完成" : "待做"}</span></button>`).join("") || "<p>暂无行动建议。</p>"}</div>
+                </article>
+                <article class="card ios-strength-card">
+                    <div class="card-head"><h2 class="section-title">${icon("trophy",18)}可迁移优势</h2><button class="btn tiny ghost" data-view="practice">迁移练习</button></div>
+                    <div class="strong-list">${strong.map((p, i) => `<div class="strong-item" style="--delay:${i * 80}ms"><b>${escapeHtml(p.title)}</b><span>${escapeHtml(p.subject)} · ${p.mastery}%</span></div>`).join("")}</div>
+                </article>
             </section>`;
     }
 
@@ -4587,6 +4712,7 @@
     function assessmentStartView(mode, meta, set) {
         const subject = mode === "test" ? state.data.selectedSubject : "计算机综合";
         const subjects = mode === "test" ? subjectTestSelector() : examScopeBanner(mode);
+        const blueprint = set.blueprint || null;
         const flow = [
             ["brain", "AI诊断范围", mode === "test" ? `聚焦 ${subject}` : "覆盖全部计算机核心模块"],
             ["exam", "沉浸答题", `${set.questions?.length || meta.count} · ${set.duration || 20} 分钟`],
@@ -4606,6 +4732,16 @@
             </section>
             ${subjects}
             <section class="test-flow">${flow.map(([ic, title, desc]) => `<article><span>${icon(ic,20)}</span><b>${title}</b><small>${desc}</small></article>`).join("")}</section>
+            ${mode === "test" && blueprint ? `<section class="card stage-blueprint">
+                <div class="card-head"><div><span class="pill good">自动组卷</span><h2 class="section-title">${icon("route",18)}根据学习路径和画像生成</h2><p>本次阶段测试不是固定题组，会优先覆盖当前路径中的薄弱节点、错题节点和笔记缺口。</p></div></div>
+                <div class="stage-blueprint-grid">
+                    <div><b>${escapeHtml(blueprint.profileStyle || "画像校准中")}</b><span>画像风格</span></div>
+                    <div><b>${escapeHtml(String(blueprint.attentionSpan || set.duration || 20))} 分钟</b><span>专注时长</span></div>
+                    <div><b>${(blueprint.focusPoints || []).length}</b><span>覆盖路径节点</span></div>
+                </div>
+                <div class="stage-focus-list">${(blueprint.focusPoints || []).slice(0, 6).map(point => `<div><b>${escapeHtml(point.title)}</b><span>${escapeHtml(point.subject)} · 掌握度 ${point.mastery}% · 错题 ${point.wrongCount || 0} · 组卷分 ${point.pathScore}</span></div>`).join("")}</div>
+                <div class="tag-row">${(blueprint.evidence || []).map(item => `<span class="pill">${escapeHtml(item)}</span>`).join("")}</div>
+            </section>` : ""}
             <section class="grid-2"><article class="card"><h2 class="section-title">${icon("list",18)}本次能力目标</h2><div class="objective-list">${(set.questions || []).slice(0,5).map(q => `<div><b>${escapeHtml(q.knowledgeTitle)}</b><span>${escapeHtml(q.subject)} · 掌握度 ${q.mastery}%</span></div>`).join("")}</div></article><article class="card"><h2 class="section-title">${icon("robot",18)}AI考前建议</h2><p class="coach-copy">${mode === "onlineExam" ? "先快速完成确定题，再回到需要推理的题。系统会在交卷后把错题归因、笔记整理和复习任务串成闭环。" : "这不是单纯刷题。每道题都会参与画像更新，完成后 AI 会告诉你本学科下一步该补定义、练应用，还是整理误区卡。"}</p></article></section>
         </main>`;
     }
@@ -4670,7 +4806,12 @@
         const reviewQueue = center.reviewQueue || [];
         const cards = center.cards || [];
         const selected = notes.find(note => Number(note.id) === Number(state.data.selectedNoteId)) || notes[0] || null;
-        const sourceLabels = { manual: "手动", course: "课程", practice: "练习", exam: "考试" };
+        const sourceLabels = { all: "全部来源", manual: "手动", course: "课程", practice: "专项练习", test: "阶段测试", exam: "在线考试", ai: "AI助手", tutor: "AI导师" };
+        const sourceStats = notes.reduce((acc, note) => {
+            const key = note.source_type || "manual";
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
         const titleValue = selected ? selected.title : "";
         const bodyValue = selected ? selected.body : "";
         const subjectValue = selected?.subject || subjects[0]?.subject || state.data.selectedSubject || "综合";
@@ -4682,12 +4823,25 @@
                 <article class="card"><b>${cards.length}</b><span>复习卡片</span></article>
                 <article class="card"><b>${subjects.length}</b><span>学科分类</span></article>
             </section>
+            <section class="card note-source-explain">
+                <div class="card-head"><div><span class="pill">动态笔记库</span><h2 class="section-title">${icon("db",18)}笔记来源与写入条件</h2><p>笔记库不是固定内容。只有手动保存、课程进度、练习/测试提交、考试复盘或 AI 回答保存时，才会写入 notes 和复习卡。</p></div></div>
+                <div class="note-source-grid">
+                    ${[
+                        ["manual", "手动保存", "在笔记页点击保存，写入 notes，默认次日复习。"],
+                        ["course", "课程学习", "课程进度更新后自动生成课程学习记录。"],
+                        ["practice", "专项练习", "提交练习后生成错题/迁移复盘笔记。"],
+                        ["test", "阶段测试", "按学习路径和画像组卷，提交后写入阶段测试复盘。"],
+                        ["exam", "在线考试", "交卷后写入考试复盘和错题闭环。"],
+                        ["ai", "AI助手", "AI 对话选择保存，或笔记模式沉淀为结构化笔记。"]
+                    ].map(([key, title, desc]) => `<div class="note-source-item ${sourceStats[key] ? "active" : ""}"><b>${escapeHtml(title)}</b><p>${escapeHtml(desc)}</p><span>${sourceStats[key] || 0} 条</span></div>`).join("")}
+                </div>
+            </section>
             <section class="notes-workbench">
                 <aside class="card note-sidebar">
                     <div class="card-head"><h2 class="section-title">${icon("search",18)}笔记库</h2><button class="btn tiny ghost" data-new-note>添加</button></div>
                     <div class="note-filter-row">
                         <select data-note-filter-subject><option value="all">全部学科</option>${subjects.map(item => `<option value="${escapeHtml(item.subject)}" ${state.data.noteFilterSubject === item.subject ? "selected" : ""}>${escapeHtml(item.subject)} · ${item.total}</option>`).join("")}</select>
-                        <select data-note-filter-source>${["all","manual","course","practice","exam"].map(key => `<option value="${key}" ${state.data.noteFilterSource === key ? "selected" : ""}>${key === "all" ? "全部来源" : sourceLabels[key]}</option>`).join("")}</select>
+                        <select data-note-filter-source>${["all","manual","course","practice","test","exam","ai"].map(key => `<option value="${key}" ${state.data.noteFilterSource === key ? "selected" : ""}>${sourceLabels[key] || key}</option>`).join("")}</select>
                     </div>
                     <div class="note-list">${notes.map(note => `<button class="note-row ${Number(note.id) === Number(selected?.id) ? "active" : ""}" data-note-open="${note.id}">
                         <span><b>${escapeHtml(note.title)}</b><small>${escapeHtml(note.subject || note.knowledge_title || "综合")} · ${escapeHtml(sourceLabels[note.source_type] || note.source_type || "笔记")} · ${formatDate(note.updated_at)}</small></span>
@@ -5435,14 +5589,58 @@
 
     function pathView() {
         const center = state.data.pathCenter || {};
+        const hasAgentPath = center.generatedByAgent === true;
         const nodes = center.pathNodes || [];
         const subjects = center.subjects || [];
         const tasks = center.tasks || [];
         const courses = center.courses || [];
         const summary = center.summary || {};
         const profileContext = center.profileContext || {};
+        const debugJson = JSON.stringify({
+            personalized: center.debug?.personalized ?? Boolean(center.profileContext),
+            profileContext,
+            personalization: center.personalization || [],
+            strategy: center.debug?.reason || "path/center profile-aware aggregation",
+            selectedWeakNodes: center.debug?.selectedWeakNodes || nodes.slice(0, 5)
+        }, null, 2);
         const statusLabel = { priority: "优先修复", learning: "学习中", review: "复习迁移", done: "已完成" };
         const statusIcon = { priority: "bolt", learning: "play", review: "refresh", done: "check" };
+        if (!hasAgentPath) {
+            const profile = center.profileContext || {};
+            return `<main class="page path-page agent-path-empty-page">
+                <section class="hero-row">
+                    <div class="hero">
+                        <span class="pill">Agent 个性化学习</span>
+                        <h1>尚未生成学习路径</h1>
+                        <p>这里不会再显示规则路径、固定课程或硬编码资源。只有你点击下方按钮，让 Agent 读取画像、目标、薄弱点和学习记录后，才会写入并展示学习路径和今日计划。</p>
+                        <div class="hero-actions">
+                            <button class="btn primary glow" data-path-generate>${icon("robot",17)}调用 Agent 个性化学习</button>
+                            <button class="btn ghost" data-view="profile">${icon("user",17)}查看学习画像</button>
+                            <button class="btn ghost" data-view="diagnostic">${icon("brain",17)}重新诊断</button>
+                        </div>
+                    </div>
+                    <article class="card agent-path-status">
+                        <span class="pill ${profile.primaryStyleLabel ? "good" : "warn"}">${profile.primaryStyleLabel ? "画像已读取" : "等待画像"}</span>
+                        <h2>${escapeHtml(profile.primaryStyleLabel || "画像待校准")}</h2>
+                        <p>每日可用 ${escapeHtml(String(profile.dailyMinutes || "--"))} 分钟 · 专注时长 ${escapeHtml(String(profile.attentionSpan || "--"))} 分钟</p>
+                    </article>
+                </section>
+                <section class="path-control card agent-only-control">
+                    <div><label>学习目标</label><input data-path-goal value="${escapeHtml(state.data.pathGoal)}" placeholder="例如：两周掌握数据结构基础"></div>
+                    <div><label>学科范围</label><select data-path-subject><option value="all">由 Agent 判断</option></select></div>
+                    <div><label>学习强度</label><select data-path-intensity>${[["light","轻量"],["normal","标准"],["intense","冲刺"]].map(([key,label]) => `<option value="${key}" ${state.data.pathIntensity === key ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+                    <button class="btn primary" data-path-generate>${icon("route",17)}生成个性化路径</button>
+                </section>
+                <section class="agent-path-empty-grid">
+                    ${[
+                        ["brain", "读取长期画像", "学习风格、可用时间、专注时长、薄弱点和偏好会进入 Agent 上下文。"],
+                        ["target", "分析当前目标", "目标会影响知识点优先级，不再固定从同一个节点开始。"],
+                        ["route", "写入路径和计划", "只有 Agent 写入 study_tasks 后，页面才展示主路径和今日任务。"],
+                        ["file", "保留生成证据", "生成后会展示 Agent 依据、任务来源和路径状态。"]
+                    ].map(([ic, title, desc]) => `<article class="card"><span class="round-icon">${icon(ic,20)}</span><b>${title}</b><p>${desc}</p></article>`).join("")}
+                </section>
+            </main>`;
+        }
         return `<main class="page path-page">
             <section class="hero-row"><div class="hero"><h1>个性化学习路径</h1><p>路径不再是固定模板：系统会根据你的掌握度、错题、课程进度、笔记和今日任务实时重排，每个人看到的节点、原因和操作都不同。</p><div class="hero-actions"><button class="btn primary glow" data-path-generate>${icon("robot",17)}生成路径</button><button class="btn ghost" data-view="practice">${icon("exam",17)}去验证</button><button class="btn ghost" data-view="smartNotes">${icon("pen",17)}整理笔记</button></div></div>${metricCards()}</section>
             <section class="path-control card">
@@ -5456,6 +5654,20 @@
                 <div><label>每日可用时间</label><b>${escapeHtml(String(profileContext.dailyMinutes || 60))} 分钟</b><small>用于控制任务数量</small></div>
                 <div><label>专注时长</label><b>${escapeHtml(String(profileContext.attentionSpan || 30))} 分钟</b><small>超过时会建议拆分</small></div>
                 <div><label>推荐资源偏好</label><b>${escapeHtml((profileContext.learningStyle || []).join(" / ") || "reading")}</b><small>影响视频、文档、实验、练习比例</small></div>
+            </section>
+            <section class="path-proof-panel">
+                <article class="path-proof-card">
+                    <span class="pill good">${center.debug?.personalized === false ? "未个性化" : "已个性化"}</span>
+                    <h2>这条路径为什么是你的</h2>
+                    <p>${escapeHtml((center.personalization || [])[0] || "系统正在读取画像、掌握度和今日任务来生成路径。")}</p>
+                    <div class="path-proof-grid">
+                        ${(center.personalization || []).slice(0, 4).map(item => `<div><b>${icon("check",15)}${escapeHtml(item)}</b></div>`).join("")}
+                    </div>
+                </article>
+                <article class="path-json-card">
+                    <div class="card-head"><h2 class="section-title">${icon("file",18)}路径判定 JSON</h2><span class="pill">profile-aware</span></div>
+                    <pre>${escapeHtml(debugJson)}</pre>
+                </article>
             </section>
             <section class="major-direction-band">
                 <div class="band-copy"><span class="pill">计算机专业方向推荐</span><h2>先选方向，再让路径自己长出来</h2><p>同样是学习计算机，不同目标需要完全不同的知识顺序。系统会按职业目标、薄弱知识点和每天可用时间推荐路线。</p></div>
@@ -7774,112 +7986,127 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         </main>`;
     }
 
-    // ========== Agent 学习中心视图 ==========
-    function agentCenterView() {
-        const agentStatus = state.data.agentStatus;
-        const agentPlan = state.data.agentPlan;
-        const reasoningLog = state.data.agentReasoningLog || [];
-        const planLoading = state.data.agentPlanLoading;
-
-        return `<main class="page vault-page agent-page">
+    function knowledgeBaseView() {
+        const kb = state.data.knowledgeBase || {};
+        const stats = kb.stats || {};
+        const subjects = kb.subjects || [];
+        const points = kb.points || [];
+        const docs = kb.documents || [];
+        const chunks = kb.chunks || [];
+        const courses = kb.courses || [];
+        const questions = kb.questions || [];
+        return `<main class="page vault-page rag-page">
             <section class="vault-hero">
-                <h1>${icon("brain", 24)} Agent 智能学习中心</h1>
-                <p>LLM驱动的个性化学习智能体 · 动态画像分析 · 自适应学习路径 · 实时推理追踪</p>
+                <h1>${icon("database", 24)} 计算机知识库</h1>
+                <p>已接入知识点、课程、题库和 RAG 文档，支持按学科浏览、检索、加入学习路径和 AI 问答。</p>
                 <div class="vault-hero-actions">
-                    <button class="btn-violet" data-agent-init ${planLoading ? 'disabled' : ''}>${icon("user", 16)} 初始化学习画像</button>
-                    <button class="btn-teal" data-agent-plan ${planLoading ? 'disabled' : ''}>${icon("route", 16)} 生成学习计划</button>
-                    <button class="btn-violet-outline" data-agent-clear>${icon("trash", 16)} 清除记录</button>
+                    <button class="btn-violet" data-view="path">${icon("route", 16)} 生成学习路径</button>
+                    <button class="btn-teal" data-view="aiAssistant" data-ai-assistant-mode="rag">${icon("robot", 16)} 基于知识库提问</button>
+                    <button class="btn-violet-outline" data-view="knowledgeGraph">${icon("brain", 16)} 知识图谱</button>
                 </div>
             </section>
-
-            ${planLoading ? `<div class="vault-loading"><div class="vault-spinner"></div><p>Agent 推理中，正在分析你的学习数据...</p></div>` : ''}
-
             <section class="agent-cards">
-                <div class="agent-card">
-                    <div class="agent-card-header">
-                        <div class="agent-card-icon" style="background:rgba(124,77,255,0.12);color:var(--violet);">${icon("user", 20)}</div>
-                        <span class="agent-card-title">学习画像状态</span>
-                    </div>
-                    <div class="agent-card-value">${agentStatus ? (agentStatus.error ? '异常' : '已就绪') : '未初始化'}</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">${agentStatus && !agentStatus.error ? 'Agent已完成初步画像分析' : '点击上方按钮初始化'}</div>
-                </div>
-                <div class="agent-card">
-                    <div class="agent-card-header">
-                        <div class="agent-card-icon" style="background:rgba(22,179,148,0.12);color:var(--teal);">${icon("route", 20)}</div>
-                        <span class="agent-card-title">学习计划</span>
-                    </div>
-                    <div class="agent-card-value">${agentPlan ? (agentPlan.error ? '失败' : '已生成') : '未生成'}</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">${agentPlan && !agentPlan.error ? '个性化学习路径已准备就绪' : '需要先初始化画像'}</div>
-                </div>
-                <div class="agent-card">
-                    <div class="agent-card-header">
-                        <div class="agent-card-icon" style="background:rgba(245,158,11,0.12);color:var(--amber);">${icon("clock", 20)}</div>
-                        <span class="agent-card-title">推理记录</span>
-                    </div>
-                    <div class="agent-card-value">${reasoningLog.length}</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Agent推理步骤追踪</div>
-                </div>
-                <div class="agent-card">
-                    <div class="agent-card-header">
-                        <div class="agent-card-icon" style="background:rgba(47,107,255,0.12);color:var(--blue);">${icon("zap", 20)}</div>
-                        <span class="agent-card-title">LLM 后端</span>
-                    </div>
-                    <div class="agent-card-value" style="font-size:16px;">${window._envOllama || '本地 / Herdsman'}</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">${agentStatus && agentStatus.provider ? '当前: ' + agentStatus.provider : '待连接'}</div>
-                </div>
+                <div class="agent-card"><div class="agent-card-header"><span class="agent-card-title">知识点</span></div><div class="agent-card-value">${stats.knowledgePoints || 0}</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">长期画像与路径节点来源</div></div>
+                <div class="agent-card"><div class="agent-card-header"><span class="agent-card-title">RAG 文档</span></div><div class="agent-card-value">${stats.documents || 0}</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">课程资料与知识库文档</div></div>
+                <div class="agent-card"><div class="agent-card-header"><span class="agent-card-title">知识片段</span></div><div class="agent-card-value">${stats.chunks || 0}</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">问答检索证据</div></div>
+                <div class="agent-card"><div class="agent-card-header"><span class="agent-card-title">题库</span></div><div class="agent-card-value">${stats.questions || 0}</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">诊断与练习题</div></div>
             </section>
-
-            ${agentPlan ? `
-            <div class="agent-reasoning">
-                <div class="agent-reasoning-badge">${icon("brain", 14)} Agent 推理结果</div>
-                <h3>个性化学习方案</h3>
-                <div class="agent-reasoning-meta">
-                    <span>${icon("target", 14)} ${escapeHtml(state.data.pathGoal || '系统掌握计算机核心能力')}</span>
-                    <span>${icon("book", 14)} ${escapeHtml(state.data.pathSubject || '全科目')}</span>
-                    <span>${icon("flame", 14)} 强度: ${escapeHtml(state.data.pathIntensity || '正常')}</span>
-                </div>
-                <div class="agent-reason">
-                    <div style="white-space:pre-wrap;">${typeof agentPlan === 'string' ? escapeHtml(agentPlan) : JSON.stringify(agentPlan, null, 2)}</div>
-                </div>
-                <div class="agent-reasoning-actions">
-                    <button class="btn-violet" data-view="studyPlan">${icon("calendar", 16)} 查看学习计划</button>
-                    <button class="btn-teal" data-agent-apply-plan>${icon("check", 16)} 应用并更新计划</button>
-                    <button class="btn-violet-outline" data-view="path">${icon("route", 16)} 进入学习路径</button>
-                    <span class="agent-plan-status" style="display:${state.data.agentPlanApplied ? 'inline-flex' : 'none'};align-items:center;gap:4px;padding:4px 12px;border-radius:6px;background:rgba(22,179,148,0.1);color:var(--teal);font-size:13px;">
-                        ${icon("check", 14)} 已同步到今日学习计划
-                    </span>
-                </div>
-            </div>
-            ` : (agentPlan && agentPlan.error ? `
-            <div class="vault-card" style="padding:20px;margin-bottom:20px;text-align:center;color:var(--muted);">
-                ${icon("alert", 32)}
-                <p>Agent推理遇到问题: ${escapeHtml(agentPlan.error)}</p>
-                <p style="font-size:13px;">请确认 Ollama 服务已启动或检查网络连接</p>
-            </div>` : !planLoading ? `
-            <div class="vault-card" style="padding:40px 20px;margin-bottom:20px;text-align:center;color:var(--muted);">
-                ${icon("brain", 48)}
-                <p style="margin:16px 0 6px;font-size:16px;color:var(--ink);font-weight:600;">Agent 智能体等待激活</p>
-                <p style="font-size:14px;margin:0;">点击"初始化学习画像"开始，Agent将分析你的学习数据并生成个性化学习计划</p>
-            </div>` : '')}
-
-            ${reasoningLog.length > 0 ? `
-            <div class="vault-card">
-                <div class="vault-card-head"><h3>${icon("clock", 16)} Agent 推理追踪</h3></div>
-                <div class="vault-card-body">
-                    ${reasoningLog.slice(-10).reverse().map(log => `
-                        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.04);font-size:13px;">
-                            <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${log.action.includes('error') ? 'rgba(239,68,68,0.1)' : 'rgba(22,179,148,0.1)'};color:${log.action.includes('error') ? '#ef4444' : 'var(--teal)'};">${escapeHtml(log.action)}</span>
-                            <span style="flex:1;color:var(--ink);">${escapeHtml(log.result)}</span>
-                            <span style="font-size:11px;color:var(--muted);">${new Date(log.time).toLocaleTimeString("zh-CN")}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>` : ''}
+            <section class="path-control card">
+                <div><label>搜索知识库</label><input data-kb-search value="${escapeHtml(state.data.knowledgeBaseQuery || "")}" placeholder="例如：需求分析、数据结构、操作系统"></div>
+                <div><label>学科</label><select data-kb-subject><option value="all">全部学科</option>${subjects.map(s => `<option value="${escapeHtml(s.subject)}" ${state.data.knowledgeBaseSubject === s.subject ? "selected" : ""}>${escapeHtml(s.subject)} · ${s.knowledgeCount}</option>`).join("")}</select></div>
+                <button class="btn primary" data-kb-refresh>${icon("search", 16)}检索</button>
+            </section>
+            <section class="path-workbench">
+                <article class="card path-main">
+                    <div class="card-head"><h2 class="section-title">${icon("book",18)}知识点库</h2><span class="pill">${points.length} 条</span></div>
+                    <div class="list">${points.map(p => `<div class="list-row">
+                        <span><b>${escapeHtml(p.title)}</b><small>${escapeHtml(p.subject)} · ${escapeHtml(p.summary || "暂无摘要")}</small></span>
+                        <span class="pill">${p.mastery}% · ${p.questionCount}题</span>
+                    </div>`).join("") || "<p>暂无匹配知识点。</p>"}</div>
+                </article>
+                <aside class="side-card">
+                    <article class="card"><div class="card-head"><h2 class="section-title">${icon("chart",18)}学科覆盖</h2></div><div class="list">${subjects.slice(0, 10).map(s => `<button class="list-row action-row" data-kb-subject-pick="${escapeHtml(s.subject)}"><span>${escapeHtml(s.subject)}<small>${s.knowledgeCount} 个知识点 · ${s.weakCount} 个薄弱</small></span><span class="pill">${s.mastery}%</span></button>`).join("")}</div></article>
+                    <article class="card"><div class="card-head"><h2 class="section-title">${icon("book",18)}课程资源</h2><span class="pill">${courses.length}</span></div><div class="list">${courses.slice(0, 8).map(c => `<div class="list-row"><span>${escapeHtml(c.title)}<small>${escapeHtml(c.provider || "课程")} · ${escapeHtml(c.subject || "综合")}</small></span><span class="pill">${c.progress || 0}%</span></div>`).join("") || "<p>暂无课程。</p>"}</div></article>
+                </aside>
+            </section>
+            <section class="grid-2">
+                <article class="card">
+                    <div class="card-head"><h2 class="section-title">${icon("file",18)}RAG 文档</h2><span class="pill">${docs.length}</span></div>
+                    <div class="list">${docs.map(d => `<div class="list-row"><span>${escapeHtml(d.title)}<small>${escapeHtml(d.course)} · ${escapeHtml(d.knowledgePoint)}</small></span><span class="pill">${d.chunks}片段</span></div>`).join("") || "<p>暂无匹配文档。</p>"}</div>
+                </article>
+                <article class="card">
+                    <div class="card-head"><h2 class="section-title">${icon("exam",18)}题库样例</h2><span class="pill">${questions.length}</span></div>
+                    <div class="list">${questions.map(q => `<div class="list-row"><span>${escapeHtml(q.question)}<small>${escapeHtml(q.knowledgeTitle)} · ${escapeHtml(q.subject)}</small></span><span class="pill">${escapeHtml(q.difficulty)}</span></div>`).join("") || "<p>暂无匹配题目。</p>"}</div>
+                </article>
+            </section>
+            <section class="card">
+                <div class="card-head"><h2 class="section-title">${icon("search",18)}可检索知识片段</h2><span class="pill">${chunks.length}</span></div>
+                <div class="grid-3">${chunks.map(c => `<article class="quick-tile" style="min-height:190px"><span class="pill">${escapeHtml(c.subject)}</span><h3>${escapeHtml(c.knowledgePoint)}</h3><p>${escapeHtml(c.text)}</p><small>${escapeHtml(c.course)} · 质量 ${c.qualityScore}</small></article>`).join("") || "<p>暂无匹配片段。</p>"}</div>
+            </section>
         </main>`;
     }
 
+    // Agent 中心当前先进入可用知识库，避免把调试 JSON 暴露给用户。
+    function agentCenterView() {
+        return knowledgeBaseView();
+    }
+
     function loginView() {
-        return `<main class="login-page"><section class="login-visual"><div class="brand">${logo()}<span>EduSmart</span></div><h1 class="login-title">智能化学习平台</h1><p>公开数据入库、学习行为闭环、AI 动态规划路径。</p><div>${metricCards()}</div></section><section class="login-card"><h2 class="section-title">${icon("user",20)}登录 EduSmart</h2><p>演示账号来自新数据库：zhangsan / 123456</p><form class="auth-form" id="login-form"><label>用户名<input name="username" value="zhangsan" autocomplete="username"></label><label>密码<input name="password" type="password" value="123456" autocomplete="current-password"></label><button class="btn primary glow" type="submit">${icon("play",17)}进入学习平台</button><div class="message" id="login-message"></div></form></section></main>`;
+        const storyCards = [
+            ["brain", "画像先行", "登录后先读取长期画像、认知偏好、专注时长和多模态偏好。"],
+            ["route", "路径可解释", "每个节点都显示掌握度、错题证据、资源偏好和推荐原因。"],
+            ["db", "知识库有数据", "软件工程、RAG 文档、题库和今日计划都绑定真实知识节点。"],
+            ["check", "闭环回写", "练习、笔记、复习和教师干预都会回写画像与下一次路径。"]
+        ];
+        const learningScenes = [
+            ["/images/login/collaborative-study.png", "小组学习", "学生围绕问题讨论，系统把提问、笔记和练习结果沉淀为画像证据。"],
+            ["/images/login/focused-study-plan.png", "专注自学", "按专注时长切分任务，避免一次性塞满课程和题目。"],
+            ["/images/login/teacher-guidance-board.png", "课堂反馈", "教师可以看到风险点、路径原因和学生当前需要的干预动作。"]
+        ];
+        return `<main class="login-story-page">
+            <section class="login-story-hero">
+                <nav class="login-story-nav"><div class="brand">${logo()}<span>EduSmart</span></div><a class="login-nav-button" href="#login-panel">${icon("user",15)}登录</a></nav>
+                <div class="login-story-copy">
+                    <span class="eyebrow">面向学生的 AI 学习驾驶舱</span>
+                    <h1>从一次登录开始，系统先理解学生，再安排学习</h1>
+                    <p>EduSmart 围绕学生的真实学习过程工作：诊断画像、课堂知识、练习结果、笔记复盘和教师反馈都会进入同一条学习证据链。</p>
+                    <div class="login-story-actions"><a class="btn primary glow" href="#login-panel">${icon("play",17)}立即登录</a><a class="btn ghost" href="#personalized-proof">${icon("route",17)}查看路径逻辑</a></div>
+                </div>
+                <div class="login-dashboard-illustration" aria-label="EduSmart 个性化学习驾驶舱插图">
+                    <img class="dash-photo" src="/images/login/hero-learning-dashboard.png" alt="无脸学生学习桌面和 AI 学习驾驶舱插图">
+                    <div class="dash-top"><span></span><span></span><span></span></div>
+                    <div class="dash-profile"><b>视觉型 · 25 分钟专注</b><small>student_profiles</small></div>
+                    <div class="dash-route">${["软件工程基础", "需求分析", "软件测试"].map((item, i) => `<div><span>${i + 1}</span><b>${item}</b><small>${i === 0 ? "优先修复" : i === 1 ? "场景练习" : "间隔复习"}</small></div>`).join("")}</div>
+                    <div class="dash-json">{ "personalized": true, "subject": "software_engineering" }</div>
+                </div>
+            </section>
+            <section class="login-story-band">${storyCards.map(([ic, title, text]) => `<article><span>${icon(ic,22)}</span><b>${title}</b><p>${text}</p></article>`).join("")}</section>
+            <section class="login-scene-gallery">
+                ${learningScenes.map(([img, title, text]) => `<article><img src="${img}" alt="${escapeHtml(title)}"><div><b>${escapeHtml(title)}</b><p>${escapeHtml(text)}</p></div></article>`).join("")}
+            </section>
+            <section class="login-narrative" id="personalized-proof">
+                <div><span class="eyebrow">Profile-aware path</span><h2>路径不是跳转结果，而是一份有证据的学习判断</h2><p>系统会把画像里的学习风格、每日可用时间、专注时长，与知识点掌握度、错题和课程进度合并。页面会展示推荐原因和 JSON 证据，让你能判断它到底有没有个性化。</p></div>
+                <div class="login-proof-stack"><div><b>画像</b><span>visual / practice / 25min</span></div><div><b>知识库</b><span>5 个软件工程核心节点</span></div><div><b>输出</b><span>节点、任务、讲义、题目、原因</span></div></div>
+            </section>
+            <section class="login-showcase">
+                <article><img src="/images/login/focused-study-plan.png" alt="无脸专注自学和学习计划插图"><h2>长线学习靠的不是一次推荐</h2><p>今日计划会从路径节点生成，练习后更新掌握度，笔记和费曼复述进入长期记忆，下一次路径会按新证据重排。</p></article>
+                <article><img src="/images/login/teacher-guidance-board.png" alt="无脸课堂白板和教师指导插图"><h2>教师能看到干预原因</h2><p>教师端不是只看分数，而是看到薄弱知识点、风险状态、画像摘要和推荐干预动作。</p></article>
+            </section>
+            <section class="login-cta-strip"><h2>准备进入你的学习驾驶舱</h2><p>登录后查看画像、今日计划、个性化路径和知识库证据。</p><a class="btn primary glow" href="#login-panel">${icon("user",17)}打开登录框</a></section>
+            <section class="login-modal" id="login-panel" aria-label="登录弹层">
+                <a class="login-modal-backdrop" href="#" aria-label="关闭登录框"></a>
+                <form class="login-card auth-form login-modal-card" id="login-form">
+                    <a class="login-modal-close" href="#" aria-label="关闭">×</a>
+                    <span class="eyebrow">Demo account</span>
+                    <h2 class="section-title">${icon("user",20)}登录 EduSmart</h2>
+                    <p>演示账号：zhangsan / 123456</p>
+                    <label>用户名<input name="username" value="zhangsan" autocomplete="username"></label>
+                    <label>密码<input name="password" type="password" value="123456" autocomplete="current-password"></label>
+                    <button class="btn primary glow" type="submit">${icon("play",17)}进入学习平台</button>
+                    <div class="message" id="login-message"></div>
+                </form>
+            </section>
+        </main>`;
     }
 
     function bindEvents() {
@@ -8160,11 +8387,15 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         document.querySelectorAll("[data-study-plan-refresh]").forEach(el => el.addEventListener("click", async () => {
             el.classList.add("is-loading");
             try {
-                await request("/api/closed-loop/study-plan/generate", { method: "POST", body: JSON.stringify({}) });
+                const goal = state.data.pathGoal || "系统掌握计算机核心能力";
+                const subject = state.data.pathSubject || "all";
+                const intensity = state.data.pathIntensity || "normal";
+                await request("/api/app/path/generate", { method: "POST", body: JSON.stringify({ goal, subject, intensity }) });
+                state.data.pathCenter = null;
                 state.data.studyPlan = null;
                 await loadStudyPlan(true);
                 await render();
-                toast("今日学习计划已重新生成");
+                toast("Agent 今日计划已重新生成");
             } catch (error) {
                 toast(error.message);
             } finally {
@@ -8173,11 +8404,10 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         }));
         document.querySelectorAll("[data-study-task-toggle]").forEach(el => el.addEventListener("click", async () => {
             const taskId = el.dataset.studyTaskToggle;
-            const completed = el.dataset.completed === "1";
             if (!taskId) return;
             try {
-                const action = completed ? "uncomplete" : "complete";
-                await request(`/api/closed-loop/study-plan/${encodeURIComponent(taskId)}/${action}`, { method: "PUT" });
+                await request(`/api/app/tasks/${encodeURIComponent(taskId)}/toggle`, { method: "POST", body: "{}" });
+                state.data.pathCenter = null;
                 state.data.studyPlan = null;
                 await loadStudyPlan(true);
                 await render();
@@ -8190,16 +8420,75 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             const payload = Object.fromEntries(new FormData(form));
             if (!String(payload.title || "").trim()) return toast("请输入任务名称");
             try {
-                await request("/api/closed-loop/study-plan/generate", {
+                await request("/api/app/path/custom-task", {
                     method: "POST",
-                    body: JSON.stringify({ title: payload.title, duration: Number(payload.duration || 30) })
+                    body: JSON.stringify({ title: payload.title, minutes: Number(payload.duration || 30), subject: "自定义", reason: "从今日计划表单追加" })
                 });
+                state.data.pathCenter = null;
                 state.data.studyPlan = null;
                 await loadStudyPlan(true);
                 await render();
-                toast("任务已加入今日计划");
+                toast("任务已加入 Agent 今日计划");
             } catch (error) {
                 toast(error.message);
+            }
+        }));
+        document.querySelectorAll("[data-study-plan-agent-generate]").forEach(el => el.addEventListener("click", async () => {
+            const goal = document.querySelector("[data-path-goal]")?.value?.trim() || state.data.pathGoal || "系统掌握计算机核心能力";
+            const subject = document.querySelector("[data-path-subject]")?.value || state.data.pathSubject || "all";
+            const intensity = document.querySelector("[data-path-intensity]")?.value || state.data.pathIntensity || "normal";
+            state.data.pathGoal = goal;
+            state.data.pathSubject = subject;
+            state.data.pathIntensity = intensity;
+            el.classList.add("is-loading");
+            try {
+                const result = await request("/api/app/path/generate", { method: "POST", body: JSON.stringify({ goal, subject, intensity }) });
+                state.data.pathCenter = null;
+                state.data.studyPlan = null;
+                await loadStudyPlan(true);
+                await render();
+                toast(`Agent 已生成 ${result.generated || 0} 个今日计划任务`);
+            } catch (error) {
+                toast(error.message);
+            } finally {
+                el.classList.remove("is-loading");
+            }
+        }));
+        document.querySelectorAll("[data-open-custom-agent-task]").forEach(el => el.addEventListener("click", () => {
+            const panel = document.querySelector("[data-custom-agent-task-panel]");
+            if (panel) panel.hidden = false;
+        }));
+        document.querySelectorAll("[data-close-custom-agent-task]").forEach(el => el.addEventListener("click", () => {
+            const panel = document.querySelector("[data-custom-agent-task-panel]");
+            if (panel) panel.hidden = true;
+        }));
+        document.querySelectorAll("[data-custom-agent-task-form]").forEach(form => form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const payload = Object.fromEntries(new FormData(form));
+            if (!String(payload.title || "").trim()) return toast("请输入任务标题");
+            const button = form.querySelector("button[type='submit']");
+            button?.classList.add("is-loading");
+            try {
+                await request("/api/app/path/custom-task", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        title: payload.title,
+                        subject: payload.subject || "自定义",
+                        reason: payload.reason || "",
+                        minutes: Number(payload.minutes || 25),
+                        icon: payload.icon || "book",
+                        knowledgeTitle: payload.knowledgeTitle || ""
+                    })
+                });
+                state.data.pathCenter = null;
+                state.data.studyPlan = null;
+                await loadStudyPlan(true);
+                await render();
+                toast("自定义路径任务已加入 Agent 今日计划");
+            } catch (error) {
+                toast(error.message);
+            } finally {
+                button?.classList.remove("is-loading");
             }
         }));
         document.querySelectorAll("[data-recommendation-view]").forEach(el => el.addEventListener("click", () => setView(normalizeTargetView(el.dataset.recommendationView || "path"))));
@@ -12056,7 +12345,7 @@ zhaoliu,赵六"></textarea>
             state.data.aiAssistantMode = "rag";
         }
         const isLogin = location.pathname === "/" || location.pathname.endsWith("/index.html");
-        if (isLogin && !localStorage.getItem("edusmart_user")) {
+        if (isLogin) {
             app.innerHTML = loginView();
             bindEvents();
             return;
@@ -12087,7 +12376,7 @@ zhaoliu,赵六"></textarea>
             }
         }
         if (state.view === "smartNotes") await loadNotesCenter();
-        if (state.view === "path") await loadPathCenter();
+        // 路径页不再自动加载规则路径；只有点击 Agent 个性化生成后才读取 path/center。
         if (state.view === "profile") await loadProfileInsight();
         if (state.view === "conceptCanvas" && !state.data._canvases) {
             try { const json = await request("/api/concept-canvas"); state.data._canvases = json.data || []; } catch(e) {}

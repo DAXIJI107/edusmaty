@@ -15,6 +15,128 @@ const DEFAULT_KNOWLEDGE_NODES = [
     ['Python入门', '变量、条件、循环、函数和项目实战', 'easy', 'practice', 'BV1qW4y1a7fU']
 ];
 
+const SOFTWARE_ENGINEERING_NODES = [
+    {
+        name: '软件工程基础概念',
+        description: '理解软件工程为什么出现、解决什么问题，以及软件危机、工程化开发、质量和维护性的关系。',
+        difficulty: 'easy',
+        type: 'theory',
+        subject: 'software_engineering',
+        mastery: 35,
+        summary: '软件工程把工程化方法应用到软件开发、运行和维护中，关注需求、设计、实现、测试、部署、维护和质量保证。'
+    },
+    {
+        name: '软件过程模型',
+        description: '比较瀑布模型、原型模型、增量迭代模型和敏捷方法的适用场景、优缺点与风险。',
+        difficulty: 'medium',
+        type: 'case',
+        subject: 'software_engineering',
+        mastery: 42,
+        summary: '过程模型决定项目如何组织阶段、反馈和交付。需求稳定时可用瀑布，需求变化快时更适合迭代或敏捷。'
+    },
+    {
+        name: '需求分析',
+        description: '掌握功能需求、非功能需求、用户故事、用例和需求规格说明的基本写法。',
+        difficulty: 'medium',
+        type: 'practice',
+        subject: 'software_engineering',
+        mastery: 38,
+        summary: '需求分析用于澄清系统要解决什么问题。功能需求描述系统做什么，非功能需求描述性能、安全、可靠性等质量约束。'
+    },
+    {
+        name: '软件设计与建模',
+        description: '从需求推导模块、接口和主要类关系，理解高内聚、低耦合、抽象和分层设计。',
+        difficulty: 'medium',
+        type: 'diagram',
+        subject: 'software_engineering',
+        mastery: 45,
+        summary: '软件设计把需求转成模块、接口、数据和交互结构。好的设计通常追求高内聚、低耦合和清晰分层。'
+    },
+    {
+        name: '软件测试基础',
+        description: '理解单元测试、集成测试、系统测试、黑盒测试和白盒测试，并能为需求设计测试用例。',
+        difficulty: 'medium',
+        type: 'practice',
+        subject: 'software_engineering',
+        mastery: 48,
+        summary: '软件测试通过设计测试用例发现缺陷并验证需求。黑盒测试关注输入输出，白盒测试关注内部逻辑和覆盖。'
+    }
+];
+
+const SOFTWARE_ENGINEERING_RAG = [
+    {
+        title: '软件工程基础概念',
+        course: '软件工程导论',
+        chapter: '第1章 软件工程概述',
+        knowledgePoint: '软件工程基础概念',
+        summary: '软件工程的目标、范围和软件危机背景。',
+        chunks: [
+            '软件工程是把工程化思想应用到软件开发、运行和维护中的学科。它关注的不只是写代码，还包括需求、设计、实现、测试、部署、维护、项目管理和质量保证。',
+            '软件危机通常表现为开发延期、成本超支、质量不稳定、需求难以控制和维护困难。软件工程的核心目标是用系统方法降低这些风险。'
+        ]
+    },
+    {
+        title: '需求分析入门',
+        course: '软件工程导论',
+        chapter: '第3章 需求工程',
+        knowledgePoint: '需求分析',
+        summary: '功能需求、非功能需求、用户故事和验收标准。',
+        chunks: [
+            '需求分析的任务是澄清系统应该解决什么问题。功能需求描述系统要做什么，非功能需求描述性能、安全、可靠性、可用性等质量约束。',
+            '用户故事常用“作为某类用户，我希望完成某个目标，从而获得某种价值”的格式。复杂系统仍需要补充验收标准和约束说明。'
+        ]
+    },
+    {
+        title: '软件测试基础',
+        course: '软件工程导论',
+        chapter: '第6章 软件测试',
+        knowledgePoint: '软件测试基础',
+        summary: '测试层次、黑盒测试、白盒测试和测试用例。',
+        chunks: [
+            '黑盒测试从输入和输出角度设计测试，不依赖代码内部结构；白盒测试关注程序内部逻辑、分支、路径和覆盖率。',
+            '好的测试用例应包含测试目标、前置条件、输入数据、执行步骤、预期结果和实际结果记录。测试用例要能追溯到具体需求。'
+        ]
+    }
+];
+
+const SOFTWARE_ENGINEERING_QUESTIONS = [
+    {
+        knowledge: '软件工程基础概念',
+        question: '软件工程主要解决的问题是什么？',
+        options: ['只提高代码运行速度', '用系统方法提升软件开发、维护和质量管理', '只学习某一种编程语言', '完全取消测试工作'],
+        answer: '用系统方法提升软件开发、维护和质量管理',
+        difficulty: 'easy'
+    },
+    {
+        knowledge: '软件过程模型',
+        question: '需求非常明确且变化较少的项目，更适合优先考虑哪类过程模型？',
+        options: ['瀑布模型', '无计划边写边改', '只做原型不交付', '完全不做文档'],
+        answer: '瀑布模型',
+        difficulty: 'medium'
+    },
+    {
+        knowledge: '需求分析',
+        question: '“系统应在 2 秒内返回搜索结果”属于哪类需求？',
+        options: ['功能需求', '非功能需求', '业务实体', '代码注释'],
+        answer: '非功能需求',
+        difficulty: 'medium'
+    },
+    {
+        knowledge: '软件设计与建模',
+        question: '高内聚、低耦合的设计目标是什么？',
+        options: ['让一个模块承担所有职责', '让模块职责集中并减少模块间依赖', '让代码不能被测试', '让数据库替代全部业务逻辑'],
+        answer: '让模块职责集中并减少模块间依赖',
+        difficulty: 'medium'
+    },
+    {
+        knowledge: '软件测试基础',
+        question: '从输入输出角度设计测试、不关心内部代码结构的方法通常是？',
+        options: ['黑盒测试', '白盒测试', '代码格式化', '数据库备份'],
+        answer: '黑盒测试',
+        difficulty: 'medium'
+    }
+];
+
 async function tableExists(pool, tableName) {
     const [rows] = await pool.query('SHOW TABLES LIKE ?', [tableName]);
     return rows.length > 0;
@@ -141,24 +263,193 @@ async function ensureKnowledgeData(pool) {
             row[2],
             row[3],
             inferSubjectByName(row[0]),
-            row[4],
-            'bilibili'
+            row[4]
         ]);
-        await pool.query(
-            `INSERT INTO knowledge_nodes (name, description, difficulty, type, subject, bvid, video_platform)
-             VALUES ?`,
-            [rows]
-        );
+        const hasBvid = await columnExists(pool, 'knowledge_nodes', 'bvid');
+        const hasVideoPlatform = await columnExists(pool, 'knowledge_nodes', 'video_platform');
+        if (hasBvid && hasVideoPlatform) {
+            await pool.query(
+                `INSERT INTO knowledge_nodes (name, description, difficulty, type, subject, bvid, video_platform)
+                 VALUES ?`,
+                [rows.map(row => [...row, 'bilibili'])]
+            );
+        } else {
+            await pool.query(
+                `INSERT INTO knowledge_nodes (name, description, difficulty, type, subject)
+                 VALUES ?`,
+                [rows.map(row => row.slice(0, 5))]
+            );
+        }
     }
+
+    await ensureSoftwareEngineeringKnowledgeBase(pool);
 
     const [nodes] = await pool.query('SELECT id, name, subject FROM knowledge_nodes');
     for (const node of nodes) {
         const inferred = inferSubjectByName(node.name);
         const current = node.subject || 'math';
+        if (current === 'software_engineering') continue;
         const shouldUpdate = !node.subject || current !== inferred || (current === 'math' && inferred !== 'math');
         if (shouldUpdate) {
             await pool.query('UPDATE knowledge_nodes SET subject = ? WHERE id = ?', [inferred, node.id]);
         }
+    }
+}
+
+async function ensureSoftwareEngineeringKnowledgeBase(pool) {
+    if (!await tableExists(pool, 'knowledge_nodes')) return;
+
+    for (const node of SOFTWARE_ENGINEERING_NODES) {
+        const [existing] = await pool.query(
+            'SELECT id FROM knowledge_nodes WHERE name = ? AND subject = ? LIMIT 1',
+            [node.name, node.subject]
+        );
+        if (existing.length) {
+            await pool.query(
+                `UPDATE knowledge_nodes
+                 SET description = ?, difficulty = ?, type = ?, is_active = 1
+                 WHERE id = ?`,
+                [node.description, node.difficulty, node.type, existing[0].id]
+            );
+        } else {
+            await pool.query(
+                `INSERT INTO knowledge_nodes (name, description, difficulty, type, subject, is_active)
+                 VALUES (?, ?, ?, ?, ?, 1)`,
+                [node.name, node.description, node.difficulty, node.type, node.subject]
+            );
+        }
+    }
+
+    if (await tableExists(pool, 'courses')) {
+        const [courseRows] = await pool.query(
+            'SELECT id FROM courses WHERE title = ? AND subject = ? LIMIT 1',
+            ['软件工程导论', 'software_engineering']
+        );
+        if (courseRows.length) {
+            await pool.query(
+                `UPDATE courses
+                 SET provider = ?, difficulty = ?, description = ?, source_url = ?, progress = COALESCE(progress, 0)
+                 WHERE id = ?`,
+                ['EduSmart', 'beginner', '覆盖软件生命周期、需求分析、建模设计、测试和工程实践的默认知识库课程。', '/knowledge-base?subject=software_engineering', courseRows[0].id]
+            );
+        } else {
+            await pool.query(
+                `INSERT INTO courses (title, provider, subject, difficulty, description, source_url, progress)
+                 VALUES (?, ?, ?, ?, ?, ?, 0)`,
+                ['软件工程导论', 'EduSmart', 'software_engineering', 'beginner', '覆盖软件生命周期、需求分析、建模设计、测试和工程实践的默认知识库课程。', '/knowledge-base?subject=software_engineering']
+            );
+        }
+    }
+
+    if (await tableExists(pool, 'knowledge_points')) {
+        for (const node of SOFTWARE_ENGINEERING_NODES) {
+            const [existing] = await pool.query(
+                'SELECT id FROM knowledge_points WHERE title = ? AND subject = ? LIMIT 1',
+                [node.name, node.subject]
+            );
+            if (existing.length) {
+                await pool.query(
+                    `UPDATE knowledge_points
+                     SET summary = ?, mastery = ?, source_name = ?, source_url = ?
+                     WHERE id = ?`,
+                    [node.summary, node.mastery, 'EduSmart 默认知识库', `/learn?topic=${encodeURIComponent(node.name)}`, existing[0].id]
+                );
+            } else {
+                await pool.query(
+                    `INSERT INTO knowledge_points (title, subject, summary, mastery, source_name, source_url)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [node.name, node.subject, node.summary, node.mastery, 'EduSmart 默认知识库', `/learn?topic=${encodeURIComponent(node.name)}`]
+                );
+            }
+        }
+    }
+
+    if (await tableExists(pool, 'rag_documents') && await tableExists(pool, 'rag_chunks')) {
+        for (const doc of SOFTWARE_ENGINEERING_RAG) {
+            const docId = `seed-${doc.knowledgePoint}`;
+            const [existing] = await pool.query('SELECT doc_id FROM rag_documents WHERE doc_id = ? LIMIT 1', [docId]);
+            if (existing.length) {
+                await pool.query(
+                    `UPDATE rag_documents
+                     SET title = ?, subject = ?, course = ?, chapter = ?, knowledge_point = ?, summary = ?, url = ?
+                     WHERE doc_id = ?`,
+                    [doc.title, 'software_engineering', doc.course, doc.chapter, doc.knowledgePoint, doc.summary, `/kb/software-engineering/${encodeURIComponent(doc.knowledgePoint)}`, docId]
+                );
+            } else {
+                await pool.query(
+                    `INSERT INTO rag_documents (doc_id, source_id, title, url, subject, course, chapter, knowledge_point, summary)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [docId, 'edusmart-seed', doc.title, `/kb/software-engineering/${encodeURIComponent(doc.knowledgePoint)}`, 'software_engineering', doc.course, doc.chapter, doc.knowledgePoint, doc.summary]
+                );
+            }
+
+            for (let index = 0; index < doc.chunks.length; index++) {
+                const chunkId = `${docId}-${index + 1}`;
+                const [chunkRows] = await pool.query('SELECT chunk_id FROM rag_chunks WHERE chunk_id = ? LIMIT 1', [chunkId]);
+                if (chunkRows.length) {
+                    await pool.query(
+                        `UPDATE rag_chunks
+                         SET doc_id = ?, chunk_index = ?, chunk_text = ?, subject = ?, course = ?, knowledge_point = ?, quality_score = ?, is_active = 1
+                         WHERE chunk_id = ?`,
+                        [docId, index, doc.chunks[index], 'software_engineering', doc.course, doc.knowledgePoint, 0.96, chunkId]
+                    );
+                } else {
+                    await pool.query(
+                        `INSERT INTO rag_chunks (chunk_id, doc_id, chunk_index, chunk_text, subject, course, knowledge_point, quality_score, is_active)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                        [chunkId, docId, index, doc.chunks[index], 'software_engineering', doc.course, doc.knowledgePoint, 0.96]
+                    );
+                }
+            }
+        }
+    }
+
+    if (await tableExists(pool, 'questions') && await tableExists(pool, 'knowledge_points')) {
+        for (const item of SOFTWARE_ENGINEERING_QUESTIONS) {
+            const [points] = await pool.query(
+                'SELECT id FROM knowledge_points WHERE title = ? AND subject = ? LIMIT 1',
+                [item.knowledge, 'software_engineering']
+            );
+            if (!points.length) continue;
+            const knowledgeId = points[0].id;
+            const [existing] = await pool.query('SELECT id FROM questions WHERE question = ? LIMIT 1', [item.question]);
+            if (existing.length) {
+                await pool.query(
+                    `UPDATE questions
+                     SET knowledge_id = ?, correct_answer = ?, options_json = ?, difficulty = ?, source_name = ?, source_url = ?, is_active = 1
+                     WHERE id = ?`,
+                    [knowledgeId, item.answer, JSON.stringify(item.options), item.difficulty, 'EduSmart 默认知识库', `/practice?knowledge=${knowledgeId}`, existing[0].id]
+                );
+            } else {
+                await pool.query(
+                    `INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url, is_active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+                    [knowledgeId, item.question, item.answer, JSON.stringify(item.options), item.difficulty, 'EduSmart 默认知识库', `/practice?knowledge=${knowledgeId}`]
+                );
+            }
+        }
+    }
+
+    await deactivateDuplicateKnowledgeNodes(pool, 'software_engineering');
+}
+
+async function deactivateDuplicateKnowledgeNodes(pool, subject) {
+    const [duplicates] = await pool.query(
+        `SELECT name, MIN(id) AS keep_id, GROUP_CONCAT(id ORDER BY id) AS ids, COUNT(*) AS total
+         FROM knowledge_nodes
+         WHERE subject = ?
+         GROUP BY name
+         HAVING COUNT(*) > 1`,
+        [subject]
+    );
+
+    for (const item of duplicates) {
+        await pool.query(
+            `UPDATE knowledge_nodes
+             SET is_active = CASE WHEN id = ? THEN 1 ELSE 0 END
+             WHERE subject = ? AND name = ?`,
+            [item.keep_id, subject, item.name]
+        );
     }
 }
 

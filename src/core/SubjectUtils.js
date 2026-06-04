@@ -63,6 +63,7 @@ function inferSubjectByName(name) {
     const text = name.toLowerCase();
 
     const patterns = [
+        { code: 'software_engineering', keywords: ['软件工程', '需求分析', '软件过程', '过程模型', '瀑布模型', '原型模型', '敏捷开发', '软件设计', '软件测试', '测试用例', '用例建模', 'srs'] },
         { code: 'physics', keywords: ['物理', '力学', '电磁', '光学', '热学', '量子', '相对论', '牛顿', '电场', '磁场', '电路', '欧姆', '运动', '引力', '动量', '能量守恒', '波', '声', '磁'] },
         { code: 'chemistry', keywords: ['化学', '元素', '反应', '分子', '原子', '离子', '酸碱', '氧化', '还原', '有机', '无机', '催化', '电解', '共价键', '离子键', '配位', '平衡'] },
         { code: 'biology', keywords: ['生物', '细胞', '基因', '遗传', '进化', '生态', '光合', '呼吸', '酶', 'DNA', 'RNA', '蛋白质', '物种', '免疫', '神经', '激素', '解剖', '微生物'] },
@@ -87,6 +88,7 @@ function subjectLabel(code) {
         biology: '生物',
         english: '英语',
         programming: '编程',
+        software_engineering: '软件工程',
         computer: '计算机基础',
         'data-structure': '数据结构与算法',
         database: '数据库',

@@ -32,6 +32,7 @@ function createApp() {
 
     app.use('/css', express.static(path.join(webRoot, 'css')));
     app.use('/js', express.static(path.join(webRoot, 'js')));
+    app.use('/images', express.static(path.join(webRoot, 'images')));
     app.use('/public', express.static(webRoot));
     app.use('/rag_software_engineering_bundle', express.static(path.join(projectRoot, 'rag_software_engineering_bundle')));
 
