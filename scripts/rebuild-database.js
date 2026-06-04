@@ -1,84 +1,84 @@
-const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
-const config = require('../config');
+const mysql = require("mysql2/promise");
+const bcrypt = require("bcryptjs");
+const config = require("../config");
 
-const dbName = process.env.DB_NAME || config.database.database || 'edusmart_rebuild';
+const dbName = process.env.DB_NAME || config.database.database || "edusmart_rebuild";
 const sourceNotes = [];
 
 async function fetchJson(url) {
     const response = await fetch(url, {
-        headers: { 'User-Agent': 'EduSmartRebuild/2.0 educational demo' }
+        headers: { "User-Agent": "EduSmartRebuild/2.0 educational demo" }
     });
     if (!response.ok) throw new Error(`${response.status} ${url}`);
     return response.json();
 }
 
 function decodeHtml(value) {
-    return String(value || '')
+    return String(value || "")
         .replace(/&quot;/g, '"')
         .replace(/&#039;/g, "'")
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>');
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">");
 }
 
 const COMPUTER_TOPICS = [
-    ['计算机科学导论', '计算机科学', '计算机基础'],
-    ['计算机组成原理', '计算机组成原理', '计算机基础'],
-    ['冯·诺依曼结构', '冯·诺伊曼结构', '计算机基础'],
-    ['二进制与信息编码', '二进制', '计算机基础'],
-    ['数据结构', '数据结构', '数据结构与算法'],
-    ['数组', '数组', '数据结构与算法'],
-    ['链表', '链表', '数据结构与算法'],
-    ['栈', '堆栈', '数据结构与算法'],
-    ['队列', '队列', '数据结构与算法'],
-    ['树结构', '树_(数据结构)', '数据结构与算法'],
-    ['二叉树', '二叉树', '数据结构与算法'],
-    ['哈希表', '哈希表', '数据结构与算法'],
-    ['图论基础', '图论', '数据结构与算法'],
-    ['算法设计', '算法', '数据结构与算法'],
-    ['时间复杂度', '时间复杂度', '数据结构与算法'],
-    ['排序算法', '排序算法', '数据结构与算法'],
-    ['动态规划', '动态规划', '数据结构与算法'],
-    ['贪心算法', '贪心算法', '数据结构与算法'],
-    ['操作系统', '操作系统', '系统软件'],
-    ['进程与线程', '进程', '系统软件'],
-    ['内存管理', '内存管理', '系统软件'],
-    ['虚拟内存', '虚拟内存', '系统软件'],
-    ['文件系统', '文件系统', '系统软件'],
-    ['Linux', 'Linux', '系统软件'],
-    ['计算机网络', '计算机网络', '计算机网络'],
-    ['TCP/IP协议族', 'TCP/IP协议族', '计算机网络'],
-    ['HTTP', '超文本传输协议', '计算机网络'],
-    ['DNS', '域名系统', '计算机网络'],
-    ['网络安全', '网络安全', '网络安全'],
-    ['密码学', '密码学', '网络安全'],
-    ['数据库系统', '数据库', '数据库'],
-    ['关系数据库', '关系数据库', '数据库'],
-    ['SQL', 'SQL', '数据库'],
-    ['事务处理', '数据库事务', '数据库'],
-    ['数据库索引', '数据库索引', '数据库'],
-    ['软件工程', '软件工程', '软件工程'],
-    ['需求分析', '需求分析', '软件工程'],
-    ['软件测试', '软件测试', '软件工程'],
-    ['版本控制', '版本控制', '软件工程'],
-    ['面向对象程序设计', '面向对象程序设计', '程序设计'],
-    ['C语言', 'C语言', '程序设计'],
-    ['Java', 'Java', '程序设计'],
-    ['Python', 'Python', '程序设计'],
-    ['JavaScript', 'JavaScript', '程序设计'],
-    ['Node.js', 'Node.js', '程序设计'],
-    ['Web开发', '万维网', '程序设计'],
-    ['人工智能', '人工智能', '人工智能'],
-    ['机器学习', '机器学习', '人工智能'],
-    ['深度学习', '深度学习', '人工智能'],
-    ['神经网络', '人工神经网络', '人工智能'],
-    ['自然语言处理', '自然语言处理', '人工智能'],
-    ['计算机视觉', '计算机视觉', '人工智能'],
-    ['云计算', '云计算', '云计算与大数据'],
-    ['大数据', '大数据', '云计算与大数据'],
-    ['分布式系统', '分布式计算', '云计算与大数据'],
-    ['容器技术', '操作系统层虚拟化', '云计算与大数据']
+    ["计算机科学导论", "计算机科学", "计算机基础"],
+    ["计算机组成原理", "计算机组成原理", "计算机基础"],
+    ["冯·诺依曼结构", "冯·诺伊曼结构", "计算机基础"],
+    ["二进制与信息编码", "二进制", "计算机基础"],
+    ["数据结构", "数据结构", "数据结构与算法"],
+    ["数组", "数组", "数据结构与算法"],
+    ["链表", "链表", "数据结构与算法"],
+    ["栈", "堆栈", "数据结构与算法"],
+    ["队列", "队列", "数据结构与算法"],
+    ["树结构", "树_(数据结构)", "数据结构与算法"],
+    ["二叉树", "二叉树", "数据结构与算法"],
+    ["哈希表", "哈希表", "数据结构与算法"],
+    ["图论基础", "图论", "数据结构与算法"],
+    ["算法设计", "算法", "数据结构与算法"],
+    ["时间复杂度", "时间复杂度", "数据结构与算法"],
+    ["排序算法", "排序算法", "数据结构与算法"],
+    ["动态规划", "动态规划", "数据结构与算法"],
+    ["贪心算法", "贪心算法", "数据结构与算法"],
+    ["操作系统", "操作系统", "系统软件"],
+    ["进程与线程", "进程", "系统软件"],
+    ["内存管理", "内存管理", "系统软件"],
+    ["虚拟内存", "虚拟内存", "系统软件"],
+    ["文件系统", "文件系统", "系统软件"],
+    ["Linux", "Linux", "系统软件"],
+    ["计算机网络", "计算机网络", "计算机网络"],
+    ["TCP/IP协议族", "TCP/IP协议族", "计算机网络"],
+    ["HTTP", "超文本传输协议", "计算机网络"],
+    ["DNS", "域名系统", "计算机网络"],
+    ["网络安全", "网络安全", "网络安全"],
+    ["密码学", "密码学", "网络安全"],
+    ["数据库系统", "数据库", "数据库"],
+    ["关系数据库", "关系数据库", "数据库"],
+    ["SQL", "SQL", "数据库"],
+    ["事务处理", "数据库事务", "数据库"],
+    ["数据库索引", "数据库索引", "数据库"],
+    ["软件工程", "软件工程", "软件工程"],
+    ["需求分析", "需求分析", "软件工程"],
+    ["软件测试", "软件测试", "软件工程"],
+    ["版本控制", "版本控制", "软件工程"],
+    ["面向对象程序设计", "面向对象程序设计", "程序设计"],
+    ["C语言", "C语言", "程序设计"],
+    ["Java", "Java", "程序设计"],
+    ["Python", "Python", "程序设计"],
+    ["JavaScript", "JavaScript", "程序设计"],
+    ["Node.js", "Node.js", "程序设计"],
+    ["Web开发", "万维网", "程序设计"],
+    ["人工智能", "人工智能", "人工智能"],
+    ["机器学习", "机器学习", "人工智能"],
+    ["深度学习", "深度学习", "人工智能"],
+    ["神经网络", "人工神经网络", "人工智能"],
+    ["自然语言处理", "自然语言处理", "人工智能"],
+    ["计算机视觉", "计算机视觉", "人工智能"],
+    ["云计算", "云计算", "云计算与大数据"],
+    ["大数据", "大数据", "云计算与大数据"],
+    ["分布式系统", "分布式计算", "云计算与大数据"],
+    ["容器技术", "操作系统层虚拟化", "云计算与大数据"]
 ];
 
 async function getWikipediaTopics() {
@@ -92,8 +92,9 @@ async function getWikipediaTopics() {
                 title,
                 subject,
                 summary: data.extract || `${title} 学习资料`,
-                sourceName: '中文维基百科 REST API',
-                sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page)}`,
+                sourceName: "中文维基百科 REST API",
+                sourceUrl:
+                    data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page)}`,
                 mastery: Math.floor(42 + Math.random() * 42)
             });
         } catch (error) {
@@ -101,13 +102,13 @@ async function getWikipediaTopics() {
                 title,
                 subject,
                 summary: `${title} 是计算机学习路径中的核心知识点，适合通过概念解释、代码实践、典型题和项目任务形成闭环。`,
-                sourceName: '本地计算机知识点兜底',
-                sourceUrl: '',
+                sourceName: "本地计算机知识点兜底",
+                sourceUrl: "",
                 mastery: Math.floor(42 + Math.random() * 42)
             });
         }
     }
-    sourceNotes.push('中文维基百科 REST API page summary');
+    sourceNotes.push("中文维基百科 REST API page summary");
     return rows;
 }
 
@@ -115,52 +116,56 @@ async function getTriviaQuestions(knowledgeRows) {
     const questions = [];
     const stems = [
         {
-            difficulty: 'easy',
+            difficulty: "easy",
             question: point => `关于「${point.title}」的学习，下列哪一项最适合作为入门理解？`,
             correct: point => `先理解${point.title}的基本概念和适用场景`,
-            wrong: point => [`只背诵${point.title}的名词，不看例子`, `跳过${point.title}直接做综合项目`, `把${point.title}与无关学科概念混用`]
+            wrong: point => [
+                `只背诵${point.title}的名词，不看例子`,
+                `跳过${point.title}直接做综合项目`,
+                `把${point.title}与无关学科概念混用`
+            ]
         },
         {
-            difficulty: 'medium',
+            difficulty: "medium",
             question: point => `在智能学习平台中，系统如何判断「${point.title}」需要优先复习？`,
-            correct: () => '结合答题正确率、掌握度、错题记录和间隔复习时间',
-            wrong: () => ['只看用户是否收藏过课程', '只按课程标题字数排序', '随机选择一个知识点']
+            correct: () => "结合答题正确率、掌握度、错题记录和间隔复习时间",
+            wrong: () => ["只看用户是否收藏过课程", "只按课程标题字数排序", "随机选择一个知识点"]
         },
         {
-            difficulty: 'medium',
+            difficulty: "medium",
             question: point => `围绕「${point.title}」生成自适应练习时，最合理的干扰项设计原则是什么？`,
-            correct: () => '干扰项应对应常见误区，能暴露具体认知缺口',
-            wrong: () => ['干扰项越离谱越好', '所有选项都写成同一句话', '只放一个正确选项且不记录原因']
+            correct: () => "干扰项应对应常见误区，能暴露具体认知缺口",
+            wrong: () => ["干扰项越离谱越好", "所有选项都写成同一句话", "只放一个正确选项且不记录原因"]
         },
         {
-            difficulty: 'hard',
+            difficulty: "hard",
             question: point => `如果学生在「${point.title}」题目上连续出错，AI 闭环下一步最应该做什么？`,
             correct: point => `降低难度并生成${point.title}的概念卡、例题和复习任务`,
-            wrong: () => ['直接提高难度', '删除该知识点', '只给出分数不提供反馈']
+            wrong: () => ["直接提高难度", "删除该知识点", "只给出分数不提供反馈"]
         },
         {
-            difficulty: 'easy',
+            difficulty: "easy",
             question: point => `下列哪种学习证据能直接帮助更新「${point.title}」掌握度？`,
-            correct: () => '一次带答案记录的练习提交',
-            wrong: () => ['打开页面但没有学习行为', '修改头像', '浏览无关课程']
+            correct: () => "一次带答案记录的练习提交",
+            wrong: () => ["打开页面但没有学习行为", "修改头像", "浏览无关课程"]
         },
         {
-            difficulty: 'hard',
+            difficulty: "hard",
             question: point => `对「${point.title}」做费曼评估时，AI 最应该关注什么？`,
-            correct: () => '解释是否清晰、准确，并能补充例子或边界条件',
-            wrong: () => ['字数越短越好', '只检查标点符号', '只统计输入速度']
+            correct: () => "解释是否清晰、准确，并能补充例子或边界条件",
+            wrong: () => ["字数越短越好", "只检查标点符号", "只统计输入速度"]
         },
         {
-            difficulty: 'medium',
+            difficulty: "medium",
             question: point => `把「${point.title}」放入知识图谱时，边的关系最适合表示什么？`,
-            correct: () => '前置依赖、细化关系或类比关系',
-            wrong: () => ['用户登录时间', '页面主题颜色', '浏览器版本']
+            correct: () => "前置依赖、细化关系或类比关系",
+            wrong: () => ["用户登录时间", "页面主题颜色", "浏览器版本"]
         },
         {
-            difficulty: 'easy',
+            difficulty: "easy",
             question: point => `学习「${point.title}」后，哪一种产物最能沉淀为长期学习资产？`,
-            correct: () => '结构化笔记卡、错题卡和主动回忆提示',
-            wrong: () => ['临时弹窗', '无来源的空白记录', '不可复习的随机文本']
+            correct: () => "结构化笔记卡、错题卡和主动回忆提示",
+            wrong: () => ["临时弹窗", "无来源的空白记录", "不可复习的随机文本"]
         }
     ];
 
@@ -174,59 +179,59 @@ async function getTriviaQuestions(knowledgeRows) {
                 correctAnswer,
                 options,
                 difficulty: stem.difficulty,
-                sourceName: 'EduSmart 中文计算机题库生成器',
+                sourceName: "EduSmart 中文计算机题库生成器",
                 sourceUrl: point.sourceUrl
             });
         }
     }
-    sourceNotes.push('中文公开知识摘要 + EduSmart 题库模板生成');
+    sourceNotes.push("中文公开知识摘要 + EduSmart 题库模板生成");
     return questions;
 }
 
 async function getCourses(knowledgeRows) {
     const realCourseMap = {
-        'Python': {
-            provider: '哔哩哔哩',
-            sourceUrl: 'https://www.bilibili.com/video/BV1qW4y1a7fU',
-            description: 'B站 Python 入门公开视频课程，可直接跳转学习。'
+        Python: {
+            provider: "哔哩哔哩",
+            sourceUrl: "https://www.bilibili.com/video/BV1qW4y1a7fU",
+            description: "B站 Python 入门公开视频课程，可直接跳转学习。"
         },
-        '数据结构': {
-            provider: '中国高校计算机教育MOOC联盟',
-            sourceUrl: 'https://computer.icourses.cn/',
-            description: '中国高校计算机教育MOOC联盟公开课程入口，适合继续检索数据结构课程资源。'
+        数据结构: {
+            provider: "中国高校计算机教育MOOC联盟",
+            sourceUrl: "https://computer.icourses.cn/",
+            description: "中国高校计算机教育MOOC联盟公开课程入口，适合继续检索数据结构课程资源。"
         },
-        '计算机网络': {
-            provider: '哔哩哔哩',
-            sourceUrl: 'https://www.bilibili.com/video/BV1c4411d7jb',
-            description: 'B站计算机网络公开视频课程入口。'
+        计算机网络: {
+            provider: "哔哩哔哩",
+            sourceUrl: "https://www.bilibili.com/video/BV1c4411d7jb",
+            description: "B站计算机网络公开视频课程入口。"
         },
-        '数据库系统': {
-            provider: '哔哩哔哩',
-            sourceUrl: 'https://www.bilibili.com/video/BV1xs411Q799',
-            description: 'B站数据库与编程公开视频课程入口。'
+        数据库系统: {
+            provider: "哔哩哔哩",
+            sourceUrl: "https://www.bilibili.com/video/BV1xs411Q799",
+            description: "B站数据库与编程公开视频课程入口。"
         },
-        '大数据': {
-            provider: '厦门大学数据库实验室',
-            sourceUrl: 'https://dblab.xmu.edu.cn/post/bigdata-online-course/',
-            description: '厦门大学数据库实验室维护的大数据技术公开课程资源。'
+        大数据: {
+            provider: "厦门大学数据库实验室",
+            sourceUrl: "https://dblab.xmu.edu.cn/post/bigdata-online-course/",
+            description: "厦门大学数据库实验室维护的大数据技术公开课程资源。"
         },
-        '软件工程': {
-            provider: '中国大学MOOC',
-            sourceUrl: 'https://www.icourse163.org/',
-            description: '中国大学MOOC公开课程平台入口，可检索软件工程相关高校课程。'
+        软件工程: {
+            provider: "中国大学MOOC",
+            sourceUrl: "https://www.icourse163.org/",
+            description: "中国大学MOOC公开课程平台入口，可检索软件工程相关高校课程。"
         }
     };
-    const providers = ['中国大学MOOC', '学堂在线', '中国高校计算机教育MOOC联盟', '哔哩哔哩'];
+    const providers = ["中国大学MOOC", "学堂在线", "中国高校计算机教育MOOC联盟", "哔哩哔哩"];
     const fallback = knowledgeRows.map((point, index) => ({
         title: `${point.title} · 中文公开课程`,
         provider: realCourseMap[point.title]?.provider || providers[index % providers.length],
         subject: point.subject,
-        difficulty: index % 3 === 0 ? '进阶' : index % 3 === 1 ? '中等' : '入门',
+        difficulty: index % 3 === 0 ? "进阶" : index % 3 === 1 ? "中等" : "入门",
         description: realCourseMap[point.title]?.description || point.summary,
-        sourceUrl: realCourseMap[point.title]?.sourceUrl || point.sourceUrl || 'https://computer.icourses.cn/',
+        sourceUrl: realCourseMap[point.title]?.sourceUrl || point.sourceUrl || "https://computer.icourses.cn/",
         progress: Math.max(8, Math.min(92, point.mastery - 8))
     }));
-    sourceNotes.push('哔哩哔哩公开视频 + 中国高校计算机教育MOOC联盟/中国大学MOOC课程入口');
+    sourceNotes.push("哔哩哔哩公开视频 + 中国高校计算机教育MOOC联盟/中国大学MOOC课程入口");
     return fallback;
 }
 
@@ -521,7 +526,7 @@ async function main() {
         );
     `);
 
-    const password = await bcrypt.hash('123456', 10);
+    const password = await bcrypt.hash("123456", 10);
     await db.query(
         `INSERT INTO users (id, username, email, password, name, nickname, role, interests, study_hours, completed_courses, knowledge_mastery, correct_answers, study_efficiency, continuous_days)
          VALUES
@@ -533,25 +538,41 @@ async function main() {
     const knowledgeRows = await getWikipediaTopics();
     for (const item of knowledgeRows) {
         await db.query(
-            'INSERT INTO knowledge_points (title, subject, summary, mastery, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?)',
+            "INSERT INTO knowledge_points (title, subject, summary, mastery, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?)",
             [item.title, item.subject, item.summary, item.mastery, item.sourceName, item.sourceUrl]
         );
     }
-    const [points] = await db.query('SELECT id, title, subject, mastery, summary, source_name AS sourceName, source_url AS sourceUrl FROM knowledge_points');
+    const [points] = await db.query(
+        "SELECT id, title, subject, mastery, summary, source_name AS sourceName, source_url AS sourceUrl FROM knowledge_points"
+    );
     const pointByTitle = new Map(points.map(point => [point.title, point]));
 
     for (let i = 0; i < points.length - 1; i += 1) {
         await db.query(
-            'INSERT INTO knowledge_edges (source_id, target_id, relation, weight, rationale) VALUES (?, ?, ?, ?, ?)',
-            [points[i].id, points[i + 1].id, i % 3 === 0 ? 'requires' : i % 3 === 1 ? 'refines' : 'analogous_to', 0.8, '由课程顺序和主题相似度初始化']
+            "INSERT INTO knowledge_edges (source_id, target_id, relation, weight, rationale) VALUES (?, ?, ?, ?, ?)",
+            [
+                points[i].id,
+                points[i + 1].id,
+                i % 3 === 0 ? "requires" : i % 3 === 1 ? "refines" : "analogous_to",
+                0.8,
+                "由课程顺序和主题相似度初始化"
+            ]
         );
     }
 
     const courses = await getCourses(points);
     for (const course of courses) {
         await db.query(
-            'INSERT INTO courses (title, provider, subject, difficulty, description, source_url, progress) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [course.title, course.provider, course.subject, course.difficulty, course.description, course.sourceUrl, course.progress]
+            "INSERT INTO courses (title, provider, subject, difficulty, description, source_url, progress) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                course.title,
+                course.provider,
+                course.subject,
+                course.difficulty,
+                course.description,
+                course.sourceUrl,
+                course.progress
+            ]
         );
     }
 
@@ -559,8 +580,16 @@ async function main() {
     for (const item of questions) {
         const point = pointByTitle.get(item.knowledgeTitle) || points[0];
         await db.query(
-            'INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [point.id, item.question, item.correctAnswer, JSON.stringify(item.options), item.difficulty, item.sourceName, item.sourceUrl]
+            "INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                point.id,
+                item.question,
+                item.correctAnswer,
+                JSON.stringify(item.options),
+                item.difficulty,
+                item.sourceName,
+                item.sourceUrl
+            ]
         );
     }
 
@@ -572,30 +601,50 @@ async function main() {
              VALUES (1, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)`,
             [
                 point.id,
-                i === 0 ? `完成今日推荐课程学习` : i === 1 ? `完成 5 道课后练习题` : i === 2 ? `与 AI 助手进行专题复盘` : `查看本周学习报告`,
+                i === 0
+                    ? `完成今日推荐课程学习`
+                    : i === 1
+                      ? `完成 5 道课后练习题`
+                      : i === 2
+                        ? `与 AI 助手进行专题复盘`
+                        : `查看本周学习报告`,
                 `${point.subject} · ${point.title}`,
-                i === 0 ? 'play' : i === 1 ? 'file' : i === 2 ? 'robot' : 'book',
+                i === 0 ? "play" : i === 1 ? "file" : i === 2 ? "robot" : "book",
                 [45, 20, 15, 10][i],
-                i < 2 ? 'done' : 'pending',
+                i < 2 ? "done" : "pending",
                 i + 1,
-                ['#635bff', '#18b87a', '#ff9500', '#2f6bff'][i],
-                ['rgba(99,91,255,.12)', 'rgba(24,184,122,.12)', 'rgba(255,149,0,.12)', 'rgba(47,107,255,.12)'][i]
+                ["#635bff", "#18b87a", "#ff9500", "#2f6bff"][i],
+                ["rgba(99,91,255,.12)", "rgba(24,184,122,.12)", "rgba(255,149,0,.12)", "rgba(47,107,255,.12)"][i]
             ]
         );
     }
 
     const activities = [
-        ['check', '完成了“数据结构”的学习', '10 分钟前', '学习完成', '#18b87a', 'rgba(24,184,122,.12)'],
-        ['trophy', '连续学习第 13 天达成', '30 分钟前', '连续记录', '#ff9500', 'rgba(255,149,0,.12)'],
-        ['chart', '完成了计算机网络在线测验，系统更新掌握度', '1 小时前', '测验完成', '#2f6bff', 'rgba(47,107,255,.12)'],
-        ['book', '导入中文计算机公开知识与智能题库数据', '今天', '数据入库', '#7c4dff', 'rgba(124,77,255,.12)']
+        ["check", "完成了“数据结构”的学习", "10 分钟前", "学习完成", "#18b87a", "rgba(24,184,122,.12)"],
+        ["trophy", "连续学习第 13 天达成", "30 分钟前", "连续记录", "#ff9500", "rgba(255,149,0,.12)"],
+        [
+            "chart",
+            "完成了计算机网络在线测验，系统更新掌握度",
+            "1 小时前",
+            "测验完成",
+            "#2f6bff",
+            "rgba(47,107,255,.12)"
+        ],
+        ["book", "导入中文计算机公开知识与智能题库数据", "今天", "数据入库", "#7c4dff", "rgba(124,77,255,.12)"]
     ];
     for (const row of activities) {
-        await db.query('INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color) VALUES (1, ?, ?, ?, ?, ?, ?)', row);
+        await db.query(
+            "INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color) VALUES (1, ?, ?, ?, ?, ?, ?)",
+            row
+        );
     }
 
-    for (const title of ['勤奋学习者', '知识点掌握', '学习里程碑', '连续学习']) {
-        await db.query('INSERT INTO achievements (user_id, title, badge, xp) VALUES (1, ?, ?, ?)', [title, 'Lv.2', 100]);
+    for (const title of ["勤奋学习者", "知识点掌握", "学习里程碑", "连续学习"]) {
+        await db.query("INSERT INTO achievements (user_id, title, badge, xp) VALUES (1, ?, ?, ?)", [
+            title,
+            "Lv.2",
+            100
+        ]);
     }
 
     await db.query(
@@ -618,18 +667,18 @@ async function main() {
             `${points[0].title} 学习笔记`,
             points[0].summary,
             points[0].subject,
-            JSON.stringify([points[0].subject, '概念', '复习']),
+            JSON.stringify([points[0].subject, "概念", "复习"]),
             points[2].id,
-            '本次练习暴露出复杂度边界判断不稳定。复盘重点：先确认输入规模，再区分最坏情况、平均情况和数据结构操作成本。',
+            "本次练习暴露出复杂度边界判断不稳定。复盘重点：先确认输入规模，再区分最坏情况、平均情况和数据结构操作成本。",
             points[2].subject,
-            JSON.stringify(['错题', '练习', points[2].subject]),
+            JSON.stringify(["错题", "练习", points[2].subject]),
             points[1].id,
-            '完成课程片段后需要沉淀三个问题：这个概念解决什么问题？常见误区是什么？能否举一个迁移例子？',
+            "完成课程片段后需要沉淀三个问题：这个概念解决什么问题？常见误区是什么？能否举一个迁移例子？",
             points[1].subject,
-            JSON.stringify(['课程', '主动回忆', points[1].subject])
+            JSON.stringify(["课程", "主动回忆", points[1].subject])
         ]
     );
-    const [noteRows] = await db.query('SELECT id FROM notes WHERE user_id = 1 LIMIT 1');
+    const [noteRows] = await db.query("SELECT id FROM notes WHERE user_id = 1 LIMIT 1");
 
     await db.query(
         `INSERT INTO cognitive_profiles (user_id, ability_theta, diagnosis_json, misconception_json, goal_text, goal_graph_json)
@@ -637,10 +686,21 @@ async function main() {
         [
             1,
             0.42,
-            JSON.stringify({ irt: { theta: 0.42, confidence: 0.74 }, weakConcepts: points.slice(0, 3).map(p => p.title), readiness: '需要修复计算机前置概念' }),
-            JSON.stringify([{ concept: '复杂度边界判断不清', severity: 0.72 }, { concept: '系统调用与库函数混淆', severity: 0.66 }]),
-            '系统掌握计算机科学核心能力',
-            JSON.stringify({ root: '计算机科学核心能力', prerequisites: ['计算机组成原理', '数据结构', '操作系统', '计算机网络'], next: ['数据库系统', '软件工程', '人工智能', '项目实战'] })
+            JSON.stringify({
+                irt: { theta: 0.42, confidence: 0.74 },
+                weakConcepts: points.slice(0, 3).map(p => p.title),
+                readiness: "需要修复计算机前置概念"
+            }),
+            JSON.stringify([
+                { concept: "复杂度边界判断不清", severity: 0.72 },
+                { concept: "系统调用与库函数混淆", severity: 0.66 }
+            ]),
+            "系统掌握计算机科学核心能力",
+            JSON.stringify({
+                root: "计算机科学核心能力",
+                prerequisites: ["计算机组成原理", "数据结构", "操作系统", "计算机网络"],
+                next: ["数据库系统", "软件工程", "人工智能", "项目实战"]
+            })
         ]
     );
 
@@ -649,7 +709,7 @@ async function main() {
          VALUES (1, 'dialogue+visual', CAST(? AS JSON), CAST(? AS JSON))`,
         [
             JSON.stringify({ text: 0.72, video: 0.64, dialogue: 0.91, experiment: 0.78 }),
-            JSON.stringify({ readingSpeed: 'medium', hintPreference: 'socratic', bestTime: '14:00-16:00' })
+            JSON.stringify({ readingSpeed: "medium", hintPreference: "socratic", bestTime: "14:00-16:00" })
         ]
     );
 
@@ -659,12 +719,13 @@ async function main() {
          (1, '小星', '数字人导师', '苏格拉底式、耐心、会追问', 'warm-female', 'focused', '蓝紫科技风', '记住用户容易在算法复杂度、进程线程和数据库事务上卡住'),
          (1, 'Nova', '编程学伴', '陪伴式自习、费曼追问', 'calm-neutral', 'encouraging', '代码实验室学伴', '适合用同伴提问促进计算机概念输出')`
     );
-    const [dhRows] = await db.query('SELECT id FROM digital_humans WHERE user_id = 1 ORDER BY id LIMIT 1');
-    await db.query(
-        'INSERT INTO tutor_sessions (user_id, digital_human_id, mode, topic) VALUES (1, ?, ?, ?)',
-        [dhRows[0].id, 'socratic', '算法复杂度入门']
-    );
-    const [sessionRows] = await db.query('SELECT id FROM tutor_sessions WHERE user_id = 1 ORDER BY id LIMIT 1');
+    const [dhRows] = await db.query("SELECT id FROM digital_humans WHERE user_id = 1 ORDER BY id LIMIT 1");
+    await db.query("INSERT INTO tutor_sessions (user_id, digital_human_id, mode, topic) VALUES (1, ?, ?, ?)", [
+        dhRows[0].id,
+        "socratic",
+        "算法复杂度入门"
+    ]);
+    const [sessionRows] = await db.query("SELECT id FROM tutor_sessions WHERE user_id = 1 ORDER BY id LIMIT 1");
     await db.query(
         `INSERT INTO tutor_messages (session_id, sender, content, strategy, emotion_signal)
          VALUES
@@ -683,21 +744,44 @@ async function main() {
              (?, 'case', ?, ?, 'application'),
              (?, 'visual', ?, ?, 'visual')`,
             [
-                point.id, `${point.title} · 直观解释`, `${point.summary}\n\n数字人会先用生活类比解释，再逐步进入正式定义。`,
-                point.id, `${point.title} · 类比`, `把 ${point.title} 类比为一次证据更新或结构拆解，帮助建立直觉。`,
-                point.id, `${point.title} · 案例`, `围绕 ${point.title} 生成一个小案例，并附带诊断性干扰项。`,
-                point.id, `${point.title} · 可视化`, `生成概念流程图、变量关系和关键节点。`
+                point.id,
+                `${point.title} · 直观解释`,
+                `${point.summary}\n\n数字人会先用生活类比解释，再逐步进入正式定义。`,
+                point.id,
+                `${point.title} · 类比`,
+                `把 ${point.title} 类比为一次证据更新或结构拆解，帮助建立直觉。`,
+                point.id,
+                `${point.title} · 案例`,
+                `围绕 ${point.title} 生成一个小案例，并附带诊断性干扰项。`,
+                point.id,
+                `${point.title} · 可视化`,
+                `生成概念流程图、变量关系和关键节点。`
             ]
         );
         await db.query(
             `INSERT INTO spaced_reviews (user_id, knowledge_id, next_review_at, interval_days, ease_factor, encoding_depth, review_prompt)
              VALUES (1, ?, DATE_ADD(NOW(), INTERVAL ? DAY), ?, ?, ?, ?)`,
-            [point.id, point.mastery < 60 ? 1 : 3, point.mastery < 60 ? 1 : 3, point.mastery < 60 ? 2.1 : 2.8, point.mastery < 60 ? 'surface' : 'transfer', `用一个新场景解释 ${point.title}`]
+            [
+                point.id,
+                point.mastery < 60 ? 1 : 3,
+                point.mastery < 60 ? 1 : 3,
+                point.mastery < 60 ? 2.1 : 2.8,
+                point.mastery < 60 ? "surface" : "transfer",
+                `用一个新场景解释 ${point.title}`
+            ]
         );
         await db.query(
             `INSERT INTO ability_radar (user_id, knowledge_id, memory_score, understanding_score, application_score, analysis_score, transfer_score, creation_score)
              VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
-            [point.id, Math.min(100, point.mastery + 10), point.mastery, Math.max(10, point.mastery - 8), Math.max(10, point.mastery - 12), Math.max(10, point.mastery - 18), Math.max(10, point.mastery - 25)]
+            [
+                point.id,
+                Math.min(100, point.mastery + 10),
+                point.mastery,
+                Math.max(10, point.mastery - 8),
+                Math.max(10, point.mastery - 12),
+                Math.max(10, point.mastery - 18),
+                Math.max(10, point.mastery - 25)
+            ]
         );
     }
 
@@ -710,11 +794,20 @@ async function main() {
             noteRows[0].id,
             points[0].id,
             `${points[0].title} 原子卡`,
-            JSON.stringify({ concept: points[0].title, explanation: points[0].summary, analogy: '把复杂概念拆成可验证步骤', example: '用一道迁移题检验理解' }),
+            JSON.stringify({
+                concept: points[0].title,
+                explanation: points[0].summary,
+                analogy: "把复杂概念拆成可验证步骤",
+                example: "用一道迁移题检验理解"
+            }),
             JSON.stringify([points[1].title, points[2].title]),
             noteRows[0].id,
             points[2].id,
-            JSON.stringify({ misconception: '只数循环层数就能得到全部复杂度', fix: '还要考虑输入规模、数据结构操作成本、最坏/平均情况和递归关系', prompt: '如果哈希退化，复杂度会如何变化？' }),
+            JSON.stringify({
+                misconception: "只数循环层数就能得到全部复杂度",
+                fix: "还要考虑输入规模、数据结构操作成本、最坏/平均情况和递归关系",
+                prompt: "如果哈希退化，复杂度会如何变化？"
+            }),
             JSON.stringify([points[0].title, points[3].title])
         ]
     );
@@ -722,12 +815,15 @@ async function main() {
     await db.query(
         `INSERT INTO feynman_reviews (user_id, knowledge_id, explanation_text, clarity_score, accuracy_score, missing_points_json, feedback)
          VALUES (1, ?, '时间复杂度就是描述算法运行时间随输入规模增长的趋势。', 72, 68, CAST(? AS JSON), '解释清晰，但需要补充最坏情况、平均情况和常数项忽略的边界。')`,
-        [points.find(p => p.title === '时间复杂度')?.id || points[2].id, JSON.stringify(['最坏情况', '平均情况', '常数项忽略边界'])]
+        [
+            points.find(p => p.title === "时间复杂度")?.id || points[2].id,
+            JSON.stringify(["最坏情况", "平均情况", "常数项忽略边界"])
+        ]
     );
 
     await db.end();
     console.log(`Database ${dbName} rebuilt.`);
-    console.log(`Public sources: ${Array.from(new Set(sourceNotes)).join(', ')}`);
+    console.log(`Public sources: ${Array.from(new Set(sourceNotes)).join(", ")}`);
 }
 
 main().catch(error => {

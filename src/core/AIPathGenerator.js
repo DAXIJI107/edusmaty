@@ -6,23 +6,23 @@ const DIFFICULTY_SCORE = { easy: 1, medium: 2, hard: 3 };
 
 // VARK 学习风格 → 资源类型权重
 const VARK_RESOURCE_WEIGHTS = {
-    visual:      { lecture: 1.0, video: 1.5, exercise: 0.8, lab: 1.0, diagram: 1.3 },
-    auditory:    { lecture: 1.3, video: 0.9, exercise: 0.7, lab: 0.8, podcast: 1.5 },
-    reading:     { lecture: 1.5, video: 0.7, exercise: 1.0, lab: 0.8, document: 1.4 },
+    visual: { lecture: 1.0, video: 1.5, exercise: 0.8, lab: 1.0, diagram: 1.3 },
+    auditory: { lecture: 1.3, video: 0.9, exercise: 0.7, lab: 0.8, podcast: 1.5 },
+    reading: { lecture: 1.5, video: 0.7, exercise: 1.0, lab: 0.8, document: 1.4 },
     kinesthetic: { lecture: 0.7, video: 0.9, exercise: 1.5, lab: 1.6, project: 1.3 }
 };
 
 const DEFAULT_WEIGHTS = VARK_RESOURCE_WEIGHTS.reading;
 
 function normalizeDifficulty(value) {
-    return ['easy', 'medium', 'hard'].includes(value) ? value : 'medium';
+    return ["easy", "medium", "hard"].includes(value) ? value : "medium";
 }
 
 function masteryBand(mastery) {
-    if (mastery >= 80) return 'mastered';
-    if (mastery >= 60) return 'consolidating';
-    if (mastery >= 40) return 'weak';
-    return 'remedial';
+    if (mastery >= 80) return "mastered";
+    if (mastery >= 60) return "consolidating";
+    if (mastery >= 40) return "weak";
+    return "remedial";
 }
 
 function recommendDifficulty(masteries) {
@@ -35,10 +35,10 @@ function recommendDifficulty(masteries) {
 
 function buildReason(node, prereqCount) {
     const band = masteryBand(node.mastery);
-    if (band === 'remedial') return `掌握度仅 ${node.mastery}%，建议先补救再进入后续节点`;
-    if (band === 'weak') return `掌握度 ${node.mastery}%，适合安排讲解与练习巩固`;
-    if (prereqCount > 0) return '前置节点已满足，可作为下一阶段进阶学习';
-    return '基础节点优先学习，帮助后续知识衔接';
+    if (band === "remedial") return `掌握度仅 ${node.mastery}%，建议先补救再进入后续节点`;
+    if (band === "weak") return `掌握度 ${node.mastery}%，适合安排讲解与练习巩固`;
+    if (prereqCount > 0) return "前置节点已满足，可作为下一阶段进阶学习";
+    return "基础节点优先学习，帮助后续知识衔接";
 }
 
 class AIPathGenerator {
@@ -47,18 +47,14 @@ class AIPathGenerator {
      */
     async loadUserProfile(userId, pool) {
         try {
-            const [rows] = await pool.query(
-                'SELECT profile_json FROM student_profiles WHERE user_id = ?',
-                [userId]
-            );
+            const [rows] = await pool.query("SELECT profile_json FROM student_profiles WHERE user_id = ?", [userId]);
             if (rows.length > 0) {
-                const profile = typeof rows[0].profile_json === 'string'
-                    ? JSON.parse(rows[0].profile_json)
-                    : rows[0].profile_json;
+                const profile =
+                    typeof rows[0].profile_json === "string" ? JSON.parse(rows[0].profile_json) : rows[0].profile_json;
                 return profile || {};
             }
         } catch (error) {
-            console.warn('读取用户画像失败，使用默认值:', error.message);
+            console.warn("读取用户画像失败，使用默认值:", error.message);
         }
         return {};
     }
@@ -72,24 +68,27 @@ class AIPathGenerator {
             profile.learning_style,
             profile.cognitiveStyle?.type,
             profile.q_learn_prefer
-        ].filter(Boolean).join(' ').toLowerCase();
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
         // 尝试映射：visual/auditory/reading/kinesthetic
         for (const [key, weights] of Object.entries(VARK_RESOURCE_WEIGHTS)) {
             if (style.includes(key)) return weights;
         }
         const preferences = profile.multimodalPreferences || profile.multimodal_preferences || {};
         const preferenceMap = {
-            '视觉': 'visual',
-            visual: 'visual',
-            '听觉': 'auditory',
-            auditory: 'auditory',
-            '阅读': 'reading',
-            reading: 'reading',
-            readwrite: 'reading',
-            '触觉': 'kinesthetic',
-            '互动': 'kinesthetic',
-            kinesthetic: 'kinesthetic',
-            experiment: 'kinesthetic'
+            视觉: "visual",
+            visual: "visual",
+            听觉: "auditory",
+            auditory: "auditory",
+            阅读: "reading",
+            reading: "reading",
+            readwrite: "reading",
+            触觉: "kinesthetic",
+            互动: "kinesthetic",
+            kinesthetic: "kinesthetic",
+            experiment: "kinesthetic"
         };
         const preferred = Object.entries(preferences)
             .map(([key, value]) => ({ key: preferenceMap[key] || key, value: Number(value || 0) }))
@@ -98,7 +97,7 @@ class AIPathGenerator {
         if (preferred) return VARK_RESOURCE_WEIGHTS[preferred.key];
         // 回退：检查概览风格字段
         const overview = profile.overview || profile.style || {};
-        const mapped = String(overview.primaryStyle || overview.preferredStyle || '').toLowerCase();
+        const mapped = String(overview.primaryStyle || overview.preferredStyle || "").toLowerCase();
         for (const [key, weights] of Object.entries(VARK_RESOURCE_WEIGHTS)) {
             if (mapped.includes(key)) return weights;
         }
@@ -125,8 +124,8 @@ class AIPathGenerator {
     getAttentionSpan(profile) {
         if (profile.attentionSpanMinutes) return Number(profile.attentionSpanMinutes);
         if (profile.attention_span_minutes) return Number(profile.attention_span_minutes);
-        if (profile.learningPatterns?.['注意力持续时间']) return Number(profile.learningPatterns['注意力持续时间']);
-        if (profile.learning_patterns?.['注意力持续时间']) return Number(profile.learning_patterns['注意力持续时间']);
+        if (profile.learningPatterns?.["注意力持续时间"]) return Number(profile.learningPatterns["注意力持续时间"]);
+        if (profile.learning_patterns?.["注意力持续时间"]) return Number(profile.learning_patterns["注意力持续时间"]);
         const habits = profile.habits || profile.learning_habits || {};
         if (habits.attentionSpan) return Number(habits.attentionSpan);
         if (habits.attention_span) return Number(habits.attention_span);
@@ -135,30 +134,30 @@ class AIPathGenerator {
 
     getProfileContext(profile, styleWeights, dailyMinutes, attentionSpan) {
         const styleLabels = {
-            visual: '视觉型',
-            auditory: '听觉型',
-            reading: '读写型',
-            kinesthetic: '实践型'
+            visual: "视觉型",
+            auditory: "听觉型",
+            reading: "读写型",
+            kinesthetic: "实践型"
         };
-        const primaryStyle = Object.entries(VARK_RESOURCE_WEIGHTS)
-            .find(([, weights]) => weights === styleWeights)?.[0] || 'reading';
+        const primaryStyle =
+            Object.entries(VARK_RESOURCE_WEIGHTS).find(([, weights]) => weights === styleWeights)?.[0] || "reading";
         const preferredResources = Object.entries(styleWeights || DEFAULT_WEIGHTS)
             .filter(([, weight]) => weight >= 1.3)
             .map(([key]) => key);
         return {
             primaryStyle,
-            primaryStyleLabel: styleLabels[primaryStyle] || '读写型',
+            primaryStyleLabel: styleLabels[primaryStyle] || "读写型",
             learningStyle: preferredResources,
             dailyMinutes,
             attentionSpan,
             suggestedPerDay: null,
             estimatedDays: null,
             evidence: [
-                `学习风格：${styleLabels[primaryStyle] || '读写型'}`,
+                `学习风格：${styleLabels[primaryStyle] || "读写型"}`,
                 `每日可用：约 ${dailyMinutes} 分钟`,
                 `专注时长：约 ${attentionSpan} 分钟`
             ],
-            source: profile.updatedAt || profile.updated_at ? 'student_profiles' : 'default'
+            source: profile.updatedAt || profile.updated_at ? "student_profiles" : "default"
         };
     }
 
@@ -174,9 +173,9 @@ class AIPathGenerator {
         const profileContext = this.getProfileContext(profile, styleWeights, dailyMinutes, attentionSpan);
 
         const params = [];
-        let whereClause = '';
-        if (subject && subject !== 'all') {
-            whereClause = 'WHERE subject = ?';
+        let whereClause = "";
+        if (subject && subject !== "all") {
+            whereClause = "WHERE subject = ?";
             params.push(subject);
         }
 
@@ -189,7 +188,7 @@ class AIPathGenerator {
         );
         let prereqMap = {};
         try {
-            const [prereqs] = await pool.query('SELECT node_id, prereq_id FROM prerequisites');
+            const [prereqs] = await pool.query("SELECT node_id, prereq_id FROM prerequisites");
             prereqs.forEach(row => {
                 const key = Number(row.node_id);
                 if (!prereqMap[key]) prereqMap[key] = [];
@@ -256,8 +255,8 @@ class AIPathGenerator {
         const path = [];
 
         while (available.length > 0) {
-            available.sort((a, b) =>
-                this.priority(nodeMap[b], targetDifficulty) - this.priority(nodeMap[a], targetDifficulty)
+            available.sort(
+                (a, b) => this.priority(nodeMap[b], targetDifficulty) - this.priority(nodeMap[a], targetDifficulty)
             );
             const cur = available.shift();
             if (visited.has(cur)) continue;
@@ -290,8 +289,8 @@ class AIPathGenerator {
             .forEach(node => path.push(node));
 
         // 根据每日可用时间和专注时长计算建议每日任务数
-        const avgEstimateMin = path.reduce((s, n) =>
-            s + DIFFICULTY_MINUTES[n.difficulty], 0) / Math.max(path.length, 1);
+        const avgEstimateMin =
+            path.reduce((s, n) => s + DIFFICULTY_MINUTES[n.difficulty], 0) / Math.max(path.length, 1);
         const suggestedPerDay = Math.max(1, Math.round(dailyMinutes / Math.max(avgEstimateMin, 15)));
 
         const steps = path.map((node, index) => {
@@ -303,9 +302,9 @@ class AIPathGenerator {
             const step = {
                 id: node.id,
                 name: node.name,
-                description: node.description || '',
+                description: node.description || "",
                 difficulty: node.difficulty,
-                subject: node.subject || 'general',
+                subject: node.subject || "general",
                 mastery: node.mastery,
                 masteryBand: band,
                 estimate: estimateMinutes,
@@ -318,7 +317,12 @@ class AIPathGenerator {
                 sessionIndex: Math.floor(index / suggestedPerDay) + 1,
                 resources: this.buildResources(node, index, styleWeights, profile)
             };
-            step.personalizedReason = `${profileContext.primaryStyleLabel}画像优先匹配${step.resources.filter(item => item.isPreferred).map(item => item.type).join('、') || '基础'}资源；按 ${attentionSpan} 分钟专注时长${needsBreak ? '建议拆分学习。' : '可一次完成。'}`;
+            step.personalizedReason = `${profileContext.primaryStyleLabel}画像优先匹配${
+                step.resources
+                    .filter(item => item.isPreferred)
+                    .map(item => item.type)
+                    .join("、") || "基础"
+            }资源；按 ${attentionSpan} 分钟专注时长${needsBreak ? "建议拆分学习。" : "可一次完成。"}`;
             return step;
         });
 
@@ -349,8 +353,8 @@ class AIPathGenerator {
             },
             strategy: {
                 targetDifficulty,
-                rule: 'topological-prerequisite + mastery-weight + adaptive-difficulty + profile-aware',
-                replanTrigger: 'mastery < 50 or assessment weak node',
+                rule: "topological-prerequisite + mastery-weight + adaptive-difficulty + profile-aware",
+                replanTrigger: "mastery < 50 or assessment weak node",
                 pacing: `建议每天完成 ${suggestedPerDay} 个节点（约 ${Math.round(suggestedPerDay * avgEstimateMin)} 分钟）`
             },
             stats: {
@@ -379,8 +383,7 @@ class AIPathGenerator {
         const weights = styleWeights || DEFAULT_WEIGHTS;
 
         // 按权重排序资源类型
-        const weightedTypes = Object.entries(weights)
-            .sort(([, a], [, b]) => b - a);
+        const weightedTypes = Object.entries(weights).sort(([, a], [, b]) => b - a);
 
         const allResources = [];
 
@@ -388,75 +391,75 @@ class AIPathGenerator {
             if (weight < 0.7) continue; // 跳过低权重类型
 
             switch (type) {
-                case 'lecture':
+                case "lecture":
                     allResources.push({
                         title: `${topic}讲稿与核心概念`,
-                        type: 'document',
+                        type: "document",
                         duration: 12,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'video':
+                case "video":
                     allResources.push({
                         title: `${topic}10分钟精讲`,
-                        type: 'video',
+                        type: "video",
                         duration: 10,
                         bvid: node.bvid || null,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'exercise':
+                case "exercise":
                     allResources.push({
                         title: `${topic}专项练习`,
-                        type: 'quiz',
+                        type: "quiz",
                         count: weight >= 1.4 ? 8 : 5,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'lab':
+                case "lab":
                     allResources.push({
                         title: `${topic}微实验 ${index + 1}`,
-                        type: 'lab',
-                        duration: node.difficulty === 'hard' ? 35 : 20,
+                        type: "lab",
+                        duration: node.difficulty === "hard" ? 35 : 20,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'diagram':
+                case "diagram":
                     allResources.push({
                         title: `${topic}概念图解`,
-                        type: 'diagram',
+                        type: "diagram",
                         duration: 5,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'podcast':
+                case "podcast":
                     allResources.push({
                         title: `${topic}音频精讲`,
-                        type: 'audio',
+                        type: "audio",
                         duration: 8,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'document':
+                case "document":
                     allResources.push({
                         title: `${topic}深度阅读材料`,
-                        type: 'document',
+                        type: "document",
                         duration: 15,
                         weight,
                         isPreferred: weight >= 1.3
                     });
                     break;
-                case 'project':
+                case "project":
                     allResources.push({
                         title: `${topic}实战项目`,
-                        type: 'project',
-                        duration: node.difficulty === 'hard' ? 45 : 25,
+                        type: "project",
+                        duration: node.difficulty === "hard" ? 45 : 25,
                         weight,
                         isPreferred: weight >= 1.3
                     });
@@ -471,8 +474,8 @@ class AIPathGenerator {
         if (topResources.length < 2) {
             // 补充默认资源
             topResources.push(
-                { title: `${topic}讲稿与核心概念`, type: 'document', duration: 12, weight: 1.0, isPreferred: false },
-                { title: `${topic}专项练习`, type: 'quiz', count: 5, weight: 1.0, isPreferred: false }
+                { title: `${topic}讲稿与核心概念`, type: "document", duration: 12, weight: 1.0, isPreferred: false },
+                { title: `${topic}专项练习`, type: "quiz", count: 5, weight: 1.0, isPreferred: false }
             );
         }
 
@@ -491,40 +494,43 @@ class AIPathGenerator {
         if (steps.length <= 2) return baseResult; // 节点太少不需要 LLM
 
         try {
-            const llmGateway = require('./llm/LlmGateway');
+            const llmGateway = require("./llm/LlmGateway");
 
             // 2. 构建 LLM prompt — 描述候选节点和当前顺序
-            const nodeDescriptions = steps.map((step, i) => {
-                const band = step.masteryBand;
-                const bandLabel = { mastered: '已掌握', consolidating: '巩固中', weak: '薄弱', remedial: '需补救' }[band] || band;
-                return `${i + 1}.「${step.name}」掌握度${step.mastery}(${bandLabel}) 难度${step.difficulty} 所属学科${step.subject} 前置数${step.prereqCount}`;
-            }).join('\n');
+            const nodeDescriptions = steps
+                .map((step, i) => {
+                    const band = step.masteryBand;
+                    const bandLabel =
+                        { mastered: "已掌握", consolidating: "巩固中", weak: "薄弱", remedial: "需补救" }[band] || band;
+                    return `${i + 1}.「${step.name}」掌握度${step.mastery}(${bandLabel}) 难度${step.difficulty} 所属学科${step.subject} 前置数${step.prereqCount}`;
+                })
+                .join("\n");
 
             const messages = [
                 {
-                    role: 'system',
+                    role: "system",
                     content: [
-                        '你是 EduSmart 学习路径优化专家。',
-                        '基于学生的掌握度、节点难度和前置依赖，审查当前学习路径排序是否合理。',
-                        '',
-                        '规则：',
-                        '- 掌握度 < 50 的薄弱节点应排在靠前位置（基数）',
-                        '- 前置依赖未满足的节点应排在其所有前置之后',
-                        '- 难度低的节点通常排在前面，形成渐进式难度',
-                        '- 同一学科的节点尽量连续排列，减少上下文切换',
-                        '',
-                        '输出格式：返回一个 JSON 对象，包含：',
-                        '{',
+                        "你是 EduSmart 学习路径优化专家。",
+                        "基于学生的掌握度、节点难度和前置依赖，审查当前学习路径排序是否合理。",
+                        "",
+                        "规则：",
+                        "- 掌握度 < 50 的薄弱节点应排在靠前位置（基数）",
+                        "- 前置依赖未满足的节点应排在其所有前置之后",
+                        "- 难度低的节点通常排在前面，形成渐进式难度",
+                        "- 同一学科的节点尽量连续排列，减少上下文切换",
+                        "",
+                        "输出格式：返回一个 JSON 对象，包含：",
+                        "{",
                         '  "adjustments": [{"index": 原始序号, "newIndex": 建议新序号, "reason": "原因"}],',
                         '  "summary": "一句话总结调整策略",',
                         '  "estimatedEffectiveness": 0-100 评分',
-                        '}',
-                        'adjustments 数组只列出有调整的节点，不需要列出全部。',
-                        '注意：originalIndex 指当前 1-based 序号。'
-                    ].join('\n')
+                        "}",
+                        "adjustments 数组只列出有调整的节点，不需要列出全部。",
+                        "注意：originalIndex 指当前 1-based 序号。"
+                    ].join("\n")
                 },
                 {
-                    role: 'user',
+                    role: "user",
                     content: `以下是当前${steps.length}个节点的排序（共${baseResult.stats?.toLearn || 0}个待学节点）：\n${nodeDescriptions}\n\n请审查并给出调整建议。`
                 }
             ];
@@ -533,19 +539,19 @@ class AIPathGenerator {
                 messages,
                 temperature: 0.3,
                 maxTokens: 1200,
-                fallbackContent: ''
+                fallbackContent: ""
             });
 
             // 3. 解析 LLM 返回的调整建议
             let llmAdjustments = null;
             try {
-                const content = result.content || '';
+                const content = result.content || "";
                 const jsonMatch = content.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     llmAdjustments = JSON.parse(jsonMatch[0]);
                 }
             } catch (parseError) {
-                console.warn('LLM 路径调整解析失败，使用规则引擎结果:', parseError.message);
+                console.warn("LLM 路径调整解析失败，使用规则引擎结果:", parseError.message);
             }
 
             // 4. 应用 LLM 调整
@@ -558,13 +564,14 @@ class AIPathGenerator {
                         const [moved] = stepArray.splice(fromIdx, 1);
                         stepArray.splice(toIdx, 0, moved);
                         moved.llmAdjusted = true;
-                        moved.adjustReason = adj.reason || '';
+                        moved.adjustReason = adj.reason || "";
                     }
                 }
 
                 // 重新计算 session 分组
                 const dailyMinutes = this.getDailyMinutes(await this.loadUserProfile(userId, pool));
-                const avgEstimateMin = stepArray.reduce((s, n) => s + (n.estimate || 30), 0) / Math.max(stepArray.length, 1);
+                const avgEstimateMin =
+                    stepArray.reduce((s, n) => s + (n.estimate || 30), 0) / Math.max(stepArray.length, 1);
                 const suggestedPerDay = Math.max(1, Math.round(dailyMinutes / Math.max(avgEstimateMin, 15)));
                 stepArray.forEach((step, index) => {
                     step.sessionIndex = Math.floor(index / suggestedPerDay) + 1;
@@ -575,19 +582,22 @@ class AIPathGenerator {
                     steps: stepArray,
                     strategy: {
                         ...baseResult.strategy,
-                        rule: baseResult.strategy.rule + ' + LLM-augmented',
+                        rule: baseResult.strategy.rule + " + LLM-augmented",
                         llmAdjustments: llmAdjustments.adjustments.length,
-                        llmSummary: llmAdjustments.summary || '',
+                        llmSummary: llmAdjustments.summary || "",
                         llmEffectiveness: llmAdjustments.estimatedEffectiveness || 0
                     }
                 };
             }
         } catch (error) {
-            console.warn('LLM 路径增强失败，回退到规则引擎:', error.message);
+            console.warn("LLM 路径增强失败，回退到规则引擎:", error.message);
         }
 
         // LLM 不可用时返回原始结果
-        return { ...baseResult, strategy: { ...baseResult.strategy, rule: baseResult.strategy.rule + ' (LLM unavailable, fallback)' } };
+        return {
+            ...baseResult,
+            strategy: { ...baseResult.strategy, rule: baseResult.strategy.rule + " (LLM unavailable, fallback)" }
+        };
     }
 
     /**
@@ -596,7 +606,7 @@ class AIPathGenerator {
      */
     async generateWithAgent(userId, pool, subject = null) {
         try {
-            const AgenticLearningAgent = require('./AgenticLearningAgent');
+            const AgenticLearningAgent = require("./AgenticLearningAgent");
             const agent = new AgenticLearningAgent(userId, pool);
 
             // 先运行规则引擎获取基础数据
@@ -610,18 +620,18 @@ class AIPathGenerator {
 
             // 标记Agent推荐的知识点在路径中的优先级
             const steps = baseResult.steps || [];
-            const recommendedTopic = agentReasoning.topic || '';
+            const recommendedTopic = agentReasoning.topic || "";
 
             if (recommendedTopic) {
                 // 找到Agent推荐的知识点在路径中的位置，将其提前
-                const matchIdx = steps.findIndex(s =>
-                    s.name.includes(recommendedTopic) || recommendedTopic.includes(s.name)
+                const matchIdx = steps.findIndex(
+                    s => s.name.includes(recommendedTopic) || recommendedTopic.includes(s.name)
                 );
                 if (matchIdx > 0) {
                     const [target] = steps.splice(matchIdx, 1);
                     target.agentRecommended = true;
-                    target.agentReason = agentReasoning.reason || '';
-                    target.agentMethod = agentReasoning.method || '';
+                    target.agentReason = agentReasoning.reason || "";
+                    target.agentMethod = agentReasoning.method || "";
                     steps.unshift(target);
 
                     // 重新计算session分组
@@ -646,12 +656,12 @@ class AIPathGenerator {
                 },
                 strategy: {
                     ...baseResult.strategy,
-                    rule: baseResult.strategy.rule + ' + Agentic-Reasoning (DeepTutor)',
+                    rule: baseResult.strategy.rule + " + Agentic-Reasoning (DeepTutor)",
                     agentRecommended: Boolean(recommendedTopic)
                 }
             };
         } catch (e) {
-            console.warn('Agentic路径生成失败，回退到规则引擎:', e.message);
+            console.warn("Agentic路径生成失败，回退到规则引擎:", e.message);
             return this.generate(userId, pool, subject);
         }
     }
@@ -660,7 +670,7 @@ class AIPathGenerator {
      * 将生成的路径持久化保存到 study_plans 表
      */
     async savePathToStudyPlans(userId, pool, pathResult) {
-        const StudyPlanEngine = require('./StudyPlanEngine');
+        const StudyPlanEngine = require("./StudyPlanEngine");
         const engine = new StudyPlanEngine();
 
         const steps = pathResult.steps || [];
@@ -672,19 +682,19 @@ class AIPathGenerator {
             difficulty: step.difficulty,
             duration: step.estimate,
             resources: step.resources || [],
-            type: step.mastery < 50 ? 'remedial' : step.mastery < 70 ? 'learn' : 'practice',
-            priority: step.isRemedial ? 'high' : 'medium',
+            type: step.mastery < 50 ? "remedial" : step.mastery < 70 ? "learn" : "practice",
+            priority: step.isRemedial ? "high" : "medium",
             mastery: step.mastery,
             profileAware: true,
-            generatedBy: pathResult.strategy?.rule || 'profile-aware',
+            generatedBy: pathResult.strategy?.rule || "profile-aware",
             completed: false,
-            status: 'pending'
+            status: "pending"
         }));
 
         return await engine.savePlan(pool, {
             userId,
             tasks,
-            strategy: pathResult.strategy?.rule || 'profile-aware'
+            strategy: pathResult.strategy?.rule || "profile-aware"
         });
     }
 }

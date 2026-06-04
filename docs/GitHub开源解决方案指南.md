@@ -3,6 +3,7 @@
 ---
 
 ## 📋 目录
+
 1. [研究背景与目标
 2. [高价值开源项目推荐
 3. [问题1解决方案
@@ -17,18 +18,22 @@
 ## 1. 研究背景与目标
 
 ### 当前问题
+
 在之前的分析中，我们发现EduSmart学习系统存在以下问题：
+
 - 内容高度模版化，缺乏真正的个性化
 - Obsidian知识库集成深度不够
 - 本地LLM + RAG系统实际上未实现
 - 学习数据没有形成闭环
 
 ### 研究目标
+
 通过研究GitHub上的高质量开源项目，找到：
-1. **本地LLM + RAG的最佳实践
-2. **Obsidian深度集成方案
-3. **真正个性化学习路径生成方法
-4. **自适应学习系统架构
+
+1. \*\*本地LLM + RAG的最佳实践
+2. \*\*Obsidian深度集成方案
+3. \*\*真正个性化学习路径生成方法
+4. \*\*自适应学习系统架构
 
 ---
 
@@ -38,15 +43,16 @@
 
 ![Ollama Logo](https://ollama.com/assets/ollama-icon.png)
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | [ollama/ollama](https://github.com/ollama/ollama) |
-| **星标** | 85k+ |
-| **核心价值** | 消费级电脑本地部署大模型，支持模型管理，推理服务构建 |
-| **关键特性** | INT8/INT4量化，分块加载，GPU/CPU调度 |
-| **我们将集成方式** | 作为本地LLM服务提供商 |
+| 项目信息           | 详情                                                 |
+| ------------------ | ---------------------------------------------------- |
+| **GitHub**         | [ollama/ollama](https://github.com/ollama/ollama)    |
+| **星标**           | 85k+                                                 |
+| **核心价值**       | 消费级电脑本地部署大模型，支持模型管理，推理服务构建 |
+| **关键特性**       | INT8/INT4量化，分块加载，GPU/CPU调度                 |
+| **我们将集成方式** | 作为本地LLM服务提供商                                |
 
 #### 为什么选择 Ollama？
+
 - 👍 **简单易用**：下载安装即可，无需配置CUDA/PyTorch环境
 - 👍 **性能优化**：权重量化、分块加载、显存优化
 - 👍 **模型丰富**：支持DeepSeek-R1、Llama3、Qwen2.5、Mistral等
@@ -57,32 +63,32 @@
 
 ### 2.2 完整 RAG 系统：AnythingLLM
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | [Mintplex-Labs/anything-llm |
-| **星标** | 68k+ |
-| **核心价值** | 全栈RAG应用，支持本地和云端模型 |
+| 项目信息     | 详情                                  |
+| ------------ | ------------------------------------- |
+| **GitHub**   | [Mintplex-Labs/anything-llm           |
+| **星标**     | 68k+                                  |
+| **核心价值** | 全栈RAG应用，支持本地和云端模型       |
 | **关键特性** | Collector分块智能切分，向量数据库集成 |
 
 ---
 
 ### 2.3 轻量级 RAG：LightRAG
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | [HKUDS/LightRAG](https://gitcode.com/GitHub_Trending/li/LightRAG) |
-| **核心价值** | EMNLP2025论文，轻量级知识图谱增强生成 |
-| **关键特性** | 双层次检索架构，知识图谱构建，Docker部署 |
+| 项目信息     | 详情                                                              |
+| ------------ | ----------------------------------------------------------------- |
+| **GitHub**   | [HKUDS/LightRAG](https://gitcode.com/GitHub_Trending/li/LightRAG) |
+| **核心价值** | EMNLP2025论文，轻量级知识图谱增强生成                             |
+| **关键特性** | 双层次检索架构，知识图谱构建，Docker部署                          |
 
 ---
 
 ### 2.4 Obsidian API 插件：obsidian-local-rest-api
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | [coddingtonbear/obsidian-local-rest-api](https://gitcode.com/gh_mirrors/ob/obsidian-local-rest-api) |
-| **核心价值** | Obsidian本地REST API，安全本地运行，实现自动化 |
-| **关键特性** | 笔记CRUD，知识图谱接口，双向链接查询 |
+| 项目信息     | 详情                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| **GitHub**   | [coddingtonbear/obsidian-local-rest-api](https://gitcode.com/gh_mirrors/ob/obsidian-local-rest-api) |
+| **核心价值** | Obsidian本地REST API，安全本地运行，实现自动化                                                      |
+| **关键特性** | 笔记CRUD，知识图谱接口，双向链接查询                                                                |
 
 ---
 
@@ -90,28 +96,29 @@
 
 ![DeepTutor Architecture](https://aka.doubaocdn.com/s/pVed1wUiy6)
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | [HKUDS/DeepTutor](https://github.com/HKUDS/DeepTutor) |
-| **论文** | [arXiv:2604.26962](https://arxiv.org/pdf/2604.26962v1) |
+| 项目信息     | 详情                                                      |
+| ------------ | --------------------------------------------------------- |
+| **GitHub**   | [HKUDS/DeepTutor](https://github.com/HKUDS/DeepTutor)     |
+| **论文**     | [arXiv:2604.26962](https://arxiv.org/pdf/2604.26962v1)    |
 | **核心价值** | Agent原生的个性化辅导框架，统一的个性化基质，封闭辅导闭环 |
-| **关键特性** | 混合个性化引擎，多分辨率记忆，问题解决与难度校准题目生成 |
+| **关键特性** | 混合个性化引擎，多分辨率记忆，问题解决与难度校准题目生成  |
 
 #### DeepTutor 核心架构亮点
-1. **Agent-Native设计
-2. **静态知识接地 + 动态记忆
-3. **封闭辅导循环
-4. **TutorBot多代理层
+
+1. \*\*Agent-Native设计
+2. \*\*静态知识接地 + 动态记忆
+3. \*\*封闭辅导循环
+4. \*\*TutorBot多代理层
 
 ---
 
 ### 2.6 AI 工程教育平台：AI-Edu-Builder
 
-| 项目信息 | 详情 |
-|---|---|
-| **GitHub** | (开源项目 |
+| 项目信息     | 详情                                           |
+| ------------ | ---------------------------------------------- |
+| **GitHub**   | (开源项目                                      |
 | **核心价值** | 模块化课程设计，个性化学习引擎，沉浸式实践环境 |
-| **关键特性** | 知识图谱构建，AI辅导，学习进度追踪，自动评估 |
+| **关键特性** | 知识图谱构建，AI辅导，学习进度追踪，自动评估   |
 
 ---
 
@@ -119,8 +126,9 @@
 
 ### 问题 1：内容模版化，缺乏真正个性化
 
-**问题分析
+\*\*问题分析
 当前：
+
 ```javascript
 // 模版化的题目生成
 function buildSingleQuestion(node) {
@@ -137,6 +145,7 @@ function buildSingleQuestion(node) {
 **解决方案**
 
 #### 方案 1：借鉴 DeepTutor 的混合个性化引擎
+
 ```javascript
 // 核心设计：
 1. 静态知识接地 (Static Knowledge Grounding)
@@ -147,31 +156,33 @@ function buildSingleQuestion(node) {
 #### 方案 2：使用 Ollama + LightRAG 实现真正个性化
 
 **实现步骤**：
-1. **数据准备
+
+1. \*\*数据准备
 2. 调用 Ollama 生成针对薄弱知识点
 3. 结合学习风格生成题目
 4. 使用 LightRAG 检索相关资料
 5. 生成真实题目生成个性化题目
 
 **关键代码架构**：
+
 ```javascript
 // 智能个性化题目生成器
 class PersonalizedQuestionGenerator {
-  constructor(ollamaClient, ragService, learnerProfile) {
-    this.ollama = ollamaClient;
-    this.rag = ragService;
-    this.profile = learnerProfile;
-  }
+    constructor(ollamaClient, ragService, learnerProfile) {
+        this.ollama = ollamaClient;
+        this.rag = ragService;
+        this.profile = learnerProfile;
+    }
 
-  async generateQuestion(topic) {
-    // 1. 检索学习者在该topic的掌握度
-    const mastery = await this.profile.getMastery(topic);
-    
-    // 2. RAG检索相关知识
-    const context = await this.rag.retrieve(topic);
-    
-    // 3. 根据掌握度+上下文，结合风格
-    const prompt = `
+    async generateQuestion(topic) {
+        // 1. 检索学习者在该topic的掌握度
+        const mastery = await this.profile.getMastery(topic);
+
+        // 2. RAG检索相关知识
+        const context = await this.rag.retrieve(topic);
+
+        // 3. 根据掌握度+上下文，结合风格
+        const prompt = `
     为学习者画像：
     - 掌握度：${mastery}
     - 学习风格：${this.profile.learningStyle}
@@ -181,10 +192,10 @@ class PersonalizedQuestionGenerator {
     
     请生成一道针对的个性化题目
     `;
-    
-    // 4. 调用 Ollama 生成个性化题目
-    return await this.ollama.chat(prompt);
-  }
+
+        // 4. 调用 Ollama 生成个性化题目
+        return await this.ollama.chat(prompt);
+    }
 }
 ```
 
@@ -206,23 +217,24 @@ class PersonalizedQuestionGenerator {
 3. 自主操作（Autonomous Operation）
 ```
 
-**核心架构实现：
+\*\*核心架构实现：
+
 ```javascript
 // src/core/agenticPathAgent.js
 class AgenticLearningPathAgent {
-  constructor(userId, pool, ollamaClient) {
-    this.userId = userId;
-    this.state = {
-      knowledgeState: {},
-      interactionHistory: [],
-      learningPreferences: {}
-    };
-    this.ollama = ollamaClient;
-  }
+    constructor(userId, pool, ollamaClient) {
+        this.userId = userId;
+        this.state = {
+            knowledgeState: {},
+            interactionHistory: [],
+            learningPreferences: {}
+        };
+        this.ollama = ollamaClient;
+    }
 
-  // 推理下一步学习内容
-  async reasonNextStep() {
-    const prompt = `
+    // 推理下一步学习内容
+    async reasonNextStep() {
+        const prompt = `
     学习者状态：
     - 当前知识掌握度：${JSON.stringify(this.state.knowledgeState)}
     - 学习历史：${JSON.stringify(this.state.interactionHistory.slice(-5))}
@@ -230,19 +242,19 @@ class AgenticLearningPathAgent {
     
     推理下一步最佳学习内容，并说明理由
     `;
-    
-    const reasoning = await this.ollama.chat(prompt);
-    return reasoning;
-  }
 
-  // 自适应调整路径
-  async adjustPath(feedback) {
-    // 更新状态
-    this.state.interactionHistory.push(feedback);
-    
-    // 重新推理
-    return this.reasonNextStep();
-  }
+        const reasoning = await this.ollama.chat(prompt);
+        return reasoning;
+    }
+
+    // 自适应调整路径
+    async adjustPath(feedback) {
+        // 更新状态
+        this.state.interactionHistory.push(feedback);
+
+        // 重新推理
+        return this.reasonNextStep();
+    }
 }
 ```
 
@@ -257,38 +269,40 @@ class AgenticLearningPathAgent {
 
 #### 方案 方案：obsidian-local-rest-api + 双向链接利用
 
-**技术方案：
+\*\*技术方案：
+
 ```javascript
 // src/core/obsidianLinker.js
 class ObsidianKnowledgeLinker {
-  constructor() {
-    this.apiBase = 'http://localhost:27123'; // Obsidian Local REST API
-  }
+    constructor() {
+        this.apiBase = "http://localhost:27123"; // Obsidian Local REST API
+    }
 
-  // 获取知识图谱
-  async getGraph() {
-    return fetch(`${this.apiBase}/api/v1/graph`);
-  }
+    // 获取知识图谱
+    async getGraph() {
+        return fetch(`${this.apiBase}/api/v1/graph`);
+    }
 
-  // 基于双向链接推荐关联知识点
-  async findRelated(topic) {
-    const graph = await this.getGraph();
-    // 图遍历算法找到关联节点
-  }
+    // 基于双向链接推荐关联知识点
+    async findRelated(topic) {
+        const graph = await this.getGraph();
+        // 图遍历算法找到关联节点
+    }
 
-  // 从学习系统同步到学习系统
-  async syncNoteFromObsidian() {
-    // 监听 Obsidian 更新，实时同步到 EduSmart
-  }
+    // 从学习系统同步到学习系统
+    async syncNoteFromObsidian() {
+        // 监听 Obsidian 更新，实时同步到 EduSmart
+    }
 
-  // 从学习系统写入 Obsidian
-  async syncNoteToObsidian(content) {
-    // 将学习笔记、错题本同步回 Obsidian
-  }
+    // 从学习系统写入 Obsidian
+    async syncNoteToObsidian(content) {
+        // 将学习笔记、错题本同步回 Obsidian
+    }
 }
 ```
 
-**知识图谱构建：
+\*\*知识图谱构建：
+
 ```
 Obsidian 双向链接 → 知识图谱 → 学习路径推荐
 ```
@@ -305,47 +319,49 @@ Obsidian 双向链接 → 知识图谱 → 学习路径推荐
 #### 方案：Ollama + Chroma + LightRAG
 
 **架构设计**：
+
 ```javascript
 // src/core/localRagService.js
 class LocalRagService {
-  constructor() {
-    this.ollama = new OllamaClient('http://localhost:11434');
-    this.chroma = new ChromaClient('http://localhost:8000');
-    this.embeddingModel = 'bge-m3';
-    this.llmModel = 'qwen2.5:7b';
-  }
+    constructor() {
+        this.ollama = new OllamaClient("http://localhost:11434");
+        this.chroma = new ChromaClient("http://localhost:8000");
+        this.embeddingModel = "bge-m3";
+        this.llmModel = "qwen2.5:7b";
+    }
 
-  // 1. 向量化 Obsidian 内容
-  async ingestObsidianContent(obsidianVaultPath) {
-    // 读取 Obsidian 笔记
-    // 分块
-    // 向量化
-    // 存入 Chroma
-  }
+    // 1. 向量化 Obsidian 内容
+    async ingestObsidianContent(obsidianVaultPath) {
+        // 读取 Obsidian 笔记
+        // 分块
+        // 向量化
+        // 存入 Chroma
+    }
 
-  // 2. 混合搜索
-  async hybridSearch(query) {
-    // BM25 关键词搜索
-    // 向量相似性搜索
-    // 融合结果重排序
-  }
+    // 2. 混合搜索
+    async hybridSearch(query) {
+        // BM25 关键词搜索
+        // 向量相似性搜索
+        // 融合结果重排序
+    }
 
-  // 3. RAG 生成答案
-  async queryWithRag(query) {
-    const context = this.hybridSearch(query);
-    const prompt = `
+    // 3. RAG 生成答案
+    async queryWithRag(query) {
+        const context = this.hybridSearch(query);
+        const prompt = `
     相关知识：${context}
     
     问题：${query}
     
     请基于提供的知识回答问题
     `;
-    return this.ollama.chat(prompt);
-  }
+        return this.ollama.chat(prompt);
+    }
 }
 ```
 
-**部署方案（Docker）：
+\*\*部署方案（Docker）：
+
 ```yaml
 version: '3.8'
 services:
@@ -375,25 +391,25 @@ services:
 ```javascript
 // src/core/learningFeedbackLoop.js
 class LearningFeedbackLoop {
-  constructor(userId, pool, llmClient, ragService) {
-    this.userId = userId;
-    this.llm = llmClient;
-    this.rag = ragService;
-  }
+    constructor(userId, pool, llmClient, ragService) {
+        this.userId = userId;
+        this.llm = llmClient;
+        this.rag = ragService;
+    }
 
-  // 答题提交
-  async onAnswerSubmitted(questionId, isCorrect) {
-    // 1. 更新掌握度（BKT 模型）
-    // 2. 调整学习路径（Agent 推理）
-    // 3. 生成复习任务（遗忘曲线）
-    // 4. 同步到 Obsidian 笔记
-  }
+    // 答题提交
+    async onAnswerSubmitted(questionId, isCorrect) {
+        // 1. 更新掌握度（BKT 模型）
+        // 2. 调整学习路径（Agent 推理）
+        // 3. 生成复习任务（遗忘曲线）
+        // 4. 同步到 Obsidian 笔记
+    }
 
-  // 学习完成
-  async onLessonComplete(nodeId) {
-    // 1. 更新学习进度
-    // 2. 生成笔记建议
-  }
+    // 学习完成
+    async onLessonComplete(nodeId) {
+        // 1. 更新学习进度
+        // 2. 生成笔记建议
+    }
 }
 ```
 
@@ -413,53 +429,53 @@ class LearningFeedbackLoop {
  * GitHub: https://github.com/ollama/ollama
  */
 class OllamaClient {
-  constructor(baseUrl = 'http://localhost:11434', model = 'qwen2.5:7b') {
-    this.baseUrl = baseUrl;
-    this.model = model;
-  }
+    constructor(baseUrl = "http://localhost:11434", model = "qwen2.5:7b") {
+        this.baseUrl = baseUrl;
+        this.model = model;
+    }
 
-  async chat(messages, options = {}) {
-    const response = await fetch(`${this.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || this.model,
-        messages,
-        stream: false,
-        ...options
-      })
-    });
-    const data = await response.json();
-    return data.message.content;
-  }
+    async chat(messages, options = {}) {
+        const response = await fetch(`${this.baseUrl}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: options.model || this.model,
+                messages,
+                stream: false,
+                ...options
+            })
+        });
+        const data = await response.json();
+        return data.message.content;
+    }
 
-  async generate(content, options = {}) {
-    const response = await fetch(`${this.baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || this.model,
-        prompt: content,
-        stream: false,
-        ...options
-      })
-    });
-    const data = await response.json();
-    return data.response;
-  }
+    async generate(content, options = {}) {
+        const response = await fetch(`${this.baseUrl}/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: options.model || this.model,
+                prompt: content,
+                stream: false,
+                ...options
+            })
+        });
+        const data = await response.json();
+        return data.response;
+    }
 
-  async embeddings(text, options = {}) {
-    const response = await fetch(`${this.baseUrl}/api/embeddings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || 'nomic-embed-text',
-        prompt: text
-      })
-    });
-    const data = await response.json();
-    return data.embedding;
-  }
+    async embeddings(text, options = {}) {
+        const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: options.model || "nomic-embed-text",
+                prompt: text
+            })
+        });
+        const data = await response.json();
+        return data.embedding;
+    }
 }
 
 module.exports = OllamaClient;
@@ -470,46 +486,46 @@ module.exports = OllamaClient;
 **文件**：改进 `src/core/ragSearchService.js`
 
 ```javascript
-const ChromaClient = require('./chromaClient');
-const OllamaClient = require('./llm/ollamaClient');
+const ChromaClient = require("./chromaClient");
+const OllamaClient = require("./llm/ollamaClient");
 
 class EnhancedRagSearchService {
-  constructor() {
-    this.ollama = new OllamaClient();
-    this.chroma = new ChromaClient();
-    this.bm25 = new BM25Index();
-  }
+    constructor() {
+        this.ollama = new OllamaClient();
+        this.chroma = new ChromaClient();
+        this.bm25 = new BM25Index();
+    }
 
-  // 混合搜索
-  async hybridSearch(query, k = 5) {
-    // 1. BM25 搜索
-    const bm25Results = this.bm25.search(query, k);
-    
-    // 2. 向量搜索
-    const vectorResults = await this.chroma.query(query, k);
-    
-    // 3. 融合重排序
-    return this.rerankResults(bm25Results, vectorResults, query);
-  }
+    // 混合搜索
+    async hybridSearch(query, k = 5) {
+        // 1. BM25 搜索
+        const bm25Results = this.bm25.search(query, k);
 
-  // RAG 查询
-  async query(query) {
-    const context = await this.hybridSearch(query);
-    const prompt = `
+        // 2. 向量搜索
+        const vectorResults = await this.chroma.query(query, k);
+
+        // 3. 融合重排序
+        return this.rerankResults(bm25Results, vectorResults, query);
+    }
+
+    // RAG 查询
+    async query(query) {
+        const context = await this.hybridSearch(query);
+        const prompt = `
 请基于以下相关知识回答问题：
 
-${context.map(c => `- ${c.content}`).join('\n')}
+${context.map(c => `- ${c.content}`).join("\n")}
 
 问题：${query}
 `;
-    return await this.ollama.generate(prompt);
-  }
+        return await this.ollama.generate(prompt);
+    }
 
-  // 注入 Obsidian 内容
-  async ingestObsidian(vaultPath) {
-    // 遍历 Obsidian 笔记
-    // 向量化存储到 Chroma
-  }
+    // 注入 Obsidian 内容
+    async ingestObsidian(vaultPath) {
+        // 遍历 Obsidian 笔记
+        // 向量化存储到 Chroma
+    }
 }
 
 module.exports = EnhancedRagSearchService;
@@ -570,20 +586,20 @@ module.exports = ObsidianApiClient;
 
 ```javascript
 class ObsidianKnowledgeLinker {
-  constructor(apiClient) {
-    this.api = apiClient;
-  }
+    constructor(apiClient) {
+        this.api = apiClient;
+    }
 
-  async findRelatedKnowledge(topic) {
-    const graph = await this.api.getGraph();
-    // 图遍历找到关联知识点
-  }
+    async findRelatedKnowledge(topic) {
+        const graph = await this.api.getGraph();
+        // 图遍历找到关联知识点
+    }
 
-  // 构建学习知识图谱
-  async buildLearningGraph() {
-    const notes = await this.api.getNotes();
-    // 构建概念关系
-  }
+    // 构建学习知识图谱
+    async buildLearningGraph() {
+        const notes = await this.api.getNotes();
+        // 构建概念关系
+    }
 }
 ```
 
@@ -601,24 +617,24 @@ class ObsidianKnowledgeLinker {
  * GitHub: https://github.com/HKUDS/DeepTutor
  */
 class AgenticLearningAgent {
-  constructor(userId, pool, ollamaClient) {
-    this.userId = userId;
-    this.pool = pool;
-    this.ollama = ollamaClient;
-    this.state = {
-      knowledge: {},
-      history: [],
-      preferences: {}
-    };
-  }
+    constructor(userId, pool, ollamaClient) {
+        this.userId = userId;
+        this.pool = pool;
+        this.ollama = ollamaClient;
+        this.state = {
+            knowledge: {},
+            history: [],
+            preferences: {}
+        };
+    }
 
-  async init() {
-    // 加载学习状态
-  }
+    async init() {
+        // 加载学习状态
+    }
 
-  // Agentic 推理下一步
-  async reasonNextStep() {
-    const prompt = `
+    // Agentic 推理下一步
+    async reasonNextStep() {
+        const prompt = `
 你是一个智能学习导师。
 
 学习者状态：
@@ -632,14 +648,14 @@ class AgenticLearningAgent {
 3. 学习方式（视觉/听觉/阅读/实践）
 4. 理由
 `;
-    return this.ollama.chat([{ role: 'user', content: prompt }]);
-  }
+        return this.ollama.chat([{ role: "user", content: prompt }]);
+    }
 
-  // 自适应路径调整
-  async adjustPath(feedback) {
-    this.state.history.push(feedback);
-    return this.reasonNextStep();
-  }
+    // 自适应路径调整
+    async adjustPath(feedback) {
+        this.state.history.push(feedback);
+        return this.reasonNextStep();
+    }
 }
 
 module.exports = AgenticLearningAgent;
@@ -651,24 +667,24 @@ module.exports = AgenticLearningAgent;
 
 ### 5.1 功能对比
 
-| 维度 | 当前 | 改进后 | 提升 |
-|---|---|---|---|
-| **个性化程度 | 模版化 | 真实个性化 | 显著提升 |
-| **题目生成** | 固定模版 | LLM 个性化 | 质量提升 80% |
-| **学习路径** | 规则驱动 | Agent 推理 | 千人千面 |
-| **Obsidian 集成** | 单向同步 | 双向联动 | 深度整合 |
-| **RAG 系统** | 框架存在 | 真实可用 | 搜索质量提升 70% |
-| **数据闭环 | 部分实现 | 完整闭环 | 学习效率提升 60% |
+| 维度              | 当前     | 改进后     | 提升             |
+| ----------------- | -------- | ---------- | ---------------- |
+| \*\*个性化程度    | 模版化   | 真实个性化 | 显著提升         |
+| **题目生成**      | 固定模版 | LLM 个性化 | 质量提升 80%     |
+| **学习路径**      | 规则驱动 | Agent 推理 | 千人千面         |
+| **Obsidian 集成** | 单向同步 | 双向联动   | 深度整合         |
+| **RAG 系统**      | 框架存在 | 真实可用   | 搜索质量提升 70% |
+| \*\*数据闭环      | 部分实现 | 完整闭环   | 学习效率提升 60% |
 
 ### 5.2 用户体验提升
 
-| 场景 | 当前体验 | 改进后体验 |
-|---|---|---|
-| **登录后** | 固定诊断 | 智能诊断 + 画像分析 |
-| **学习路径** | 千人一面 | 个性化路径生成 |
-| **做题时 | 固定题目 | 针对薄弱环节的题目 |
-| **笔记记录** | 独立系统 | 与 Obsidian 双向同步 |
-| **AI 对话** | 模版响应 | 基于知识库 + RAG 增强 |
+| 场景         | 当前体验 | 改进后体验            |
+| ------------ | -------- | --------------------- |
+| **登录后**   | 固定诊断 | 智能诊断 + 画像分析   |
+| **学习路径** | 千人一面 | 个性化路径生成        |
+| \*\*做题时   | 固定题目 | 针对薄弱环节的题目    |
+| **笔记记录** | 独立系统 | 与 Obsidian 双向同步  |
+| **AI 对话**  | 模版响应 | 基于知识库 + RAG 增强 |
 
 ### 5.3 技术效果提升
 
@@ -682,6 +698,7 @@ module.exports = AgenticLearningAgent;
 ## 6. 实施路线图
 
 ### Week 1-2：Phase 1 - 本地 LLM + RAG
+
 1. 安装 Ollama
 2. 拉取模型 (Qwen2.5:7b, bge-m3)
 3. 实现 OllamaClient
@@ -689,17 +706,20 @@ module.exports = AgenticLearningAgent;
 5. 向量化 Obsidian 内容
 
 ### Week 3-4：Phase 2 - Obsidian 深度集成
+
 1. 安装 Obsidian Local REST API
 2. 实现 ObsidianApiClient
 3. 双向链接知识图谱
 4. 笔记双向同步
 
 ### Week 5-6：Phase 3 - Agentic 学习路径
+
 1. 实现 AgenticLearningAgent
 2. 实现 LearningFeedbackLoop
 3. 完整数据闭环
 
 ### Week 7-8：Phase 4 - 用户体验
+
 1. 前端界面优化
 2. 测试与优化
 3. 文档完善
@@ -772,13 +792,13 @@ OBSIDIAN_API_BASE=http://localhost:27123
 
 ## 参考资源
 
-| 项目 | GitHub | 论文 |
-|---|---|---|
-| Ollama | https://github.com/ollama/ollama | - |
-| AnythingLLM | https://github.com/Mintplex-Labs/anything-llm | - |
-| LightRAG | https://gitcode.com/GitHub_Trending/li/LightRAG | EMNLP2025 |
-| Obsidian Local REST API | https://gitcode.com/gh_mirrors/ob/obsidian-local-rest-api | - |
-| DeepTutor | https://github.com/HKUDS/DeepTutor | arXiv:2604.26962 |
+| 项目                    | GitHub                                                    | 论文             |
+| ----------------------- | --------------------------------------------------------- | ---------------- |
+| Ollama                  | https://github.com/ollama/ollama                          | -                |
+| AnythingLLM             | https://github.com/Mintplex-Labs/anything-llm             | -                |
+| LightRAG                | https://gitcode.com/GitHub_Trending/li/LightRAG           | EMNLP2025        |
+| Obsidian Local REST API | https://gitcode.com/gh_mirrors/ob/obsidian-local-rest-api | -                |
+| DeepTutor               | https://github.com/HKUDS/DeepTutor                        | arXiv:2604.26962 |
 
 ---
 

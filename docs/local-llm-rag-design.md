@@ -189,15 +189,15 @@ Obsidian 资料导入：
 2. 查询学生画像：薄弱点、最近错题、课程进度。
 3. RAG 检索：TopK 证据。
 4. Prompt 组装：
-   - system：小星学习导师身份、安全边界、引用规则。
-   - context：学生画像。
-   - evidence：编号证据。
-   - user：原始问题。
+    - system：小星学习导师身份、安全边界、引用规则。
+    - context：学生画像。
+    - evidence：编号证据。
+    - user：原始问题。
 5. 本地 LLM 生成。
 6. 后处理：
-   - 提取引用编号。
-   - 若没有引用但使用了证据，追加引用提示或降级模板答案。
-   - 返回 `answer/citations/nextActions/confidence`。
+    - 提取引用编号。
+    - 若没有引用但使用了证据，追加引用提示或降级模板答案。
+    - 返回 `answer/citations/nextActions/confidence`。
 
 推荐 Prompt 约束：
 

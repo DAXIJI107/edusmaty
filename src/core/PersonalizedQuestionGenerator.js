@@ -8,8 +8,8 @@
 //   3. 结合学习风格生成个性化prompt
 //   4. 调用LLM生成题目
 
-const llmGateway = require('./llm/LlmGateway');
-const { ensureRagData } = require('./RagSeeder');
+const llmGateway = require("./llm/LlmGateway");
+const { ensureRagData } = require("./RagSeeder");
 
 class PersonalizedQuestionGenerator {
     /**
@@ -19,7 +19,7 @@ class PersonalizedQuestionGenerator {
     constructor(pool, options = {}) {
         this.pool = pool;
         this.maxBatch = options.maxBatch || 10;
-        this.defaultDifficulty = options.defaultDifficulty || 'medium';
+        this.defaultDifficulty = options.defaultDifficulty || "medium";
     }
 
     /**
@@ -27,17 +27,17 @@ class PersonalizedQuestionGenerator {
      */
     async _loadProfile(userId) {
         try {
-            const [rows] = await this.pool.query(
-                'SELECT profile_json FROM student_profiles WHERE user_id = ?',
-                [userId]
-            );
+            const [rows] = await this.pool.query("SELECT profile_json FROM student_profiles WHERE user_id = ?", [
+                userId
+            ]);
             if (rows.length > 0) {
-                const profile = typeof rows[0].profile_json === 'string'
-                    ? JSON.parse(rows[0].profile_json)
-                    : rows[0].profile_json;
+                const profile =
+                    typeof rows[0].profile_json === "string" ? JSON.parse(rows[0].profile_json) : rows[0].profile_json;
                 return profile || {};
             }
-        } catch (e) { /* 忽略 */ }
+        } catch (e) {
+            /* 忽略 */
+        }
         return {};
     }
 
@@ -46,7 +46,7 @@ class PersonalizedQuestionGenerator {
      */
     async _getMastery(userId, nodeId) {
         const [rows] = await this.pool.query(
-            'SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?',
+            "SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?",
             [userId, nodeId]
         );
         return rows.length > 0 ? Number(rows[0].mastery || 0) : 0;
@@ -62,9 +62,11 @@ class PersonalizedQuestionGenerator {
             if (!chunks.length) return [];
 
             // 简单关键词匹配
-            const keywords = String(topic).split(/[\s,，]+/).filter(Boolean);
+            const keywords = String(topic)
+                .split(/[\s,，]+/)
+                .filter(Boolean);
             const scored = chunks.map(chunk => {
-                const text = (chunk.title + ' ' + (chunk.content || '')).toLowerCase();
+                const text = (chunk.title + " " + (chunk.content || "")).toLowerCase();
                 let score = 0;
                 for (const kw of keywords) {
                     if (text.includes(kw.toLowerCase())) score += 1;
@@ -76,7 +78,7 @@ class PersonalizedQuestionGenerator {
                 .filter(c => c.score > 0)
                 .sort((a, b) => b.score - a.score)
                 .slice(0, limit)
-                .map(c => c.content || c.title || '');
+                .map(c => c.content || c.title || "");
         } catch (e) {
             return [];
         }
@@ -97,7 +99,7 @@ class PersonalizedQuestionGenerator {
     async generateQuestion(topic, options = {}) {
         const userId = options.userId;
         let mastery = options.mastery;
-        let learningStyle = options.learningStyle || 'reading';
+        let learningStyle = options.learningStyle || "reading";
         let difficulty = options.difficulty || this.defaultDifficulty;
 
         // 如果有userId，从数据库加载个性化数据
@@ -109,12 +111,13 @@ class PersonalizedQuestionGenerator {
 
         // 检索RAG上下文
         const contexts = await this._retrieveContext(topic, 3);
-        const ragContext = contexts.length > 0
-            ? `\n【相关知识库内容】\n${contexts.map((c, i) => `${i + 1}. ${c.slice(0, 300)}`).join('\n')}`
-            : '';
+        const ragContext =
+            contexts.length > 0
+                ? `\n【相关知识库内容】\n${contexts.map((c, i) => `${i + 1}. ${c.slice(0, 300)}`).join("\n")}`
+                : "";
 
-        const typeLabels = ['单选题', '多选题', '判断题'];
-        const qType = options.questionType !== undefined ? typeLabels[options.questionType] : '单选题';
+        const typeLabels = ["单选题", "多选题", "判断题"];
+        const qType = options.questionType !== undefined ? typeLabels[options.questionType] : "单选题";
 
         const prompt = `你是一位专业的计算机科学教育者，请为学习者生成一道${qType}。
 
@@ -122,7 +125,7 @@ class PersonalizedQuestionGenerator {
 - 知识点：${topic}
 - 难度：${difficulty}
 - 题型：${qType}
-- 学习者掌握度：${mastery || '未知'}%（掌握度越低，题目越基础）
+- 学习者掌握度：${mastery || "未知"}%（掌握度越低，题目越基础）
 - 学习者风格：${learningStyle}（visual=图表类, auditory=讲解类, reading=文字类, kinesthetic=实践类）
 ${ragContext}
 
@@ -141,33 +144,36 @@ ${ragContext}
         try {
             const result = await llmGateway.chat({
                 messages: [
-                    { role: 'system', content: '你是计算机科学题目生成专家。请总是返回有效JSON，题目内容准确、有教育意义。' },
-                    { role: 'user', content: prompt }
+                    {
+                        role: "system",
+                        content: "你是计算机科学题目生成专家。请总是返回有效JSON，题目内容准确、有教育意义。"
+                    },
+                    { role: "user", content: prompt }
                 ],
                 temperature: 0.6,
                 maxTokens: 1024,
                 fallbackContent: JSON.stringify(this._fallbackQuestion(topic, difficulty))
             });
 
-            const isFallback = result && result.provider === 'fallback';
-            const content = result?.content || '';
+            const isFallback = result && result.provider === "fallback";
+            const content = result?.content || "";
 
             const jsonMatch = String(content).match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 return {
                     ...parsed,
-                    generatedBy: isFallback ? 'fallback' : 'llm',
+                    generatedBy: isFallback ? "fallback" : "llm",
                     generatedAt: new Date().toISOString()
                 };
             }
         } catch (e) {
-            console.warn('题目生成LLM调用失败，使用回退:', e.message);
+            console.warn("题目生成LLM调用失败，使用回退:", e.message);
         }
 
         return {
             ...this._fallbackQuestion(topic, difficulty),
-            generatedBy: 'fallback',
+            generatedBy: "fallback",
             generatedAt: new Date().toISOString()
         };
     }
@@ -182,14 +188,11 @@ ${ragContext}
     async generateQuestionSet(topics, options = {}) {
         const questions = [];
         for (const item of topics.slice(0, this.maxBatch)) {
-            const q = await this.generateQuestion(
-                typeof item === 'string' ? item : item.topic,
-                {
-                    ...options,
-                    difficulty: item.difficulty || options.difficulty,
-                    questionType: options.questionType
-                }
-            );
+            const q = await this.generateQuestion(typeof item === "string" ? item : item.topic, {
+                ...options,
+                difficulty: item.difficulty || options.difficulty,
+                questionType: options.questionType
+            });
             questions.push(q);
         }
         return questions;
@@ -215,15 +218,12 @@ ${ragContext}
 
         if (weakRows.length === 0 && weakPoints.length === 0) {
             // 没有薄弱点，生成进阶题目
-            return this.generateQuestionSet(
-                [{ topic: '计算机综合', difficulty: 'medium' }],
-                { userId, count: 1 }
-            );
+            return this.generateQuestionSet([{ topic: "计算机综合", difficulty: "medium" }], { userId, count: 1 });
         }
 
         const topics = weakRows.map(r => ({
             topic: r.name,
-            difficulty: r.difficulty || 'medium',
+            difficulty: r.difficulty || "medium",
             mastery: Number(r.mastery || 0)
         }));
 
@@ -243,7 +243,7 @@ ${ragContext}
     /**
      * LLM不可用时的回退题目
      */
-    _fallbackQuestion(topic, difficulty = 'medium') {
+    _fallbackQuestion(topic, difficulty = "medium") {
         const banks = {
             easy: [
                 {
@@ -294,7 +294,7 @@ ${ragContext}
             answer: template.answer,
             explanation: template.explanation,
             difficulty,
-            tags: [topic, '基础概念']
+            tags: [topic, "基础概念"]
         };
     }
 
@@ -302,9 +302,9 @@ ${ragContext}
      * 根据掌握度映射难度
      */
     _mapMasteryToDifficulty(mastery) {
-        if (mastery < 30) return 'easy';
-        if (mastery < 70) return 'medium';
-        return 'hard';
+        if (mastery < 30) return "easy";
+        if (mastery < 70) return "medium";
+        return "hard";
     }
 }
 

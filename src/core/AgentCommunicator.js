@@ -14,15 +14,15 @@ class AgentCommunicator {
     // 注册智能体
     registerAgent(agentId, agent) {
         if (!agentId || !agent) {
-            console.error('Agent ID and agent instance are required');
+            console.error("Agent ID and agent instance are required");
             return false;
         }
-        
-        if (!agent.handleMessage || typeof agent.handleMessage !== 'function') {
+
+        if (!agent.handleMessage || typeof agent.handleMessage !== "function") {
             console.error(`Agent ${agentId} must have a handleMessage method`);
             return false;
         }
-        
+
         this.agents.set(agentId, agent);
         console.log(`Agent ${agentId} registered successfully`);
         return true;
@@ -30,11 +30,11 @@ class AgentCommunicator {
 
     // 订阅事件
     subscribe(event, callback) {
-        if (!event || typeof callback !== 'function') {
-            console.error('Event name and callback function are required');
+        if (!event || typeof callback !== "function") {
+            console.error("Event name and callback function are required");
             return false;
         }
-        
+
         if (!this.events[event]) {
             this.events[event] = [];
         }
@@ -45,10 +45,10 @@ class AgentCommunicator {
     // 发布事件
     publish(event, data) {
         if (!event) {
-            console.error('Event name is required');
+            console.error("Event name is required");
             return false;
         }
-        
+
         if (this.events[event]) {
             this.events[event].forEach((callback, index) => {
                 try {
@@ -64,15 +64,15 @@ class AgentCommunicator {
     // 发送消息给特定智能体
     async sendMessage(toAgentId, message) {
         if (!toAgentId) {
-            return Promise.reject(new Error('Agent ID is required'));
+            return Promise.reject(new Error("Agent ID is required"));
         }
-        
+
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const fullMessage = {
             id: messageId,
-            from: message.from || 'system',
+            from: message.from || "system",
             to: toAgentId,
-            type: message.type || 'request',
+            type: message.type || "request",
             content: message.content,
             timestamp: new Date(),
             correlationId: message.correlationId || messageId
@@ -83,10 +83,10 @@ class AgentCommunicator {
 
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(new Error('Message timeout'));
+                reject(new Error("Message timeout"));
             }, 30000); // 30秒超时
 
-            this.subscribe(`message_response_${messageId}`, (response) => {
+            this.subscribe(`message_response_${messageId}`, response => {
                 clearTimeout(timeout);
                 resolve(response);
             });
@@ -120,14 +120,16 @@ class AgentCommunicator {
                     this.publish(`message_response_${message.id}`, response);
                 } else {
                     // 即使没有响应，也发布一个空响应以避免超时
-                    this.publish(`message_response_${message.id}`, { success: true, message: 'No response' });
+                    this.publish(`message_response_${message.id}`, { success: true, message: "No response" });
                 }
             } catch (error) {
                 console.error(`Error processing message for agent ${message.to}:`, error);
-                
+
                 // 重试机制
                 if (attempt < this.retryAttempts) {
-                    console.log(`Retrying message ${message.id} for agent ${message.to} (${attempt + 1}/${this.retryAttempts})`);
+                    console.log(
+                        `Retrying message ${message.id} for agent ${message.to} (${attempt + 1}/${this.retryAttempts})`
+                    );
                     await new Promise(resolve => setTimeout(resolve, this.retryDelay * (attempt + 1)));
                     await this.processSingleMessage(message, attempt + 1);
                 } else {
@@ -147,10 +149,10 @@ class AgentCommunicator {
     // 广播消息给所有智能体
     broadcast(message) {
         if (!message) {
-            console.error('Message is required');
+            console.error("Message is required");
             return false;
         }
-        
+
         this.agents.forEach((agent, agentId) => {
             this.sendMessage(agentId, {
                 ...message,
@@ -170,7 +172,7 @@ class AgentCommunicator {
         const agent = this.agents.get(agentId);
         return {
             exists: !!agent,
-            hasHandleMessage: agent && typeof agent.handleMessage === 'function'
+            hasHandleMessage: agent && typeof agent.handleMessage === "function"
         };
     }
 

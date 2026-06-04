@@ -11,8 +11,8 @@ class RecommendationEngine {
         );
 
         const wrongQuestions = answers.filter(a => {
-            const userAns = (a.user_ans || '').trim();
-            const correctAns = (a.correct_ans || '').trim();
+            const userAns = (a.user_ans || "").trim();
+            const correctAns = (a.correct_ans || "").trim();
             return userAns !== correctAns;
         });
 
@@ -20,13 +20,21 @@ class RecommendationEngine {
         wrongQuestions.forEach(q => {
             if (!q.node_id) return;
             if (!nodeErrorMap[q.node_id]) {
-                nodeErrorMap[q.node_id] = { nodeId: q.node_id, nodeName: q.node_name, subject: q.subject, errors: [], count: 0 };
+                nodeErrorMap[q.node_id] = {
+                    nodeId: q.node_id,
+                    nodeName: q.node_name,
+                    subject: q.subject,
+                    errors: [],
+                    count: 0
+                };
             }
             nodeErrorMap[q.node_id].errors.push(q.question_id);
             nodeErrorMap[q.node_id].count++;
         });
 
-        const weakPoints = Object.values(nodeErrorMap).sort((a, b) => b.count - a.count).slice(0, 5);
+        const weakPoints = Object.values(nodeErrorMap)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
 
         const courseRecommendations = [];
         for (const wp of weakPoints) {
@@ -72,7 +80,7 @@ class RecommendationEngine {
 
         const totalWrong = wrongQuestions.length;
         const totalAnswered = answers.length;
-        const accuracy = totalAnswered > 0 ? ((totalAnswered - totalWrong) / totalAnswered * 100) : 100;
+        const accuracy = totalAnswered > 0 ? ((totalAnswered - totalWrong) / totalAnswered) * 100 : 100;
 
         return {
             summary: {
@@ -85,7 +93,7 @@ class RecommendationEngine {
             courseRecommendations,
             practiceRecommendations: practiceQuestions,
             autoErrors,
-            aiPrompt: `该学生在最近一次考试中正确率${accuracy.toFixed(1)}%，共有${totalWrong}道错题。主要薄弱知识点：${weakPoints.map(w => w.nodeName).join('、')}。`
+            aiPrompt: `该学生在最近一次考试中正确率${accuracy.toFixed(1)}%，共有${totalWrong}道错题。主要薄弱知识点：${weakPoints.map(w => w.nodeName).join("、")}。`
         };
     }
 
@@ -115,10 +123,10 @@ class RecommendationEngine {
         }));
 
         return {
-            date: now.toISOString().split('T')[0],
+            date: now.toISOString().split("T")[0],
             recommendedNodes,
             errorNodesToReview: errors.map(e => e.knowledge_node_id),
-            suggestion: `今日建议重点复习：${recommendedNodes.map(n => n.nodeName).join('、')}`
+            suggestion: `今日建议重点复习：${recommendedNodes.map(n => n.nodeName).join("、")}`
         };
     }
 }

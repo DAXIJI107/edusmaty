@@ -6,45 +6,55 @@ class ProfileTool {
     async run({ userId, subject = "all" }) {
         const subjectWhere = subject && subject !== "all" ? "WHERE subject = ?" : "";
         const subjectParams = subjectWhere ? [subject] : [];
-        let [weakPoints] = await this.pool.query(
-            `SELECT id, title, subject, mastery, summary
+        let [weakPoints] = await this.pool
+            .query(
+                `SELECT id, title, subject, mastery, summary
              FROM knowledge_points
              ${subjectWhere}
              ORDER BY mastery ASC, id
              LIMIT 6`,
-            subjectParams
-        ).catch(() => [[]]);
+                subjectParams
+            )
+            .catch(() => [[]]);
         if (!weakPoints.length && subjectWhere) {
-            [weakPoints] = await this.pool.query(
-                `SELECT id, title, subject, mastery, summary
+            [weakPoints] = await this.pool
+                .query(
+                    `SELECT id, title, subject, mastery, summary
                  FROM knowledge_points
                  ORDER BY mastery ASC, id
                  LIMIT 6`
-            ).catch(() => [[]]);
+                )
+                .catch(() => [[]]);
         }
-        const [[answerStats]] = await this.pool.query(
-            `SELECT COUNT(*) AS total, SUM(is_correct = 1) AS correct,
+        const [[answerStats]] = await this.pool
+            .query(
+                `SELECT COUNT(*) AS total, SUM(is_correct = 1) AS correct,
                     ROUND(SUM(is_correct = 1) / NULLIF(COUNT(*), 0) * 100) AS accuracy
              FROM user_answers
              WHERE user_id = ?`,
-            [userId]
-        ).catch(() => [[{}]]);
-        const [recentEvents] = await this.pool.query(
-            `SELECT event_type, subject, knowledge_node_id, payload, created_at
+                [userId]
+            )
+            .catch(() => [[{}]]);
+        const [recentEvents] = await this.pool
+            .query(
+                `SELECT event_type, subject, knowledge_node_id, payload, created_at
              FROM learning_events
              WHERE user_id = ?
              ORDER BY created_at DESC
              LIMIT 8`,
-            [userId]
-        ).catch(() => [[]]);
-        const [notes] = await this.pool.query(
-            `SELECT title, subject, updated_at
+                [userId]
+            )
+            .catch(() => [[]]);
+        const [notes] = await this.pool
+            .query(
+                `SELECT title, subject, updated_at
              FROM notes
              WHERE user_id = ?
              ORDER BY updated_at DESC
              LIMIT 5`,
-            [userId]
-        ).catch(() => [[]]);
+                [userId]
+            )
+            .catch(() => [[]]);
 
         const averageMastery = weakPoints.length
             ? Math.round(weakPoints.reduce((sum, item) => sum + Number(item.mastery || 0), 0) / weakPoints.length)

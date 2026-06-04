@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const WebSocket = require('ws');
+const fs = require("fs");
+const path = require("path");
+const { spawn } = require("child_process");
+const WebSocket = require("ws");
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3020';
+const BASE_URL = process.env.BASE_URL || "http://localhost:3020";
 const DEBUG_PORT = Number(process.env.CHROME_DEBUG_PORT || 9333);
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const OUT_DIR = path.join(__dirname, '..', 'demo-walkthrough');
+const CHROME = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const OUT_DIR = path.join(__dirname, "..", "demo-walkthrough");
 
 function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -20,11 +20,11 @@ async function requestJson(url, options = {}) {
 
 async function login() {
     const json = await requestJson(`${BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'zhangsan', password: '123456' })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "zhangsan", password: "123456" })
     });
-    if (!json.token) throw new Error('login did not return token');
+    if (!json.token) throw new Error("login did not return token");
     return json.token;
 }
 
@@ -32,12 +32,12 @@ async function waitForChrome() {
     for (let i = 0; i < 60; i += 1) {
         try {
             const pages = await requestJson(`http://127.0.0.1:${DEBUG_PORT}/json/list`);
-            const page = Array.isArray(pages) && pages.find(item => item.type === 'page' && item.webSocketDebuggerUrl);
+            const page = Array.isArray(pages) && pages.find(item => item.type === "page" && item.webSocketDebuggerUrl);
             if (page) return page.webSocketDebuggerUrl;
         } catch {}
         await wait(250);
     }
-    throw new Error('Chrome DevTools endpoint is not ready');
+    throw new Error("Chrome DevTools endpoint is not ready");
 }
 
 function createCdp(wsUrl) {
@@ -45,7 +45,7 @@ function createCdp(wsUrl) {
     let id = 0;
     const pending = new Map();
 
-    ws.on('message', raw => {
+    ws.on("message", raw => {
         const msg = JSON.parse(raw.toString());
         if (msg.id && pending.has(msg.id)) {
             const { resolve, reject } = pending.get(msg.id);
@@ -56,7 +56,7 @@ function createCdp(wsUrl) {
     });
 
     return new Promise((resolve, reject) => {
-        ws.on('open', () => {
+        ws.on("open", () => {
             resolve({
                 send(method, params = {}) {
                     id += 1;
@@ -68,23 +68,23 @@ function createCdp(wsUrl) {
                 }
             });
         });
-        ws.on('error', reject);
+        ws.on("error", reject);
     });
 }
 
 async function saveScreenshot(cdp, filename) {
-    const result = await cdp.send('Page.captureScreenshot', {
-        format: 'png',
+    const result = await cdp.send("Page.captureScreenshot", {
+        format: "png",
         fromSurface: true,
         captureBeyondViewport: true
     });
     const file = path.join(OUT_DIR, filename);
-    fs.writeFileSync(file, Buffer.from(result.data, 'base64'));
+    fs.writeFileSync(file, Buffer.from(result.data, "base64"));
     return file;
 }
 
 async function saveElementScreenshot(cdp, selector, filename) {
-    const rectResult = await cdp.send('Runtime.evaluate', {
+    const rectResult = await cdp.send("Runtime.evaluate", {
         expression: `
             (() => {
                 const el = document.querySelector(${JSON.stringify(selector)});
@@ -99,8 +99,8 @@ async function saveElementScreenshot(cdp, selector, filename) {
     await wait(800);
     const rect = rectResult.result?.value;
     if (!rect || rect.width <= 0 || rect.height <= 0) return null;
-    const result = await cdp.send('Page.captureScreenshot', {
-        format: 'png',
+    const result = await cdp.send("Page.captureScreenshot", {
+        format: "png",
         fromSurface: true,
         clip: {
             x: Math.max(0, rect.x - 12),
@@ -111,43 +111,47 @@ async function saveElementScreenshot(cdp, selector, filename) {
         }
     });
     const file = path.join(OUT_DIR, filename);
-    fs.writeFileSync(file, Buffer.from(result.data, 'base64'));
+    fs.writeFileSync(file, Buffer.from(result.data, "base64"));
     return file;
 }
 
 async function main() {
     fs.mkdirSync(OUT_DIR, { recursive: true });
     const token = await login();
-    const profileDir = path.join(__dirname, '..', '.codex-screenshot-profile');
-    const chrome = spawn(CHROME, [
-        '--headless=new',
-        `--remote-debugging-port=${DEBUG_PORT}`,
-        `--user-data-dir=${profileDir}`,
-        '--window-size=1440,1200',
-        '--hide-scrollbars',
-        '--disable-gpu',
-        '--no-first-run',
-        'about:blank'
-    ], { stdio: 'ignore' });
+    const profileDir = path.join(__dirname, "..", ".codex-screenshot-profile");
+    const chrome = spawn(
+        CHROME,
+        [
+            "--headless=new",
+            `--remote-debugging-port=${DEBUG_PORT}`,
+            `--user-data-dir=${profileDir}`,
+            "--window-size=1440,1200",
+            "--hide-scrollbars",
+            "--disable-gpu",
+            "--no-first-run",
+            "about:blank"
+        ],
+        { stdio: "ignore" }
+    );
 
     let cdp;
     try {
         cdp = await createCdp(await waitForChrome());
-        await cdp.send('Page.enable');
-        await cdp.send('Runtime.enable');
-        await cdp.send('Network.enable');
-        await cdp.send('Network.setCookie', {
-            name: 'token',
+        await cdp.send("Page.enable");
+        await cdp.send("Runtime.enable");
+        await cdp.send("Network.enable");
+        await cdp.send("Network.setCookie", {
+            name: "token",
             value: token,
             url: BASE_URL,
-            path: '/'
+            path: "/"
         });
 
-        await cdp.send('Page.navigate', { url: `${BASE_URL}/agent-research` });
+        await cdp.send("Page.navigate", { url: `${BASE_URL}/agent-research` });
         await wait(5500);
-        const researchShot = await saveScreenshot(cdp, 'agent-rag-01-research-center.png');
+        const researchShot = await saveScreenshot(cdp, "agent-rag-01-research-center.png");
 
-        await cdp.send('Runtime.evaluate', {
+        await cdp.send("Runtime.evaluate", {
             expression: `
                 (() => {
                     const buttons = Array.from(document.querySelectorAll('[data-agent-source-plan]'));
@@ -159,14 +163,14 @@ async function main() {
             awaitPromise: true
         });
         await wait(14000);
-        const assistantShot = await saveScreenshot(cdp, 'agent-rag-02-assistant-result.png');
+        const assistantShot = await saveScreenshot(cdp, "agent-rag-02-assistant-result.png");
 
-        await cdp.send('Runtime.evaluate', {
+        await cdp.send("Runtime.evaluate", {
             expression: `window.scrollTo(0, Math.max(0, document.body.scrollHeight * 0.35)); true`
         });
         await wait(1000);
-        const evidenceShot = await saveScreenshot(cdp, 'agent-rag-03-evidence-chain.png');
-        const evidenceCardShot = await saveElementScreenshot(cdp, '.assistant-rag-card', 'agent-rag-04-rag-card.png');
+        const evidenceShot = await saveScreenshot(cdp, "agent-rag-03-evidence-chain.png");
+        const evidenceCardShot = await saveElementScreenshot(cdp, ".assistant-rag-card", "agent-rag-04-rag-card.png");
 
         console.log(JSON.stringify({ researchShot, assistantShot, evidenceShot, evidenceCardShot }, null, 2));
     } finally {

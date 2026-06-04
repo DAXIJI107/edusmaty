@@ -1,9 +1,9 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
-const { ensureLearningTables, ensurePathData, ensureQuestionData } = require('../core/DemoDataSeeder');
-const { subjectLabel } = require('../core/SubjectUtils');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
+const { ensureLearningTables, ensurePathData, ensureQuestionData } = require("../core/DemoDataSeeder");
+const { subjectLabel } = require("../core/SubjectUtils");
 
 function parseKnowledgeId(value) {
     const id = Number(value);
@@ -17,15 +17,15 @@ async function ensureCourseData(userId) {
 }
 
 function difficultyMinutes(difficulty) {
-    if (difficulty === 'hard') return 90;
-    if (difficulty === 'medium') return 60;
+    if (difficulty === "hard") return 90;
+    if (difficulty === "medium") return 60;
     return 30;
 }
 
 function difficultyLabel(difficulty) {
-    if (difficulty === 'hard') return '进阶';
-    if (difficulty === 'medium') return '提高';
-    return '基础';
+    if (difficulty === "hard") return "进阶";
+    if (difficulty === "medium") return "提高";
+    return "基础";
 }
 
 function buildLearningGoals(course, questions = []) {
@@ -34,8 +34,8 @@ function buildLearningGoals(course, questions = []) {
         `能用自己的话解释「${course.name}」并举出一个例子`,
         `完成本节 ${Math.min(5, Math.max(questions.length, 1))} 道相关练习并复盘错因`
     ];
-    if (course.difficulty === 'hard') goals.push('能把本节知识迁移到综合题或项目场景');
-    if (course.difficulty === 'medium') goals.push('能识别常见题型中的关键条件与陷阱');
+    if (course.difficulty === "hard") goals.push("能把本节知识迁移到综合题或项目场景");
+    if (course.difficulty === "medium") goals.push("能识别常见题型中的关键条件与陷阱");
     return goals;
 }
 
@@ -82,7 +82,7 @@ async function loadResources(course) {
             id: doc.doc_id,
             title: doc.title,
             url: doc.url,
-            type: 'document',
+            type: "document",
             course: doc.course,
             chapter: doc.chapter,
             knowledgePoint: doc.knowledge_point,
@@ -90,16 +90,18 @@ async function loadResources(course) {
         }));
     }
 
-    return [{
-        id: `resource_${course.id}`,
-        title: `${course.name}学习讲义`,
-        url: course.content_url || '',
-        type: 'document',
-        course: subjectLabel(course.subject),
-        chapter: course.name,
-        knowledgePoint: course.name,
-        summary: course.description || ''
-    }];
+    return [
+        {
+            id: `resource_${course.id}`,
+            title: `${course.name}学习讲义`,
+            url: course.content_url || "",
+            type: "document",
+            course: subjectLabel(course.subject),
+            chapter: course.name,
+            knowledgePoint: course.name,
+            summary: course.description || ""
+        }
+    ];
 }
 
 async function loadQuestions(course) {
@@ -140,16 +142,16 @@ async function loadSafeComments(knowledgeId) {
     }
 }
 
-router.get('/first/available', authenticateJWT, async (req, res) => {
+router.get("/first/available", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const subject = String(req.query?.subject || '').trim();
+        const subject = String(req.query?.subject || "").trim();
         await ensureCourseData(userId);
 
         const params = [userId];
-        let subjectWhere = '';
-        if (subject && subject !== 'all') {
-            subjectWhere = 'AND k.subject = ?';
+        let subjectWhere = "";
+        if (subject && subject !== "all") {
+            subjectWhere = "AND k.subject = ?";
             params.push(subject);
         }
 
@@ -164,24 +166,24 @@ router.get('/first/available', authenticateJWT, async (req, res) => {
             params
         );
 
-        if (!rows.length) return res.status(404).json({ success: false, message: '暂无可学习课程' });
+        if (!rows.length) return res.status(404).json({ success: false, message: "暂无可学习课程" });
         res.json({ success: true, data: { knowledgeId: rows[0].id } });
     } catch (error) {
-        console.error('读取默认课程失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("读取默认课程失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.get('/notes/mine', authenticateJWT, async (req, res) => {
+router.get("/notes/mine", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const subject = String(req.query?.subject || 'all').trim();
+        const subject = String(req.query?.subject || "all").trim();
         await ensureLearningTables(pool);
 
         const params = [userId];
-        let subjectWhere = '';
-        if (subject && subject !== 'all') {
-            subjectWhere = 'AND cn.subject = ?';
+        let subjectWhere = "";
+        if (subject && subject !== "all") {
+            subjectWhere = "AND cn.subject = ?";
             params.push(subject);
         }
 
@@ -213,31 +215,31 @@ router.get('/notes/mine', authenticateJWT, async (req, res) => {
             data: {
                 subjects: subjectRows.map(item => ({
                     code: item.code,
-                    label: item.code === 'unknown' ? '未分类' : subjectLabel(item.code),
+                    label: item.code === "unknown" ? "未分类" : subjectLabel(item.code),
                     count: Number(item.count || 0)
                 })),
                 notes: notes.map(note => ({
                     ...note,
-                    subjectLabel: note.subject ? subjectLabel(note.subject) : '未分类'
+                    subjectLabel: note.subject ? subjectLabel(note.subject) : "未分类"
                 }))
             }
         });
     } catch (error) {
-        console.error('读取我的笔记失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("读取我的笔记失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.put('/notes/:noteId', authenticateJWT, async (req, res) => {
+router.put("/notes/:noteId", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const noteId = Number(req.params.noteId);
-        const content = String(req.body?.content || '').trim();
+        const content = String(req.body?.content || "").trim();
         if (!Number.isInteger(noteId) || noteId <= 0) {
-            return res.status(400).json({ success: false, message: 'noteId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "noteId必须是有效数字" });
         }
         if (!content) {
-            return res.status(400).json({ success: false, message: '请输入笔记内容' });
+            return res.status(400).json({ success: false, message: "请输入笔记内容" });
         }
 
         await ensureLearningTables(pool);
@@ -248,44 +250,41 @@ router.put('/notes/:noteId', authenticateJWT, async (req, res) => {
             [content, noteId, userId]
         );
         if (!result.affectedRows) {
-            return res.status(404).json({ success: false, message: '笔记不存在或无权限' });
+            return res.status(404).json({ success: false, message: "笔记不存在或无权限" });
         }
-        res.json({ success: true, message: '笔记已更新' });
+        res.json({ success: true, message: "笔记已更新" });
     } catch (error) {
-        console.error('更新我的笔记失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("更新我的笔记失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.delete('/notes/:noteId', authenticateJWT, async (req, res) => {
+router.delete("/notes/:noteId", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const noteId = Number(req.params.noteId);
         if (!Number.isInteger(noteId) || noteId <= 0) {
-            return res.status(400).json({ success: false, message: 'noteId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "noteId必须是有效数字" });
         }
 
         await ensureLearningTables(pool);
-        const [result] = await pool.query(
-            'DELETE FROM course_notes WHERE id = ? AND user_id = ?',
-            [noteId, userId]
-        );
+        const [result] = await pool.query("DELETE FROM course_notes WHERE id = ? AND user_id = ?", [noteId, userId]);
         if (!result.affectedRows) {
-            return res.status(404).json({ success: false, message: '笔记不存在或无权限' });
+            return res.status(404).json({ success: false, message: "笔记不存在或无权限" });
         }
-        res.json({ success: true, message: '笔记已删除' });
+        res.json({ success: true, message: "笔记已删除" });
     } catch (error) {
-        console.error('删除我的笔记失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("删除我的笔记失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.get('/:knowledgeId/detail', authenticateJWT, async (req, res) => {
+router.get("/:knowledgeId/detail", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const knowledgeId = parseKnowledgeId(req.params.knowledgeId);
         if (!knowledgeId) {
-            return res.status(400).json({ success: false, message: 'knowledgeId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "knowledgeId必须是有效数字" });
         }
         await ensureCourseData(userId);
 
@@ -299,7 +298,7 @@ router.get('/:knowledgeId/detail', authenticateJWT, async (req, res) => {
         );
 
         if (!course) {
-            return res.status(404).json({ success: false, message: '课程不存在' });
+            return res.status(404).json({ success: false, message: "课程不存在" });
         }
 
         const [catalog, resources, questions, comments, interactions, subjectNotes, currentNotes] = await Promise.all([
@@ -307,31 +306,37 @@ router.get('/:knowledgeId/detail', authenticateJWT, async (req, res) => {
             loadResources(course),
             loadQuestions(course),
             loadSafeComments(knowledgeId),
-            pool.query(
-                `SELECT action_type, COUNT(*) AS total
+            pool
+                .query(
+                    `SELECT action_type, COUNT(*) AS total
                  FROM course_interactions
                  WHERE knowledge_node_id = ?
                  GROUP BY action_type`,
-                [knowledgeId]
-            ).then(([rows]) => rows),
-            pool.query(
-                `SELECT cn.id, cn.knowledge_node_id, cn.subject, cn.content, cn.progress_snapshot, cn.last_section,
+                    [knowledgeId]
+                )
+                .then(([rows]) => rows),
+            pool
+                .query(
+                    `SELECT cn.id, cn.knowledge_node_id, cn.subject, cn.content, cn.progress_snapshot, cn.last_section,
                         cn.updated_at, k.name AS knowledge_name
                  FROM course_notes cn
                  LEFT JOIN knowledge_nodes k ON k.id = cn.knowledge_node_id
                  WHERE cn.user_id = ? AND cn.subject = ?
                  ORDER BY cn.updated_at DESC
                  LIMIT 12`,
-                [userId, course.subject]
-            ).then(([rows]) => rows),
-            pool.query(
-                `SELECT id, content, progress_snapshot, last_section, updated_at
+                    [userId, course.subject]
+                )
+                .then(([rows]) => rows),
+            pool
+                .query(
+                    `SELECT id, content, progress_snapshot, last_section, updated_at
                  FROM course_notes
                  WHERE user_id = ? AND knowledge_node_id = ?
                  ORDER BY updated_at DESC
                  LIMIT 1`,
-                [userId, knowledgeId]
-            ).then(([rows]) => rows)
+                    [userId, knowledgeId]
+                )
+                .then(([rows]) => rows)
         ]);
 
         const [[mine]] = await pool.query(
@@ -344,8 +349,8 @@ router.get('/:knowledgeId/detail', authenticateJWT, async (req, res) => {
             [userId, knowledgeId]
         );
 
-        const completeCount = interactions.find(item => item.action_type === 'complete')?.total || 0;
-        const likeCount = interactions.find(item => item.action_type === 'like')?.total || 0;
+        const completeCount = interactions.find(item => item.action_type === "complete")?.total || 0;
+        const likeCount = interactions.find(item => item.action_type === "like")?.total || 0;
         const progress = Math.max(Number(course.mastery || 0), mine?.completed ? 100 : 0);
 
         res.json({
@@ -381,22 +386,22 @@ router.get('/:knowledgeId/detail', authenticateJWT, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('读取课程详情失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("读取课程详情失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.post('/:knowledgeId/interactions', authenticateJWT, async (req, res) => {
+router.post("/:knowledgeId/interactions", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const knowledgeId = parseKnowledgeId(req.params.knowledgeId);
         if (!knowledgeId) {
-            return res.status(400).json({ success: false, message: 'knowledgeId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "knowledgeId必须是有效数字" });
         }
         const { actionType, payload = {} } = req.body;
-        const allowed = new Set(['start', 'like', 'share', 'complete', 'download', 'ask_ai', 'progress']);
+        const allowed = new Set(["start", "like", "share", "complete", "download", "ask_ai", "progress"]);
         if (!allowed.has(actionType)) {
-            return res.status(400).json({ success: false, message: '不支持的操作' });
+            return res.status(400).json({ success: false, message: "不支持的操作" });
         }
 
         await ensureCourseData(userId);
@@ -406,14 +411,14 @@ router.post('/:knowledgeId/interactions', authenticateJWT, async (req, res) => {
             [userId, knowledgeId, actionType, JSON.stringify(payload)]
         );
 
-        if (actionType === 'complete') {
+        if (actionType === "complete") {
             await pool.query(
                 `INSERT INTO student_knowledge (user_id, node_id, mastery)
                  VALUES (?, ?, 100)
                  ON DUPLICATE KEY UPDATE mastery = GREATEST(mastery, 100), last_updated = NOW()`,
                 [userId, knowledgeId]
             );
-        } else if (actionType === 'progress') {
+        } else if (actionType === "progress") {
             const mastery = Math.max(0, Math.min(99, Number(payload.mastery || 0)));
             await pool.query(
                 `INSERT INTO student_knowledge (user_id, node_id, mastery)
@@ -423,10 +428,10 @@ router.post('/:knowledgeId/interactions', authenticateJWT, async (req, res) => {
             );
         }
 
-        res.json({ success: true, message: '操作已保存' });
+        res.json({ success: true, message: "操作已保存" });
     } catch (error) {
-        console.error('保存课程操作失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("保存课程操作失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
@@ -435,20 +440,20 @@ async function saveCurrentNote(req, res) {
         const userId = req.user.id;
         const knowledgeId = parseKnowledgeId(req.params.knowledgeId);
         if (!knowledgeId) {
-            return res.status(400).json({ success: false, message: 'knowledgeId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "knowledgeId必须是有效数字" });
         }
-        const content = String(req.body?.content || '').trim();
+        const content = String(req.body?.content || "").trim();
         const progress = Math.max(0, Math.min(100, Number(req.body?.progress || 0)));
         if (!content) {
-            return res.status(400).json({ success: false, message: '请输入笔记内容' });
+            return res.status(400).json({ success: false, message: "请输入笔记内容" });
         }
 
         await ensureCourseData(userId);
-        const [[course]] = await pool.query('SELECT subject, name FROM knowledge_nodes WHERE id = ?', [knowledgeId]);
-        if (!course) return res.status(404).json({ success: false, message: '课程不存在' });
+        const [[course]] = await pool.query("SELECT subject, name FROM knowledge_nodes WHERE id = ?", [knowledgeId]);
+        if (!course) return res.status(404).json({ success: false, message: "课程不存在" });
 
         const [[existing]] = await pool.query(
-            'SELECT id FROM course_notes WHERE user_id = ? AND knowledge_node_id = ? ORDER BY updated_at DESC LIMIT 1',
+            "SELECT id FROM course_notes WHERE user_id = ? AND knowledge_node_id = ? ORDER BY updated_at DESC LIMIT 1",
             [userId, knowledgeId]
         );
 
@@ -465,7 +470,7 @@ async function saveCurrentNote(req, res) {
                  ON DUPLICATE KEY UPDATE mastery = GREATEST(mastery, VALUES(mastery)), last_updated = NOW()`,
                 [userId, knowledgeId, Math.min(99, progress)]
             );
-            return res.json({ success: true, noteId: existing.id, message: '笔记已更新' });
+            return res.json({ success: true, noteId: existing.id, message: "笔记已更新" });
         }
 
         const [result] = await pool.query(
@@ -479,27 +484,27 @@ async function saveCurrentNote(req, res) {
              ON DUPLICATE KEY UPDATE mastery = GREATEST(mastery, VALUES(mastery)), last_updated = NOW()`,
             [userId, knowledgeId, Math.min(99, progress)]
         );
-        res.json({ success: true, noteId: result.insertId, message: '笔记已保存' });
+        res.json({ success: true, noteId: result.insertId, message: "笔记已保存" });
     } catch (error) {
-        console.error('保存课程笔记失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("保存课程笔记失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 }
 
-router.put('/:knowledgeId/notes/current', authenticateJWT, saveCurrentNote);
+router.put("/:knowledgeId/notes/current", authenticateJWT, saveCurrentNote);
 
-router.post('/:knowledgeId/notes', authenticateJWT, saveCurrentNote);
+router.post("/:knowledgeId/notes", authenticateJWT, saveCurrentNote);
 
-router.post('/:knowledgeId/comments', authenticateJWT, async (req, res) => {
+router.post("/:knowledgeId/comments", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const knowledgeId = parseKnowledgeId(req.params.knowledgeId);
         if (!knowledgeId) {
-            return res.status(400).json({ success: false, message: 'knowledgeId必须是有效数字' });
+            return res.status(400).json({ success: false, message: "knowledgeId必须是有效数字" });
         }
         const { content } = req.body;
         if (!content || !content.trim()) {
-            return res.status(400).json({ success: false, message: '请输入评论内容' });
+            return res.status(400).json({ success: false, message: "请输入评论内容" });
         }
 
         await ensureCourseData(userId);
@@ -508,10 +513,10 @@ router.post('/:knowledgeId/comments', authenticateJWT, async (req, res) => {
              VALUES (?, ?, ?)`,
             [userId, knowledgeId, content.trim()]
         );
-        res.json({ success: true, commentId: result.insertId, message: '评论已发布' });
+        res.json({ success: true, commentId: result.insertId, message: "评论已发布" });
     } catch (error) {
-        console.error('发布课程评论失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("发布课程评论失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 

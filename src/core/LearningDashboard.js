@@ -1,7 +1,7 @@
 class LearningDashboard {
     async generateDashboard(userId, pool) {
         const now = new Date();
-        const today = now.toISOString().split('T')[0];
+        const today = now.toISOString().split("T")[0];
 
         const [masteryStats] = await pool.query(
             `SELECT 
@@ -71,12 +71,12 @@ class LearningDashboard {
         let current = 0;
         let longest = 0;
         let tempStreak = 0;
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toISOString().split("T")[0];
 
         for (let i = 0; i < streakData.length; i++) {
             const expectedDate = new Date();
             expectedDate.setDate(expectedDate.getDate() - i);
-            const expected = expectedDate.toISOString().split('T')[0];
+            const expected = expectedDate.toISOString().split("T")[0];
 
             if (streakData[i]?.study_date === expected) {
                 tempStreak++;
@@ -92,11 +92,11 @@ class LearningDashboard {
 
         let tempLongest = 0;
         for (let i = 0; i < streakData.length; i++) {
-            if (i > 0 && streakData[i].study_date === streakData[i-1].study_date) continue;
+            if (i > 0 && streakData[i].study_date === streakData[i - 1].study_date) continue;
             const expectedDate = new Date(streakData[i].study_date);
             expectedDate.setDate(expectedDate.getDate() - 1);
-            const expected = expectedDate.toISOString().split('T')[0];
-            if (i === 0 || streakData[i-1]?.study_date === expected) {
+            const expected = expectedDate.toISOString().split("T")[0];
+            if (i === 0 || streakData[i - 1]?.study_date === expected) {
                 tempLongest++;
             } else {
                 tempLongest = 1;
@@ -168,19 +168,19 @@ class LearningDashboard {
     }
 
     getEnergyStatus(fatigue, focus) {
-        if (fatigue >= 70) return 'exhausted';
-        if (fatigue >= 50) return 'tired';
-        if (focus < 50) return 'distracted';
-        if (fatigue >= 30) return 'moderate';
-        return 'energetic';
+        if (fatigue >= 70) return "exhausted";
+        if (fatigue >= 50) return "tired";
+        if (focus < 50) return "distracted";
+        if (fatigue >= 30) return "moderate";
+        return "energetic";
     }
 
     getEnergySuggestion(fatigue, focus) {
-        if (fatigue >= 70) return '建议立即休息，过度疲劳会影响学习效果';
-        if (fatigue >= 50) return '建议休息15-20分钟，或切换到轻松的知识卡片复习';
-        if (focus < 50) return '注意力分散，建议使用番茄工作法保持专注';
-        if (fatigue >= 30) return '状态尚可，建议适当安排休息';
-        return '精力充沛，适合进行高难度学习任务';
+        if (fatigue >= 70) return "建议立即休息，过度疲劳会影响学习效果";
+        if (fatigue >= 50) return "建议休息15-20分钟，或切换到轻松的知识卡片复习";
+        if (focus < 50) return "注意力分散，建议使用番茄工作法保持专注";
+        if (fatigue >= 30) return "状态尚可，建议适当安排休息";
+        return "精力充沛，适合进行高难度学习任务";
     }
 
     async generatePredictions(userId, pool) {
@@ -194,13 +194,13 @@ class LearningDashboard {
         );
 
         const accuracies = recentTrend.map(r => r.accuracy);
-        const trend = accuracies.length >= 2
-            ? (accuracies[accuracies.length - 1] - accuracies[0]) / accuracies.length
-            : 0;
+        const trend =
+            accuracies.length >= 2 ? (accuracies[accuracies.length - 1] - accuracies[0]) / accuracies.length : 0;
 
-        const predictedAccuracy = Math.min(100, Math.max(0,
-            ((accuracies[accuracies.length - 1] || 0) + trend * 3) * 100
-        ));
+        const predictedAccuracy = Math.min(
+            100,
+            Math.max(0, ((accuracies[accuracies.length - 1] || 0) + trend * 3) * 100)
+        );
 
         const [weakNodes] = await pool.query(
             `SELECT COUNT(*) as count FROM student_knowledge
@@ -208,13 +208,11 @@ class LearningDashboard {
             [userId]
         );
 
-        const estimatedDaysToMaster = weakNodes[0]?.count > 0
-            ? Math.ceil(weakNodes[0].count * 2.5)
-            : 0;
+        const estimatedDaysToMaster = weakNodes[0]?.count > 0 ? Math.ceil(weakNodes[0].count * 2.5) : 0;
 
         return {
             predictedAccuracy: Math.round(predictedAccuracy),
-            trend: trend >= 0 ? 'improving' : 'declining',
+            trend: trend >= 0 ? "improving" : "declining",
             estimatedDaysToMasterAll: estimatedDaysToMaster,
             weakNodeCount: weakNodes[0]?.count || 0
         };
@@ -225,11 +223,11 @@ class LearningDashboard {
 
         if (fatigueScore >= 70) {
             alerts.push({
-                type: 'warning',
-                severity: 'high',
-                title: '学习疲劳预警',
-                message: '检测到您已连续学习较长时间，建议立即休息',
-                action: '查看休息建议'
+                type: "warning",
+                severity: "high",
+                title: "学习疲劳预警",
+                message: "检测到您已连续学习较长时间，建议立即休息",
+                action: "查看休息建议"
             });
         }
 
@@ -241,11 +239,11 @@ class LearningDashboard {
 
         if (inactiveDays[0]?.days_inactive >= 3) {
             alerts.push({
-                type: 'warning',
-                severity: 'medium',
-                title: '学习中断提醒',
+                type: "warning",
+                severity: "medium",
+                title: "学习中断提醒",
                 message: `您已经${inactiveDays[0].days_inactive}天没有学习了，是否遇到了困难？`,
-                action: '查看激励内容'
+                action: "查看激励内容"
             });
         }
 
@@ -261,11 +259,11 @@ class LearningDashboard {
 
         if (errorSpike.length > 0) {
             alerts.push({
-                type: 'insight',
-                severity: 'medium',
-                title: '错误率上升',
-                message: '最近3天错误题数较多，建议回顾薄弱知识点',
-                action: '查看错题本'
+                type: "insight",
+                severity: "medium",
+                title: "错误率上升",
+                message: "最近3天错误题数较多，建议回顾薄弱知识点",
+                action: "查看错题本"
             });
         }
 

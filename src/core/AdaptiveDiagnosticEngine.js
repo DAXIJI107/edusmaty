@@ -1,14 +1,14 @@
 // core/AdaptiveDiagnosticEngine.js
 // CAT自适应诊断引擎 - Fisher信息量最大化选题 + EAP能力估计
 
-const { normalizeDifficulty } = require('./SubjectUtils');
+const { normalizeDifficulty } = require("./SubjectUtils");
 
 class AdaptiveDiagnosticEngine {
     constructor(userId, pool, options = {}) {
         this.userId = userId;
         this.pool = pool;
-        this.ability = 0;           // θ 能力估计
-        this.abilitySE = 2.0;       // 标准误(初始大)
+        this.ability = 0; // θ 能力估计
+        this.abilitySE = 2.0; // 标准误(初始大)
         this.minQuestions = options.minQuestions || 8;
         this.maxQuestions = options.maxQuestions || 25;
         this.targetSE = options.targetSE || 0.35;
@@ -28,17 +28,17 @@ class AdaptiveDiagnosticEngine {
 
             // 已用题目排除
             if (this.questionsUsed.size > 0) {
-                conditions.push(`q.id NOT IN (${[...this.questionsUsed].map(() => '?').join(',')})`);
+                conditions.push(`q.id NOT IN (${[...this.questionsUsed].map(() => "?").join(",")})`);
                 params.push(...[...this.questionsUsed]);
             }
 
             // 学科过滤
             if (this.subjects.length > 0) {
-                conditions.push(`kp.subject IN (${this.subjects.map(() => '?').join(',')})`);
+                conditions.push(`kp.subject IN (${this.subjects.map(() => "?").join(",")})`);
                 params.push(...this.subjects);
             }
 
-            const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+            const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
             // 获取候选题目
             const [rows] = await this.pool.query(
@@ -72,15 +72,21 @@ class AdaptiveDiagnosticEngine {
                 const targetDiff = this.estimateTargetDifficulty();
                 bestQuestion = rows.reduce((best, row) => {
                     const d = this.difficultyToNumeric(row.difficulty);
-                    return Math.abs(d - targetDiff) < Math.abs(this.difficultyToNumeric(best.difficulty) - targetDiff) ? row : best;
+                    return Math.abs(d - targetDiff) < Math.abs(this.difficultyToNumeric(best.difficulty) - targetDiff)
+                        ? row
+                        : best;
                 }, rows[0]);
             }
 
             this.questionsUsed.add(bestQuestion.id);
 
             let options = bestQuestion.options_json;
-            if (typeof options === 'string') {
-                try { options = JSON.parse(options); } catch (e) { options = []; }
+            if (typeof options === "string") {
+                try {
+                    options = JSON.parse(options);
+                } catch (e) {
+                    options = [];
+                }
             }
             if (!Array.isArray(options)) options = [];
 
@@ -89,7 +95,7 @@ class AdaptiveDiagnosticEngine {
                 content: bestQuestion.question,
                 type: this.inferQuestionType(options),
                 options: options,
-                difficulty: bestQuestion.difficulty || 'medium',
+                difficulty: bestQuestion.difficulty || "medium",
                 difficultyNumeric: this.difficultyToNumeric(bestQuestion.difficulty),
                 knowledgeId: bestQuestion.knowledge_id,
                 knowledgeName: bestQuestion.knowledge_name,
@@ -97,7 +103,7 @@ class AdaptiveDiagnosticEngine {
                 questionIndex: this.responses.length + 1
             };
         } catch (error) {
-            console.error('AdaptiveDiagnostic: 选题失败', error.message);
+            console.error("AdaptiveDiagnostic: 选题失败", error.message);
             return null;
         }
     }
@@ -115,7 +121,7 @@ class AdaptiveDiagnosticEngine {
                 [questionId]
             );
 
-            if (!rows.length) throw new Error('题目不存在');
+            if (!rows.length) throw new Error("题目不存在");
 
             const { difficulty, knowledge_id, subject } = rows[0];
             const diffNumeric = this.difficultyToNumeric(difficulty);
@@ -131,13 +137,21 @@ class AdaptiveDiagnosticEngine {
                 this.subjectScores[subject].total++;
                 if (isCorrect) this.subjectScores[subject].correct++;
                 this.subjectScores[subject].questions.push({
-                    questionId, correct: isCorrect, difficulty, knowledgeId: knowledge_id
+                    questionId,
+                    correct: isCorrect,
+                    difficulty,
+                    knowledgeId: knowledge_id
                 });
             }
 
             this.responses.push({
-                questionId, correct: isCorrect, difficulty, diffNumeric,
-                knowledgeId: knowledge_id, subject, timeMs
+                questionId,
+                correct: isCorrect,
+                difficulty,
+                diffNumeric,
+                knowledgeId: knowledge_id,
+                subject,
+                timeMs
             });
 
             return {
@@ -148,7 +162,7 @@ class AdaptiveDiagnosticEngine {
                 recentAccuracy: this.calculateRecentAccuracy()
             };
         } catch (error) {
-            console.error('AdaptiveDiagnostic: 提交答案失败', error.message);
+            console.error("AdaptiveDiagnostic: 提交答案失败", error.message);
             throw error;
         }
     }
@@ -165,19 +179,19 @@ class AdaptiveDiagnosticEngine {
                 accuracy: Math.round(accuracy * 100),
                 questions: data.total,
                 correct: data.correct,
-                state: accuracy >= 0.75 ? 'strong' : accuracy >= 0.5 ? 'moderate' : accuracy >= 0.3 ? 'weak' : 'beginner',
+                state:
+                    accuracy >= 0.75 ? "strong" : accuracy >= 0.5 ? "moderate" : accuracy >= 0.3 ? "weak" : "beginner",
                 weakKnowledgeIds: [...new Set(data.questions.filter(q => !q.correct).map(q => q.knowledgeId))]
             };
         }
 
-        const overallAccuracy = this.responses.length > 0
-            ? this.responses.filter(r => r.correct).length / this.responses.length
-            : 0;
+        const overallAccuracy =
+            this.responses.length > 0 ? this.responses.filter(r => r.correct).length / this.responses.length : 0;
 
         return {
             abilityEstimate: Math.round(this.ability * 100) / 100,
             abilitySE: Math.round(this.abilitySE * 100) / 100,
-            reliability: this.abilitySE < 0.35 ? '高' : this.abilitySE < 0.55 ? '中' : '低',
+            reliability: this.abilitySE < 0.35 ? "高" : this.abilitySE < 0.55 ? "中" : "低",
             questionsAnswered: this.responses.length,
             overallAccuracy: Math.round(overallAccuracy * 100),
             subjectAnalysis,
@@ -205,7 +219,7 @@ class AdaptiveDiagnosticEngine {
      * 项目反应函数: P(θ) = 1 / (1 + e^(-a*(θ-b)))
      */
     itemResponseProbability(ability, difficulty) {
-        const a = 1.7;  // 区分度参数
+        const a = 1.7; // 区分度参数
         return 1 / (1 + Math.exp(-a * (ability - difficulty)));
     }
 
@@ -245,9 +259,11 @@ class AdaptiveDiagnosticEngine {
     }
 
     difficultyToNumeric(difficulty) {
-        const d = String(difficulty || 'medium').toLowerCase().trim();
-        if (d === 'easy' || d === '简单') return -1;
-        if (d === 'hard' || d === '困难') return 1.5;
+        const d = String(difficulty || "medium")
+            .toLowerCase()
+            .trim();
+        if (d === "easy" || d === "简单") return -1;
+        if (d === "hard" || d === "困难") return 1.5;
         return 0;
     }
 
@@ -266,19 +282,19 @@ class AdaptiveDiagnosticEngine {
     }
 
     inferQuestionType(options) {
-        if (!options || !options.length) return 'single';
-        if (options.length === 2 && (options.includes('正确') || options.includes('错误'))) return 'judge';
-        return 'single';
+        if (!options || !options.length) return "single";
+        if (options.length === 2 && (options.includes("正确") || options.includes("错误"))) return "judge";
+        return "single";
     }
 
     estimateCognitiveLevels() {
         const bloomLevels = {
-            '记忆': 0.5 + this.ability * 0.1,
-            '理解': 0.4 + this.ability * 0.12,
-            '应用': 0.3 + this.ability * 0.15,
-            '分析': 0.2 + this.ability * 0.15,
-            '评价': 0.15 + this.ability * 0.12,
-            '创造': 0.1 + this.ability * 0.1
+            记忆: 0.5 + this.ability * 0.1,
+            理解: 0.4 + this.ability * 0.12,
+            应用: 0.3 + this.ability * 0.15,
+            分析: 0.2 + this.ability * 0.15,
+            评价: 0.15 + this.ability * 0.12,
+            创造: 0.1 + this.ability * 0.1
         };
         // 归一化到0-1
         for (const key in bloomLevels) {
@@ -288,10 +304,12 @@ class AdaptiveDiagnosticEngine {
     }
 
     analyzeResponsePattern() {
-        if (this.responses.length < 5) return { pattern: 'insufficient_data', description: '答题量不足，无法分析模式' };
+        if (this.responses.length < 5) return { pattern: "insufficient_data", description: "答题量不足，无法分析模式" };
 
-        let consecutiveCorrect = 0, consecutiveWrong = 0;
-        let maxConsecutiveCorrect = 0, maxConsecutiveWrong = 0;
+        let consecutiveCorrect = 0,
+            consecutiveWrong = 0;
+        let maxConsecutiveCorrect = 0,
+            maxConsecutiveWrong = 0;
 
         for (const r of this.responses) {
             if (r.correct) {
@@ -305,23 +323,24 @@ class AdaptiveDiagnosticEngine {
             }
         }
 
-        if (maxConsecutiveWrong >= 3) return { pattern: 'struggling', description: '连续多题错误，可能需要调整学习策略' };
-        if (maxConsecutiveCorrect >= 4) return { pattern: 'thriving', description: '连续多题正确，当前难度适中偏低' };
-        return { pattern: 'variable', description: '对错交替，处于最佳学习区间边缘' };
+        if (maxConsecutiveWrong >= 3)
+            return { pattern: "struggling", description: "连续多题错误，可能需要调整学习策略" };
+        if (maxConsecutiveCorrect >= 4) return { pattern: "thriving", description: "连续多题正确，当前难度适中偏低" };
+        return { pattern: "variable", description: "对错交替，处于最佳学习区间边缘" };
     }
 
     estimateGrade(ability) {
-        if (ability >= 2) return 'A (优秀)';
-        if (ability >= 1) return 'B (良好)';
-        if (ability >= 0) return 'C (中等)';
-        if (ability >= -1) return 'D (及格)';
-        return 'E (需努力)';
+        if (ability >= 2) return "A (优秀)";
+        if (ability >= 1) return "B (良好)";
+        if (ability >= 0) return "C (中等)";
+        if (ability >= -1) return "D (及格)";
+        return "E (需努力)";
     }
 
     calculateDiagnosisQuality() {
-        const reliability = this.abilitySE < 0.35 ? '高' : this.abilitySE < 0.55 ? '中' : '低';
-        const coverage = this.subjects.length >= 3 ? '全面' : this.subjects.length >= 2 ? '基本' : '单一';
-        const depth = this.responses.length >= 15 ? '充分' : this.responses.length >= 10 ? '适中' : '初步';
+        const reliability = this.abilitySE < 0.35 ? "高" : this.abilitySE < 0.55 ? "中" : "低";
+        const coverage = this.subjects.length >= 3 ? "全面" : this.subjects.length >= 2 ? "基本" : "单一";
+        const depth = this.responses.length >= 15 ? "充分" : this.responses.length >= 10 ? "适中" : "初步";
         return { reliability, coverage, depth };
     }
 }

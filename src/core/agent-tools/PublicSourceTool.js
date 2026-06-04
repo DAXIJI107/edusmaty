@@ -1,11 +1,11 @@
-const { ingestPublicSources } = require('../PublicRagIngestor');
+const { ingestPublicSources } = require("../PublicRagIngestor");
 
 class PublicSourceTool {
     constructor(pool) {
         this.pool = pool;
     }
 
-    async run({ sourceName = 'all', limit = 2 } = {}) {
+    async run({ sourceName = "all", limit = 2 } = {}) {
         const result = await ingestPublicSources(this.pool, { sourceName, limit });
         return {
             ...result,

@@ -10,4 +10,3 @@ This folder contains the runtime backend code.
 - `config.js`, `db.js`, `middleware.js`: Runtime configuration, MySQL pool, and auth guards.
 
 Root-level `server.js`, `config.js`, `db.js`, and `middleware.js` are compatibility shims for older scripts.
-

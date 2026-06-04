@@ -7,10 +7,10 @@ class RhythmAnalyzer {
         return new Promise(resolve => {
             setTimeout(() => {
                 const mockNodes = [
-                    { time: 120, type: 'teacher_emphasis', importance: 0.9, topic: '函数极限定义' },
-                    { time: 350, type: 'teacher_emphasis', importance: 0.8, topic: '极限运算法则' },
-                    { time: 480, type: 'student_interaction', importance: 0.7, topic: '课堂提问' },
-                    { time: 600, type: 'transition', importance: 0.3, topic: '章节过渡' }
+                    { time: 120, type: "teacher_emphasis", importance: 0.9, topic: "函数极限定义" },
+                    { time: 350, type: "teacher_emphasis", importance: 0.8, topic: "极限运算法则" },
+                    { time: 480, type: "student_interaction", importance: 0.7, topic: "课堂提问" },
+                    { time: 600, type: "transition", importance: 0.3, topic: "章节过渡" }
                 ];
                 resolve(mockNodes);
             }, 2000);
@@ -29,9 +29,8 @@ class RhythmAnalyzer {
         // 简单逻辑：如果学生在节点时间附近注意力低于阈值（假设attention_logs有status数值）
         for (const node of rhythmNodes) {
             // 查找节点前后10秒内的注意力记录
-            const relevantLogs = attentionLogs.filter(log => 
-                Math.abs(log.time_seconds - node.time) <= 10 && 
-                log.attention_status !== 'focusing'
+            const relevantLogs = attentionLogs.filter(
+                log => Math.abs(log.time_seconds - node.time) <= 10 && log.attention_status !== "focusing"
             );
             if (relevantLogs.length > 0) {
                 missed.push(node);

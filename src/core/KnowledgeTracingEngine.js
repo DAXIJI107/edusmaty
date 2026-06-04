@@ -4,10 +4,10 @@
 class KnowledgeTracingEngine {
     constructor() {
         this.defaults = {
-            prior: 0.3,     // P(L₀): 初始掌握概率
-            learn: 0.15,    // P(T): 每次练习后的学习概率
-            guess: 0.2,     // P(G): 猜测概率
-            slip: 0.1       // P(S): 粗心失误概率
+            prior: 0.3, // P(L₀): 初始掌握概率
+            learn: 0.15, // P(T): 每次练习后的学习概率
+            guess: 0.2, // P(G): 猜测概率
+            slip: 0.1 // P(S): 粗心失误概率
         };
     }
 
@@ -18,7 +18,7 @@ class KnowledgeTracingEngine {
      */
     estimateMastery(answerSequence, params = {}) {
         if (!answerSequence || !answerSequence.length) {
-            return { mastery: 0.3, confidence: 0.1, state: 'not_started' };
+            return { mastery: 0.3, confidence: 0.1, state: "not_started" };
         }
 
         const p = { ...this.defaults, ...params };
@@ -28,13 +28,11 @@ class KnowledgeTracingEngine {
             if (answer.correct) {
                 const P_correct_given_known = 1 - p.slip;
                 const P_correct_given_unknown = p.guess;
-                L = (L * P_correct_given_known) /
-                    (L * P_correct_given_known + (1 - L) * P_correct_given_unknown);
+                L = (L * P_correct_given_known) / (L * P_correct_given_known + (1 - L) * P_correct_given_unknown);
             } else {
                 const P_wrong_given_known = p.slip;
                 const P_wrong_given_unknown = 1 - p.guess;
-                L = (L * P_wrong_given_known) /
-                    (L * P_wrong_given_known + (1 - L) * P_wrong_given_unknown);
+                L = (L * P_wrong_given_known) / (L * P_wrong_given_known + (1 - L) * P_wrong_given_unknown);
             }
             L = L + (1 - L) * p.learn;
         }
@@ -44,7 +42,7 @@ class KnowledgeTracingEngine {
         return {
             mastery: L,
             confidence: this.calculateConfidence(answerSequence.length),
-            state: L >= 0.85 ? 'mastered' : L >= 0.6 ? 'learning' : L >= 0.3 ? 'beginner' : 'not_started',
+            state: L >= 0.85 ? "mastered" : L >= 0.6 ? "learning" : L >= 0.3 ? "beginner" : "not_started",
             observationCount: answerSequence.length
         };
     }
@@ -57,8 +55,7 @@ class KnowledgeTracingEngine {
 
         if (!lastPracticeDate) return result;
 
-        const daysSinceLastPractice =
-            (Date.now() - new Date(lastPracticeDate).getTime()) / 86400000;
+        const daysSinceLastPractice = (Date.now() - new Date(lastPracticeDate).getTime()) / 86400000;
 
         // 艾宾浩斯遗忘曲线: R = e^(-t/30)
         const halfLife = 30;
@@ -69,9 +66,8 @@ class KnowledgeTracingEngine {
             mastery: Math.max(0.01, result.mastery * retentionRate),
             retentionRate: Math.round(retentionRate * 100) / 100,
             daysSincePractice: Math.round(daysSinceLastPractice),
-            suggestedReviewIn: daysSinceLastPractice > 7 ? '尽快复习' :
-                daysSinceLastPractice > 3 ? '1-2天内' :
-                '暂不需要'
+            suggestedReviewIn:
+                daysSinceLastPractice > 7 ? "尽快复习" : daysSinceLastPractice > 3 ? "1-2天内" : "暂不需要"
         };
     }
 
@@ -105,8 +101,8 @@ class KnowledgeTracingEngine {
             const improvement = Math.max(0, secondAcc - firstAcc);
 
             // 拟合guess/slip: 分析高难度题对vs低难度题错
-            const hardQuestions = rows.filter(r => r.difficulty === 'hard');
-            const easyQuestions = rows.filter(r => r.difficulty === 'easy');
+            const hardQuestions = rows.filter(r => r.difficulty === "hard");
+            const easyQuestions = rows.filter(r => r.difficulty === "easy");
 
             const easyErrors = easyQuestions.filter(r => !r.is_correct).length / Math.max(1, easyQuestions.length);
             const hardCorrects = hardQuestions.filter(r => r.is_correct).length / Math.max(1, hardQuestions.length);
@@ -118,7 +114,7 @@ class KnowledgeTracingEngine {
                 slip: Math.max(0.02, Math.min(0.3, easyErrors || 0.1))
             };
         } catch (e) {
-            console.error('拟合BKT参数失败，使用默认值:', e.message);
+            console.error("拟合BKT参数失败，使用默认值:", e.message);
             return this.defaults;
         }
     }
@@ -128,8 +124,8 @@ class KnowledgeTracingEngine {
      */
     predictNextCorrect(currentMastery, questionDifficulty, params = {}) {
         const p = { ...this.defaults, ...params };
-        const slip = p.slip * (1 + (questionDifficulty === 'hard' ? 0.5 : questionDifficulty === 'easy' ? -0.3 : 0));
-        const guess = p.guess * (1 + (questionDifficulty === 'easy' ? 0.3 : questionDifficulty === 'hard' ? -0.2 : 0));
+        const slip = p.slip * (1 + (questionDifficulty === "hard" ? 0.5 : questionDifficulty === "easy" ? -0.3 : 0));
+        const guess = p.guess * (1 + (questionDifficulty === "easy" ? 0.3 : questionDifficulty === "hard" ? -0.2 : 0));
         return currentMastery * (1 - slip) + (1 - currentMastery) * guess;
     }
 
@@ -178,7 +174,7 @@ class KnowledgeTracingEngine {
 
             return result;
         } catch (e) {
-            console.error('批量知识追踪失败:', e.message);
+            console.error("批量知识追踪失败:", e.message);
             return {};
         }
     }

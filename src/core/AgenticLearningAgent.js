@@ -5,7 +5,7 @@
 // 参考: https://github.com/HKUDS/DeepTutor (arXiv:2604.26962)
 // 核心理念: 混合个性化引擎 = 静态知识接地 + 动态多分辨率记忆 + 学习者画像持续演化
 
-const llmGateway = require('./llm/LlmGateway');
+const llmGateway = require("./llm/LlmGateway");
 
 class AgenticLearningAgent {
     /**
@@ -16,10 +16,10 @@ class AgenticLearningAgent {
         this.userId = userId;
         this.pool = pool;
         this.state = {
-            knowledgeState: {},     // { nodeId: { mastery, lastStudied, errorCount } }
-            interactionHistory: [],  // [{ action, result, timestamp }]
-            preferences: {},         // { learningStyle, dailyMinutes, attentionSpan }
-            currentFocus: null       // 当前聚焦的知识点
+            knowledgeState: {}, // { nodeId: { mastery, lastStudied, errorCount } }
+            interactionHistory: [], // [{ action, result, timestamp }]
+            preferences: {}, // { learningStyle, dailyMinutes, attentionSpan }
+            currentFocus: null // 当前聚焦的知识点
         };
         this.initialized = false;
     }
@@ -47,9 +47,8 @@ class AgenticLearningAgent {
                 [String(this.userId), this.userId]
             );
             for (const row of knowledgeRows) {
-                const mastery = row.total_answers > 0
-                    ? Math.round((row.correct_answers / row.total_answers) * 100)
-                    : 30; // 无答题记录默认为30%
+                const mastery =
+                    row.total_answers > 0 ? Math.round((row.correct_answers / row.total_answers) * 100) : 30; // 无答题记录默认为30%
                 this.state.knowledgeState[String(row.node_id)] = {
                     mastery,
                     name: row.name,
@@ -66,11 +65,15 @@ class AgenticLearningAgent {
                 );
                 for (const row of allNodes) {
                     this.state.knowledgeState[String(row.node_id)] = {
-                        mastery: 30, name: row.name,
-                        subject: row.subject, difficulty: row.difficulty
+                        mastery: 30,
+                        name: row.name,
+                        subject: row.subject,
+                        difficulty: row.difficulty
                     };
                 }
-            } catch (e2) { /* ignore */ }
+            } catch (e2) {
+                /* ignore */
+            }
         }
 
         // 如果知识状态仍为空，从 knowledge_nodes 直接加载前50个
@@ -82,11 +85,15 @@ class AgenticLearningAgent {
                 );
                 for (const row of allNodes) {
                     this.state.knowledgeState[String(row.node_id)] = {
-                        mastery: 30, name: row.name,
-                        subject: row.subject, difficulty: row.difficulty
+                        mastery: 30,
+                        name: row.name,
+                        subject: row.subject,
+                        difficulty: row.difficulty
                     };
                 }
-            } catch (e2) { /* ignore */ }
+            } catch (e2) {
+                /* ignore */
+            }
         }
 
         // 2. 加载最近的学习交互历史（实际表: questions.knowledge_id → knowledge_nodes.id）
@@ -103,49 +110,55 @@ class AgenticLearningAgent {
                 [this.userId]
             );
             this.state.interactionHistory = historyRows.map(r => ({
-                action: r.is_correct ? 'correct' : 'incorrect',
+                action: r.is_correct ? "correct" : "incorrect",
                 nodeId: r.node_id,
                 nodeName: r.node_name,
                 timestamp: r.created_at
             }));
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
 
         // 3. 加载偏好设置
         try {
-            const [profileRows] = await this.pool.query(
-                'SELECT profile_json FROM student_profiles WHERE user_id = ?',
-                [this.userId]
-            );
+            const [profileRows] = await this.pool.query("SELECT profile_json FROM student_profiles WHERE user_id = ?", [
+                this.userId
+            ]);
             if (profileRows.length > 0) {
-                const profile = typeof profileRows[0].profile_json === 'string'
-                    ? JSON.parse(profileRows[0].profile_json)
-                    : profileRows[0].profile_json;
+                const profile =
+                    typeof profileRows[0].profile_json === "string"
+                        ? JSON.parse(profileRows[0].profile_json)
+                        : profileRows[0].profile_json;
                 this.state.preferences = {
-                    learningStyle: profile.learningStyle || profile.learning_style || 'reading',
+                    learningStyle: profile.learningStyle || profile.learning_style || "reading",
                     dailyMinutes: profile.dailyTimeMinutes || profile.daily_time_minutes || 60,
                     attentionSpan: profile.attentionSpanMinutes || profile.attention_span_minutes || 30,
-                    goal: profile.goal || profile.learningGoal || '',
-                    level: profile.level || profile.currentLevel || 'beginner'
+                    goal: profile.goal || profile.learningGoal || "",
+                    level: profile.level || profile.currentLevel || "beginner"
                 };
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
 
         // 4. 尝试从 learning_preferences 补充学习风格
         try {
             const [prefRows] = await this.pool.query(
-                'SELECT style, modality_weights FROM learning_preferences WHERE user_id = ?',
+                "SELECT style, modality_weights FROM learning_preferences WHERE user_id = ?",
                 [this.userId]
             );
             if (prefRows.length > 0 && !this.state.preferences.learningStyle) {
-                this.state.preferences.learningStyle = prefRows[0].style || 'reading';
+                this.state.preferences.learningStyle = prefRows[0].style || "reading";
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
 
         // 5. 确定当前聚焦的薄弱点
         if (this.state.interactionHistory.length > 0) {
             const incorrectNodes = {};
             for (const h of this.state.interactionHistory) {
-                if (h.action === 'incorrect') {
+                if (h.action === "incorrect") {
                     incorrectNodes[h.nodeId] = (incorrectNodes[h.nodeId] || 0) + 1;
                 }
             }
@@ -172,23 +185,24 @@ class AgenticLearningAgent {
             .sort((a, b) => a[1].mastery - b[1].mastery)
             .slice(0, 5);
 
-        const recentHistory = this.state.interactionHistory.slice(0, 10)
-            .map(h => `${h.action === 'correct' ? '✓' : '✗'} ${h.nodeName}`);
+        const recentHistory = this.state.interactionHistory
+            .slice(0, 10)
+            .map(h => `${h.action === "correct" ? "✓" : "✗"} ${h.nodeName}`);
 
         const prompt = `你是一位智能学习导师，需要为学习者推理下一步最佳学习内容。
 
 【学习者画像】
-- 学习风格：${this.state.preferences.learningStyle || '未评估'}
+- 学习风格：${this.state.preferences.learningStyle || "未评估"}
 - 每日可用时间：${this.state.preferences.dailyMinutes || 60}分钟
 - 专注时长：${this.state.preferences.attentionSpan || 30}分钟
-- 学习目标：${this.state.preferences.goal || '系统掌握计算机核心能力'}
-- 当前水平：${this.state.preferences.level || '初学者'}
+- 学习目标：${this.state.preferences.goal || "系统掌握计算机核心能力"}
+- 当前水平：${this.state.preferences.level || "初学者"}
 
 【薄弱知识点（掌握度<50%）】
-${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}%, 难度: ${s.difficulty})`).join('\n') || '暂无数据'}
+${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}%, 难度: ${s.difficulty})`).join("\n") || "暂无数据"}
 
 【最近学习记录】
-${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
+${recentHistory.map(h => `- ${h}`).join("\n") || "暂无记录"}
 
 请推理并返回JSON格式的下一步学习计划：
 {
@@ -205,8 +219,12 @@ ${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
         try {
             const result = await llmGateway.chatText({
                 messages: [
-                    { role: 'system', content: '你是一个智能学习导师，专门为计算机科学学习者推荐个性化学习路径。请总是返回有效的JSON。' },
-                    { role: 'user', content: prompt }
+                    {
+                        role: "system",
+                        content:
+                            "你是一个智能学习导师，专门为计算机科学学习者推荐个性化学习路径。请总是返回有效的JSON。"
+                    },
+                    { role: "user", content: prompt }
                 ],
                 temperature: 0.3,
                 maxTokens: 1024,
@@ -221,7 +239,7 @@ ${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
                 return parsed;
             }
         } catch (e) {
-            console.warn('AgenticLearningAgent LLM推理失败，使用规则回退:', e.message);
+            console.warn("AgenticLearningAgent LLM推理失败，使用规则回退:", e.message);
         }
 
         return this._fallbackReasoning();
@@ -237,27 +255,27 @@ ${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
 
         if (weakEntries.length === 0) {
             return {
-                topic: '进阶学习',
-                difficulty: 'medium',
-                method: '项目实战',
-                reason: '当前基础知识点掌握良好，建议通过项目综合练习提升',
+                topic: "进阶学习",
+                difficulty: "medium",
+                method: "项目实战",
+                reason: "当前基础知识点掌握良好，建议通过项目综合练习提升",
                 estimatedMinutes: 45,
-                suggestedResources: ['选择一个实战项目', '完成综合练习']
+                suggestedResources: ["选择一个实战项目", "完成综合练习"]
             };
         }
 
         const [nodeId, state] = weakEntries[0];
         const methodMap = {
-            visual: '视频学习',
-            auditory: '理论讲解',
-            reading: '阅读文档',
-            kinesthetic: '动手练习'
+            visual: "视频学习",
+            auditory: "理论讲解",
+            reading: "阅读文档",
+            kinesthetic: "动手练习"
         };
 
         return {
             topic: state.name,
-            difficulty: state.difficulty || 'medium',
-            method: methodMap[this.state.preferences.learningStyle] || '理论讲解',
+            difficulty: state.difficulty || "medium",
+            method: methodMap[this.state.preferences.learningStyle] || "理论讲解",
             reason: `掌握度仅${state.mastery}%，是当前最薄弱环节，建议优先补充`,
             estimatedMinutes: Math.min(this.state.preferences.attentionSpan || 30, 45),
             suggestedResources: [`${state.name}核心概念讲解`, `${state.name}专项练习题`]
@@ -271,9 +289,9 @@ ${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
         await this.init();
 
         this.state.interactionHistory.unshift({
-            action: feedback.isCorrect ? 'correct' : 'incorrect',
+            action: feedback.isCorrect ? "correct" : "incorrect",
             nodeId: feedback.nodeId,
-            nodeName: feedback.nodeName || '',
+            nodeName: feedback.nodeName || "",
             timestamp: new Date().toISOString()
         });
 
@@ -303,16 +321,16 @@ ${recentHistory.map(h => `- ${h}`).join('\n') || '暂无记录'}
             .slice(0, days * 2);
 
         if (weakNodes.length === 0) {
-            return { days: [], summary: '当前学科知识点掌握良好，建议扩展学习范围或进行综合项目练习' };
+            return { days: [], summary: "当前学科知识点掌握良好，建议扩展学习范围或进行综合项目练习" };
         }
 
         const prompt = `为学习者生成${days}天的学习计划。
 
 每日可用时间：${dailyMinutes}分钟
-学习风格：${this.state.preferences.learningStyle || '综合'}
+学习风格：${this.state.preferences.learningStyle || "综合"}
 
 需要加强的知识点：
-${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}%)`).join('\n')}
+${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}%)`).join("\n")}
 
 请返回JSON：
 {
@@ -332,8 +350,11 @@ ${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}
         try {
             const result = await llmGateway.chatText({
                 messages: [
-                    { role: 'system', content: '你是学习计划生成专家，为学习者生成科学合理的学习计划。请总是返回有效JSON。' },
-                    { role: 'user', content: prompt }
+                    {
+                        role: "system",
+                        content: "你是学习计划生成专家，为学习者生成科学合理的学习计划。请总是返回有效JSON。"
+                    },
+                    { role: "user", content: prompt }
                 ],
                 temperature: 0.4,
                 maxTokens: 2048
@@ -342,7 +363,7 @@ ${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}
             const jsonMatch = String(result).match(/\{[\s\S]*\}/);
             if (jsonMatch) return JSON.parse(jsonMatch[0]);
         } catch (e) {
-            console.warn('学习计划生成失败:', e.message);
+            console.warn("学习计划生成失败:", e.message);
         }
 
         // 回退：简单均分
@@ -352,14 +373,14 @@ ${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}
             const dayNodes = weakNodes.slice(d * perDay, (d + 1) * perDay);
             daysPlan.push({
                 day: d + 1,
-                focus: dayNodes.map(([, s]) => s.name).join('、'),
+                focus: dayNodes.map(([, s]) => s.name).join("、"),
                 tasks: dayNodes.map(([, s]) => ({
-                    type: '学习',
+                    type: "学习",
                     topic: s.name,
                     minutes: Math.floor(dailyMinutes / dayNodes.length),
-                    method: '阅读文档'
+                    method: "阅读文档"
                 })),
-                goal: `掌握${dayNodes.map(([, s]) => s.name).join('、')}`
+                goal: `掌握${dayNodes.map(([, s]) => s.name).join("、")}`
             });
         }
         return {
@@ -373,12 +394,11 @@ ${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}
      */
     getStatus() {
         const totalNodes = Object.keys(this.state.knowledgeState).length;
-        if (totalNodes === 0) return { message: '尚未开始学习' };
+        if (totalNodes === 0) return { message: "尚未开始学习" };
 
         const mastered = Object.values(this.state.knowledgeState).filter(s => s.mastery >= 80).length;
         const weak = Object.values(this.state.knowledgeState).filter(s => s.mastery < 50).length;
-        const avgMastery = Object.values(this.state.knowledgeState)
-            .reduce((sum, s) => sum + s.mastery, 0) / totalNodes;
+        const avgMastery = Object.values(this.state.knowledgeState).reduce((sum, s) => sum + s.mastery, 0) / totalNodes;
 
         return {
             totalNodes,

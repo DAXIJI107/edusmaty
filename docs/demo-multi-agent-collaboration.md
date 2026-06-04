@@ -36,6 +36,7 @@
 ![Step 2](screenshots/step2-input-topic.png)
 
 卡片显示提示文字：
+
 > 输入一个学习主题，启动多Agent协作学习流程：规划Agent拆解知识 → 教学Agent讲解 → 出题Agent练习 → 评估Agent反馈
 
 ### Step 3：点击「启动协作」— 4 个 Agent 串行执行
@@ -148,12 +149,12 @@ GET /api/agent-collaborate/history
 
 ## 技术实现
 
-| 组件 | 位置 |
-|------|------|
-| **后端 API** | [api/agent-collaborate.js](file:///d:/Desktop/new/edusmart-rebuild/api/agent-collaborate.js) |
+| 组件         | 位置                                                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| **后端 API** | [api/agent-collaborate.js](file:///d:/Desktop/new/edusmart-rebuild/api/agent-collaborate.js)                                |
 | **前端渲染** | [js/edusmart-app.js](file:///d:/Desktop/new/edusmart-rebuild/js/edusmart-app.js) — `intelligenceView()` 中的多Agent协作卡片 |
-| **AI 接口** | 调用 `config.spark.httpApi`（Spark AI），4 个 Agent 串行调用 |
-| **数据库** | `agent_collaboration_logs` 表（自动创建） |
+| **AI 接口**  | 调用 `config.spark.httpApi`（Spark AI），4 个 Agent 串行调用                                                                |
+| **数据库**   | `agent_collaboration_logs` 表（自动创建）                                                                                   |
 
 ---
 

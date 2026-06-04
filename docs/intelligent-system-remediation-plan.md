@@ -413,18 +413,18 @@ GET  /api/course-design/:id
 
 ```json
 {
-  "title": "掌握哈希表冲突处理",
-  "reason": "你在哈希表开放寻址题上错误率较高",
-  "prerequisites": ["数组", "时间复杂度"],
-  "resources": [],
-  "practice": [],
-  "noteTask": "整理开放寻址与链地址法对比",
-  "projectTask": "实现一个简单 HashMap",
-  "estimatedMinutes": 45,
-  "agentDecision": {
-    "confidence": 0.84,
-    "evidence": ["错题 3 道", "掌握度 58%", "最近未复习"]
-  }
+    "title": "掌握哈希表冲突处理",
+    "reason": "你在哈希表开放寻址题上错误率较高",
+    "prerequisites": ["数组", "时间复杂度"],
+    "resources": [],
+    "practice": [],
+    "noteTask": "整理开放寻址与链地址法对比",
+    "projectTask": "实现一个简单 HashMap",
+    "estimatedMinutes": 45,
+    "agentDecision": {
+        "confidence": 0.84,
+        "evidence": ["错题 3 道", "掌握度 58%", "最近未复习"]
+    }
 }
 ```
 

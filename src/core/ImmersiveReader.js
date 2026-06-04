@@ -17,7 +17,7 @@ class ImmersiveReader {
             const difficultWords = this.findDifficultWords(sentence);
             if (difficultWords.length > 0) {
                 annotations.push({
-                    type: 'vocabulary',
+                    type: "vocabulary",
                     sentence: sentence.trim(),
                     words: difficultWords
                 });
@@ -25,9 +25,9 @@ class ImmersiveReader {
 
             if (this.isKeySentence(sentence)) {
                 annotations.push({
-                    type: 'key_point',
+                    type: "key_point",
                     sentence: sentence.trim(),
-                    reason: '包含核心观点或结论'
+                    reason: "包含核心观点或结论"
                 });
             }
         }
@@ -43,7 +43,7 @@ class ImmersiveReader {
             if (word.length > 4 && /[\u4e00-\u9fa5]/.test(word)) {
                 difficultWords.push({
                     word: word,
-                    difficulty: 'medium',
+                    difficulty: "medium",
                     suggestion: `"${word}"是一个专业术语，建议结合上下文理解`
                 });
             }
@@ -54,9 +54,26 @@ class ImmersiveReader {
 
     isKeySentence(sentence) {
         const indicators = [
-            '因此', '所以', '总之', '综上所述', '关键', '核心', '本质',
-            '重要', '必须', '一定', '总是', '永远', '不可能', '必然',
-            'therefore', 'thus', 'consequently', 'key', 'essential', 'important'
+            "因此",
+            "所以",
+            "总之",
+            "综上所述",
+            "关键",
+            "核心",
+            "本质",
+            "重要",
+            "必须",
+            "一定",
+            "总是",
+            "永远",
+            "不可能",
+            "必然",
+            "therefore",
+            "thus",
+            "consequently",
+            "key",
+            "essential",
+            "important"
         ];
         return indicators.some(i => sentence.includes(i));
     }
@@ -81,31 +98,32 @@ class ImmersiveReader {
     }
 
     classifyWord(word) {
-        const technicalIndicators = ['定理', '定律', '公式', '原理', '效应', '方程', '函数', '算法'];
-        if (technicalIndicators.some(i => word.includes(i))) return 'technical';
-        if (word.length > 6) return 'complex';
-        return 'normal';
+        const technicalIndicators = ["定理", "定律", "公式", "原理", "效应", "方程", "函数", "算法"];
+        if (technicalIndicators.some(i => word.includes(i))) return "technical";
+        if (word.length > 6) return "complex";
+        return "normal";
     }
 
     findContext(text, word) {
         const idx = text.indexOf(word);
-        if (idx === -1) return '';
+        if (idx === -1) return "";
         const start = Math.max(0, idx - 20);
         const end = Math.min(text.length, idx + word.length + 20);
-        return (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+        return (start > 0 ? "..." : "") + text.slice(start, end) + (end < text.length ? "..." : "");
     }
 
     analyzeStructure(text) {
-        const paragraphs = text.split('\n').filter(p => p.trim());
+        const paragraphs = text.split("\n").filter(p => p.trim());
         const sentences = text.split(/[。！？\n]/).filter(s => s.trim());
 
         return {
             paragraphCount: paragraphs.length,
             sentenceCount: sentences.length,
             totalChars: text.length,
-            avgSentenceLength: sentences.length > 0
-                ? Math.round(sentences.reduce((s, sen) => s + sen.length, 0) / sentences.length)
-                : 0,
+            avgSentenceLength:
+                sentences.length > 0
+                    ? Math.round(sentences.reduce((s, sen) => s + sen.length, 0) / sentences.length)
+                    : 0,
             structure: this.identifyStructure(paragraphs)
         };
     }
@@ -115,13 +133,19 @@ class ImmersiveReader {
         for (let i = 0; i < paragraphs.length; i++) {
             const p = paragraphs[i];
             if (i === 0 && p.length < 100) {
-                structure.push({ index: i, role: 'title', content: p.slice(0, 50) });
-            } else if (p.startsWith('第') || p.startsWith('一、') || p.startsWith('二、') || p.startsWith('1.') || p.startsWith('2.')) {
-                structure.push({ index: i, role: 'heading', content: p.slice(0, 50) });
+                structure.push({ index: i, role: "title", content: p.slice(0, 50) });
+            } else if (
+                p.startsWith("第") ||
+                p.startsWith("一、") ||
+                p.startsWith("二、") ||
+                p.startsWith("1.") ||
+                p.startsWith("2.")
+            ) {
+                structure.push({ index: i, role: "heading", content: p.slice(0, 50) });
             } else if (p.length > 200) {
-                structure.push({ index: i, role: 'body', content: p.slice(0, 50) });
+                structure.push({ index: i, role: "body", content: p.slice(0, 50) });
             } else {
-                structure.push({ index: i, role: 'paragraph', content: p.slice(0, 50) });
+                structure.push({ index: i, role: "paragraph", content: p.slice(0, 50) });
             }
         }
         return structure;
@@ -138,24 +162,25 @@ class ImmersiveReader {
         const avgSentenceLength = totalChars / totalSentences;
         const avgWordLength = totalChars / totalWords;
 
-        let difficulty = 'medium';
-        if (avgSentenceLength > 50 || avgWordLength > 3) difficulty = 'hard';
-        if (avgSentenceLength < 20 && avgWordLength < 2) difficulty = 'easy';
+        let difficulty = "medium";
+        if (avgSentenceLength > 50 || avgWordLength > 3) difficulty = "hard";
+        if (avgSentenceLength < 20 && avgWordLength < 2) difficulty = "easy";
 
         return {
             score: Math.round(100 - (avgSentenceLength * 0.5 + avgWordLength * 10)),
             difficulty,
             avgSentenceLength: Math.round(avgSentenceLength),
             avgWordLength: Math.round(avgWordLength * 10) / 10,
-            suggestion: difficulty === 'hard'
-                ? '建议将长句拆分为短句，适当增加分段'
-                : difficulty === 'easy'
-                ? '文本易于理解'
-                : '文本难度适中'
+            suggestion:
+                difficulty === "hard"
+                    ? "建议将长句拆分为短句，适当增加分段"
+                    : difficulty === "easy"
+                      ? "文本易于理解"
+                      : "文本难度适中"
         };
     }
 
-    async translate(text, targetLang = 'zh') {
+    async translate(text, targetLang = "zh") {
         return {
             original: text,
             translation: `[翻译] ${text}`,
@@ -173,7 +198,7 @@ class ImmersiveReader {
             cards: keySentences.slice(0, 5).map(s => ({
                 front: s.trim(),
                 back: `关键知识点：${s.trim()}`,
-                source: 'reading'
+                source: "reading"
             })),
             createdAt: new Date()
         };

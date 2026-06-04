@@ -1,10 +1,10 @@
 // api/supervisor.js
 // 智能督学API - 番茄钟、学习统计、督学Agent
 
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
 
 async function ensureSupervisorTables() {
     await pool.query(`
@@ -47,66 +47,66 @@ router.use(async (req, res, next) => {
     next();
 });
 
-router.post('/pomodoro/start', authenticateJWT, async (req, res) => {
+router.post("/pomodoro/start", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const { task, duration } = req.body;
 
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.startPomodoro(task, duration || 25);
 
         res.json(result);
     } catch (error) {
-        console.error('启动番茄钟失败:', error);
+        console.error("启动番茄钟失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/pomodoro/pause', authenticateJWT, async (req, res) => {
+router.post("/pomodoro/pause", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.pausePomodoro();
 
         res.json(result);
     } catch (error) {
-        console.error('暂停番茄钟失败:', error);
+        console.error("暂停番茄钟失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/pomodoro/resume', authenticateJWT, async (req, res) => {
+router.post("/pomodoro/resume", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.resumePomodoro();
 
         res.json(result);
     } catch (error) {
-        console.error('继续番茄钟失败:', error);
+        console.error("继续番茄钟失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/pomodoro/complete', authenticateJWT, async (req, res) => {
+router.post("/pomodoro/complete", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.completePomodoro();
 
         res.json(result);
     } catch (error) {
-        console.error('完成番茄钟失败:', error);
+        console.error("完成番茄钟失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.get('/pomodoro/state', authenticateJWT, async (req, res) => {
+router.get("/pomodoro/state", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
 
         const [rows] = await pool.query(
-            'SELECT * FROM pomodoro_sessions WHERE user_id = ? AND session_date = CURDATE()',
+            "SELECT * FROM pomodoro_sessions WHERE user_id = ? AND session_date = CURDATE()",
             [userId]
         );
 
@@ -116,84 +116,90 @@ router.get('/pomodoro/state', authenticateJWT, async (req, res) => {
             success: true,
             state: {
                 isActive: false,
-                type: 'work',
+                type: "work",
                 remainingTime: 25 * 60,
                 sessionsCompleted: todaySession.sessions_completed,
                 totalFocusTime: todaySession.total_focus_time
             }
         });
     } catch (error) {
-        console.error('获取番茄钟状态失败:', error);
+        console.error("获取番茄钟状态失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.get('/statistics', authenticateJWT, async (req, res) => {
+router.get("/statistics", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.getStudyStatistics();
 
         res.json(result);
     } catch (error) {
-        console.error('获取学习统计失败:', error);
+        console.error("获取学习统计失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.get('/motivation', authenticateJWT, async (req, res) => {
+router.get("/motivation", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const type = req.query.type || 'encouragement';
+        const type = req.query.type || "encouragement";
 
-        const supervisorAgent = new (require('../core/SupervisorAgent'))(userId, pool);
+        const supervisorAgent = new (require("../core/SupervisorAgent"))(userId, pool);
         const result = await supervisorAgent.handleMessage({
-            type: 'get_motivation',
+            type: "get_motivation",
             motivationType: type
         });
 
         res.json(result);
     } catch (error) {
-        console.error('获取激励消息失败:', error);
+        console.error("获取激励消息失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.get('/achievements', authenticateJWT, async (req, res) => {
+router.get("/achievements", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const [achievements] = await pool.query(`
+        const [achievements] = await pool.query(
+            `
             SELECT achievement_type, achievement_name, achieved_at
             FROM study_achievements
             WHERE user_id = ?
             ORDER BY achieved_at DESC
             LIMIT 20
-        `, [userId]);
+        `,
+            [userId]
+        );
 
         res.json({
             success: true,
             achievements: achievements
         });
     } catch (error) {
-        console.error('获取成就失败:', error);
+        console.error("获取成就失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/achievements/check', authenticateJWT, async (req, res) => {
+router.post("/achievements/check", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const { type, name } = req.body;
 
-        await pool.query(`
+        await pool.query(
+            `
             INSERT INTO study_achievements (user_id, achievement_type, achievement_name)
             VALUES (?, ?, ?)
-        `, [userId, type, name]);
+        `,
+            [userId, type, name]
+        );
 
-        res.json({ success: true, message: '成就已解锁' });
+        res.json({ success: true, message: "成就已解锁" });
     } catch (error) {
-        console.error('解锁成就失败:', error);
+        console.error("解锁成就失败:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

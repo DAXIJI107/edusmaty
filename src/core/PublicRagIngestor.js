@@ -1,103 +1,97 @@
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 const PUBLIC_AGENT_SOURCES = [
     {
-        id: 'SRC_AGENT_HELLO',
-        name: 'Hello-Agents',
-        baseUrl: 'https://github.com/datawhalechina/hello-agents',
-        license: '公开 GitHub 项目',
-        subject: 'AI Agent',
-        course: 'agent_open_source',
+        id: "SRC_AGENT_HELLO",
+        name: "Hello-Agents",
+        baseUrl: "https://github.com/datawhalechina/hello-agents",
+        license: "公开 GitHub 项目",
+        subject: "AI Agent",
+        course: "agent_open_source",
+        urls: ["https://raw.githubusercontent.com/datawhalechina/hello-agents/main/README.md"]
+    },
+    {
+        id: "SRC_AGENT_OATUTOR",
+        name: "OATutor",
+        baseUrl: "https://github.com/CAHLR/OATutor-LLM-Learner",
+        license: "公开 GitHub 项目",
+        subject: "AI Agent",
+        course: "adaptive_tutoring",
         urls: [
-            'https://raw.githubusercontent.com/datawhalechina/hello-agents/main/README.md'
+            "https://raw.githubusercontent.com/CAHLR/OATutor-LLM-Learner/main/README.md",
+            "https://raw.githubusercontent.com/CAHLR/OATutor/main/README.md"
         ]
     },
     {
-        id: 'SRC_AGENT_OATUTOR',
-        name: 'OATutor',
-        baseUrl: 'https://github.com/CAHLR/OATutor-LLM-Learner',
-        license: '公开 GitHub 项目',
-        subject: 'AI Agent',
-        course: 'adaptive_tutoring',
-        urls: [
-            'https://raw.githubusercontent.com/CAHLR/OATutor-LLM-Learner/main/README.md',
-            'https://raw.githubusercontent.com/CAHLR/OATutor/main/README.md'
-        ]
+        id: "SRC_AGENT_OPENMAIC",
+        name: "OpenMAIC",
+        baseUrl: "https://openmaic.chat/",
+        license: "公开网页资料",
+        subject: "AI Agent",
+        course: "multi_agent_classroom",
+        urls: ["https://openmaic.chat/"]
     },
     {
-        id: 'SRC_AGENT_OPENMAIC',
-        name: 'OpenMAIC',
-        baseUrl: 'https://openmaic.chat/',
-        license: '公开网页资料',
-        subject: 'AI Agent',
-        course: 'multi_agent_classroom',
-        urls: [
-            'https://openmaic.chat/'
-        ]
+        id: "SRC_AGENT_NEXUSRAG",
+        name: "NexusRAG",
+        baseUrl: "https://github.com/LeDat98/NexusRAG",
+        license: "公开 GitHub 项目",
+        subject: "AI Agent",
+        course: "rag_knowledge_graph",
+        urls: ["https://raw.githubusercontent.com/LeDat98/NexusRAG/main/README.md"]
     },
     {
-        id: 'SRC_AGENT_NEXUSRAG',
-        name: 'NexusRAG',
-        baseUrl: 'https://github.com/LeDat98/NexusRAG',
-        license: '公开 GitHub 项目',
-        subject: 'AI Agent',
-        course: 'rag_knowledge_graph',
-        urls: [
-            'https://raw.githubusercontent.com/LeDat98/NexusRAG/main/README.md'
-        ]
+        id: "SRC_AGENT_AGENTSCOPE",
+        name: "AgentScope",
+        baseUrl: "https://github.com/modelscope/agentscope",
+        license: "公开 GitHub 项目",
+        subject: "AI Agent",
+        course: "agent_runtime",
+        urls: ["https://raw.githubusercontent.com/modelscope/agentscope/main/README.md"]
     },
     {
-        id: 'SRC_AGENT_AGENTSCOPE',
-        name: 'AgentScope',
-        baseUrl: 'https://github.com/modelscope/agentscope',
-        license: '公开 GitHub 项目',
-        subject: 'AI Agent',
-        course: 'agent_runtime',
-        urls: [
-            'https://raw.githubusercontent.com/modelscope/agentscope/main/README.md'
-        ]
-    },
-    {
-        id: 'SRC_AGENT_HF',
-        name: 'Hugging Face Agents Course',
-        baseUrl: 'https://huggingface.co/learn/agents-course',
-        license: '公开课程资料',
-        subject: 'AI Agent',
-        course: 'agent_course',
-        urls: [
-            'https://huggingface.co/learn/agents-course/unit0/introduction'
-        ]
+        id: "SRC_AGENT_HF",
+        name: "Hugging Face Agents Course",
+        baseUrl: "https://huggingface.co/learn/agents-course",
+        license: "公开课程资料",
+        subject: "AI Agent",
+        course: "agent_course",
+        urls: ["https://huggingface.co/learn/agents-course/unit0/introduction"]
     }
 ];
 
 function stableId(prefix, value, maxLength = 32) {
-    const hash = crypto.createHash('sha1').update(String(value)).digest('hex').slice(0, maxLength - prefix.length);
+    const hash = crypto
+        .createHash("sha1")
+        .update(String(value))
+        .digest("hex")
+        .slice(0, maxLength - prefix.length);
     return `${prefix}${hash}`.slice(0, maxLength);
 }
 
 function decodeEntities(text) {
-    return String(text || '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
+    return String(text || "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'");
 }
 
 function stripHtml(text) {
     return decodeEntities(text)
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\[[^\]]*\]\([^)]*\)/g, ' ')
-        .replace(/[`*_>#|~]/g, ' ')
-        .replace(/\s+/g, ' ')
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\[[^\]]*\]\([^)]*\)/g, " ")
+        .replace(/[`*_>#|~]/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
 }
 
 function extractTitle(raw, fallback) {
-    const text = String(raw || '');
+    const text = String(raw || "");
     const markdownTitle = text.match(/^#\s+(.+)$/m);
     if (markdownTitle) return markdownTitle[1].trim().slice(0, 180);
     const htmlTitle = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -112,7 +106,7 @@ function chunkText(text, maxChars = 900, overlap = 120) {
     let start = 0;
     while (start < cleaned.length && chunks.length < 80) {
         let end = Math.min(cleaned.length, start + maxChars);
-        const boundary = cleaned.lastIndexOf('。', end);
+        const boundary = cleaned.lastIndexOf("。", end);
         if (boundary > start + 260) end = boundary + 1;
         chunks.push(cleaned.slice(start, end).trim());
         if (end >= cleaned.length) break;
@@ -165,22 +159,26 @@ async function ensurePublicRagSchema(pool) {
 }
 
 function matchSources(sourceName) {
-    const name = String(sourceName || '').trim().toLowerCase();
-    if (!name || name === 'all' || name === 'agent') return PUBLIC_AGENT_SOURCES;
+    const name = String(sourceName || "")
+        .trim()
+        .toLowerCase();
+    if (!name || name === "all" || name === "agent") return PUBLIC_AGENT_SOURCES;
     return PUBLIC_AGENT_SOURCES.filter(source => {
-        return source.name.toLowerCase().includes(name) ||
+        return (
+            source.name.toLowerCase().includes(name) ||
             source.course.toLowerCase().includes(name) ||
-            source.baseUrl.toLowerCase().includes(name);
+            source.baseUrl.toLowerCase().includes(name)
+        );
     });
 }
 
 async function fetchPublicText(url) {
     const response = await fetch(url, {
         headers: {
-            'User-Agent': 'EduSmartRebuild/2.0 public-rag-ingestor',
-            'Accept': 'text/html,text/markdown,text/plain,application/json;q=0.8,*/*;q=0.5'
+            "User-Agent": "EduSmartRebuild/2.0 public-rag-ingestor",
+            Accept: "text/html,text/markdown,text/plain,application/json;q=0.8,*/*;q=0.5"
         },
-        redirect: 'follow'
+        redirect: "follow"
     });
     if (!response.ok) throw new Error(`fetch ${url} failed: ${response.status}`);
     return await response.text();
@@ -200,7 +198,7 @@ async function upsertSource(pool, source) {
 }
 
 async function writeDocument(pool, source, url, rawText) {
-    const docId = stableId('DOC', `${source.id}:${url}`);
+    const docId = stableId("DOC", `${source.id}:${url}`);
     const title = extractTitle(rawText, `${source.name} 公开资料`);
     const chunks = chunkText(rawText);
     if (!chunks.length) return { docId, title, url, chunks: 0, skipped: true };
@@ -230,9 +228,9 @@ async function writeDocument(pool, source, url, rawText) {
         ]
     );
 
-    await pool.query('UPDATE rag_chunks SET is_active = 0 WHERE doc_id = ?', [docId]);
+    await pool.query("UPDATE rag_chunks SET is_active = 0 WHERE doc_id = ?", [docId]);
     for (let index = 0; index < chunks.length; index += 1) {
-        const chunkId = stableId('CHK', `${docId}:${index}:${chunks[index].slice(0, 40)}`);
+        const chunkId = stableId("CHK", `${docId}:${index}:${chunks[index].slice(0, 40)}`);
         await pool.query(
             `INSERT INTO rag_chunks
                 (chunk_id, doc_id, chunk_index, chunk_text, subject, course, knowledge_point, quality_score, is_active)
@@ -250,7 +248,7 @@ async function writeDocument(pool, source, url, rawText) {
     return { docId, title, url, chunks: chunks.length, skipped: false };
 }
 
-async function ingestPublicSources(pool, { sourceName = 'all', limit = 4 } = {}) {
+async function ingestPublicSources(pool, { sourceName = "all", limit = 4 } = {}) {
     await ensurePublicRagSchema(pool);
     const sources = matchSources(sourceName).slice(0, Math.max(1, Number(limit || 4)));
     const documents = [];

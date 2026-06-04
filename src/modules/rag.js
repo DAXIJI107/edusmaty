@@ -1,30 +1,30 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
-const { ensureRagData } = require('../core/RagSeeder');
-const { ingestPublicSources, PUBLIC_AGENT_SOURCES } = require('../core/PublicRagIngestor');
-const RagSearchService = require('../core/RagSearchService');
-const llmGateway = require('../core/llm/LlmGateway');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
+const { ensureRagData } = require("../core/RagSeeder");
+const { ingestPublicSources, PUBLIC_AGENT_SOURCES } = require("../core/PublicRagIngestor");
+const RagSearchService = require("../core/RagSearchService");
+const llmGateway = require("../core/llm/LlmGateway");
 
 const ragSearch = new RagSearchService(pool);
 
 function splitKeywords(text) {
-    return String(text || '')
+    return String(text || "")
         .toLowerCase()
-        .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ')
+        .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, " ")
         .split(/\s+/)
-        .map((item) => item.trim())
-        .filter((item) => item.length >= 2)
+        .map(item => item.trim())
+        .filter(item => item.length >= 2)
         .slice(0, 10);
 }
 
 function scoreChunk(chunk, query, keywords) {
     let score = 0;
-    const t = String(chunk.chunk_text || '').toLowerCase();
-    const kp = String(chunk.knowledge_point || '').toLowerCase();
-    const course = String(chunk.course || '').toLowerCase();
-    const q = String(query || '').toLowerCase();
+    const t = String(chunk.chunk_text || "").toLowerCase();
+    const kp = String(chunk.knowledge_point || "").toLowerCase();
+    const course = String(chunk.course || "").toLowerCase();
+    const q = String(query || "").toLowerCase();
     if (q && t.includes(q)) score += 5;
     if (q && kp.includes(q)) score += 3;
     if (q && course.includes(q)) score += 2;
@@ -40,32 +40,32 @@ function scoreChunk(chunk, query, keywords) {
 // 计算相关性
 function calculateRelevance(item, query, keywords) {
     let relevance = 0;
-    const chunkText = String(item.chunk_text || '').toLowerCase();
-    const queryLower = String(query || '').toLowerCase();
-    
+    const chunkText = String(item.chunk_text || "").toLowerCase();
+    const queryLower = String(query || "").toLowerCase();
+
     // 完全匹配
     if (chunkText.includes(queryLower)) {
         relevance += 0.5;
     }
-    
+
     // 关键词匹配
     for (const keyword of keywords) {
         if (chunkText.includes(keyword.toLowerCase())) {
             relevance += 0.1;
         }
     }
-    
+
     // 质量分数
     relevance += (Number(item.quality_score || 0) / 10) * 0.3;
-    
+
     return Math.min(relevance, 1.0);
 }
 
-router.get('/status', authenticateJWT, async (req, res) => {
+router.get("/status", authenticateJWT, async (req, res) => {
     try {
         await ensureRagData(pool);
-        const [[docRow]] = await pool.query('SELECT COUNT(*) AS total FROM rag_documents');
-        const [[chunkRow]] = await pool.query('SELECT COUNT(*) AS total FROM rag_chunks WHERE is_active = 1');
+        const [[docRow]] = await pool.query("SELECT COUNT(*) AS total FROM rag_documents");
+        const [[chunkRow]] = await pool.query("SELECT COUNT(*) AS total FROM rag_chunks WHERE is_active = 1");
         res.json({
             success: true,
             data: {
@@ -74,12 +74,12 @@ router.get('/status', authenticateJWT, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('RAG状态查询失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("RAG状态查询失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.get('/public-sources', authenticateJWT, async (req, res) => {
+router.get("/public-sources", authenticateJWT, async (req, res) => {
     res.json({
         success: true,
         data: PUBLIC_AGENT_SOURCES.map(source => ({
@@ -93,41 +93,35 @@ router.get('/public-sources', authenticateJWT, async (req, res) => {
     });
 });
 
-router.post('/ingest-public', authenticateJWT, async (req, res) => {
+router.post("/ingest-public", authenticateJWT, async (req, res) => {
     try {
         const result = await ingestPublicSources(pool, {
-            sourceName: req.body?.sourceName || req.body?.source || 'all',
+            sourceName: req.body?.sourceName || req.body?.source || "all",
             limit: req.body?.limit || 4
         });
         res.json(result);
     } catch (error) {
-        console.error('公开资料入库失败:', error);
-        res.status(500).json({ success: false, message: error.message || '公开资料入库失败' });
+        console.error("公开资料入库失败:", error);
+        res.status(500).json({ success: false, message: error.message || "公开资料入库失败" });
     }
 });
 
 async function handleOverview(req, res) {
     try {
         await ensureRagData(pool);
-        const subject = String(req.body?.subject || req.query?.subject || 'all').trim();
+        const subject = String(req.body?.subject || req.query?.subject || "all").trim();
         const params = [];
-        let docWhere = '';
-        let chunkWhere = 'WHERE c.is_active = 1';
-        if (subject && subject !== 'all') {
-            docWhere = 'WHERE d.subject = ?';
-            chunkWhere += ' AND c.subject = ?';
+        let docWhere = "";
+        let chunkWhere = "WHERE c.is_active = 1";
+        if (subject && subject !== "all") {
+            docWhere = "WHERE d.subject = ?";
+            chunkWhere += " AND c.subject = ?";
             params.push(subject);
         }
 
         const [[sourceTotal]] = await pool.query('SELECT COUNT(*) AS total FROM rag_sources WHERE approved = "Y"');
-        const [[docTotal]] = await pool.query(
-            `SELECT COUNT(*) AS total FROM rag_documents d ${docWhere}`,
-            params
-        );
-        const [[chunkTotal]] = await pool.query(
-            `SELECT COUNT(*) AS total FROM rag_chunks c ${chunkWhere}`,
-            params
-        );
+        const [[docTotal]] = await pool.query(`SELECT COUNT(*) AS total FROM rag_documents d ${docWhere}`, params);
+        const [[chunkTotal]] = await pool.query(`SELECT COUNT(*) AS total FROM rag_chunks c ${chunkWhere}`, params);
         const [courseRows] = await pool.query(
             `SELECT c.course, COUNT(*) AS chunks
              FROM rag_chunks c
@@ -205,21 +199,21 @@ async function handleOverview(req, res) {
             }
         });
     } catch (error) {
-        console.error('RAG概览查询失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("RAG概览查询失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 }
 
 router.get(/^\/overview\/?$/, authenticateJWT, handleOverview);
-router.post('/overview', authenticateJWT, handleOverview);
+router.post("/overview", authenticateJWT, handleOverview);
 
-router.post('/query', authenticateJWT, async (req, res) => {
+router.post("/query", authenticateJWT, async (req, res) => {
     try {
-        const query = String(req.body?.query || '').trim();
-        const subject = String(req.body?.subject || 'all').trim();
-        const sourceName = String(req.body?.sourceName || req.body?.source || '').trim() || null;
+        const query = String(req.body?.query || "").trim();
+        const subject = String(req.body?.subject || "all").trim();
+        const sourceName = String(req.body?.sourceName || req.body?.source || "").trim() || null;
         if (!query) {
-            return res.status(400).json({ success: false, message: 'query不能为空' });
+            return res.status(400).json({ success: false, message: "query不能为空" });
         }
         const data = await ragSearch.search({
             query,
@@ -233,64 +227,62 @@ router.post('/query', authenticateJWT, async (req, res) => {
             data
         });
     } catch (error) {
-        console.error('RAG检索失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("RAG检索失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
 function buildRagPrompt({ query, subject, citations }) {
-    const evidence = citations.map(item => [
-        `[${item.rank}] ${item.title}`,
-        `来源: ${item.source?.name || '未知来源'}`,
-        `课程/知识点: ${item.course || ''} / ${item.knowledgePoint || ''}`,
-        `片段: ${item.snippet || ''}`
-    ].join('\n')).join('\n\n');
+    const evidence = citations
+        .map(item =>
+            [
+                `[${item.rank}] ${item.title}`,
+                `来源: ${item.source?.name || "未知来源"}`,
+                `课程/知识点: ${item.course || ""} / ${item.knowledgePoint || ""}`,
+                `片段: ${item.snippet || ""}`
+            ].join("\n")
+        )
+        .join("\n\n");
 
     return [
         {
-            role: 'system',
+            role: "system",
             content: [
-                '你是 EduSmart 本地学习导师。请只基于给定证据回答。',
-                '如果证据不足，请明确说明“当前资料不足以确定”，并给出下一步检索建议。',
-                '回答必须包含简明结论、分步解释、引用编号和下一步学习动作。',
-                '引用格式使用 [1]、[2]，不要编造来源、链接或题号。'
-            ].join('\n')
+                "你是 EduSmart 本地学习导师。请只基于给定证据回答。",
+                "如果证据不足，请明确说明“当前资料不足以确定”，并给出下一步检索建议。",
+                "回答必须包含简明结论、分步解释、引用编号和下一步学习动作。",
+                "引用格式使用 [1]、[2]，不要编造来源、链接或题号。"
+            ].join("\n")
         },
         {
-            role: 'user',
-            content: [
-                `学科: ${subject || 'all'}`,
-                `问题: ${query}`,
-                '',
-                '证据:',
-                evidence || '无可用证据'
-            ].join('\n')
+            role: "user",
+            content: [`学科: ${subject || "all"}`, `问题: ${query}`, "", "证据:", evidence || "无可用证据"].join("\n")
         }
     ];
 }
 
 // POST /api/rag/add-to-learning — 将RAG检索到的知识点加入学习列表
-router.post('/add-to-learning', authenticateJWT, async (req, res) => {
+router.post("/add-to-learning", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const knowledgePoint = String(req.body?.knowledgePoint || '').trim();
-        const queryContext = String(req.body?.queryContext || '').trim();
+        const knowledgePoint = String(req.body?.knowledgePoint || "").trim();
+        const queryContext = String(req.body?.queryContext || "").trim();
 
         if (!knowledgePoint) {
-            return res.status(400).json({ success: false, message: 'knowledgePoint不能为空' });
+            return res.status(400).json({ success: false, message: "knowledgePoint不能为空" });
         }
 
         // 1. 尝试匹配已有知识节点（精确匹配 → 模糊匹配）
         let nodeId = null;
         const [exactMatch] = await pool.query(
-            'SELECT id, name FROM knowledge_nodes WHERE name = ? AND is_active = 1 LIMIT 1',
+            "SELECT id, name FROM knowledge_nodes WHERE name = ? AND is_active = 1 LIMIT 1",
             [knowledgePoint]
         );
         if (exactMatch.length > 0) {
             nodeId = exactMatch[0].id;
         } else {
             const [fuzzyMatch] = await pool.query(
-                'SELECT id, name FROM knowledge_nodes WHERE (name LIKE ? OR description LIKE ?) AND is_active = 1 LIMIT 1',
+                "SELECT id, name FROM knowledge_nodes WHERE (name LIKE ? OR description LIKE ?) AND is_active = 1 LIMIT 1",
                 [`%${knowledgePoint}%`, `%${knowledgePoint}%`]
             );
             if (fuzzyMatch.length > 0) {
@@ -304,7 +296,7 @@ router.post('/add-to-learning', authenticateJWT, async (req, res) => {
             const [result] = await pool.query(
                 `INSERT INTO knowledge_nodes (name, description, subject, difficulty, type, is_active)
                  VALUES (?, ?, 'general', 'medium', 'concept', 1)`,
-                [knowledgePoint, `来自RAG检索的知识点：${knowledgePoint}（查询上下文：${queryContext || '无'}）`]
+                [knowledgePoint, `来自RAG检索的知识点：${knowledgePoint}（查询上下文：${queryContext || "无"}）`]
             );
             nodeId = result.insertId;
             isNewNode = true;
@@ -327,7 +319,7 @@ router.post('/add-to-learning', authenticateJWT, async (req, res) => {
 
         // 4. 添加到学习列表
         const card = {
-            source: 'rag_search',
+            source: "rag_search",
             knowledgePoint,
             queryContext,
             addedAt: new Date().toISOString()
@@ -346,13 +338,13 @@ router.post('/add-to-learning', authenticateJWT, async (req, res) => {
             isNewNode
         });
     } catch (error) {
-        console.error('添加RAG知识点到学习列表失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("添加RAG知识点到学习列表失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
 // POST /api/rag/enrich-nodes — 为 suggestedNodes 匹配已有的 knowledge_node ID
-router.post('/enrich-nodes', authenticateJWT, async (req, res) => {
+router.post("/enrich-nodes", authenticateJWT, async (req, res) => {
     try {
         const nodes = req.body?.nodes || [];
         if (!Array.isArray(nodes) || nodes.length === 0) {
@@ -361,11 +353,11 @@ router.post('/enrich-nodes', authenticateJWT, async (req, res) => {
 
         const enriched = [];
         for (const node of nodes) {
-            const name = String(node.name || '').trim();
+            const name = String(node.name || "").trim();
             if (!name) continue;
 
             const [matches] = await pool.query(
-                'SELECT id, name, subject FROM knowledge_nodes WHERE name LIKE ? AND is_active = 1 LIMIT 3',
+                "SELECT id, name, subject FROM knowledge_nodes WHERE name LIKE ? AND is_active = 1 LIMIT 3",
                 [`%${name}%`]
             );
 
@@ -377,18 +369,18 @@ router.post('/enrich-nodes', authenticateJWT, async (req, res) => {
 
         res.json({ success: true, data: enriched });
     } catch (error) {
-        console.error('RAG节点匹配失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("RAG节点匹配失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 
-router.post('/ask', authenticateJWT, async (req, res) => {
+router.post("/ask", authenticateJWT, async (req, res) => {
     try {
-        const query = String(req.body?.query || '').trim();
-        const subject = String(req.body?.subject || 'all').trim();
-        const sourceName = String(req.body?.sourceName || req.body?.source || '').trim() || null;
+        const query = String(req.body?.query || "").trim();
+        const subject = String(req.body?.subject || "all").trim();
+        const sourceName = String(req.body?.sourceName || req.body?.source || "").trim() || null;
         if (!query) {
-            return res.status(400).json({ success: false, message: 'query不能为空' });
+            return res.status(400).json({ success: false, message: "query不能为空" });
         }
 
         const retrieved = await ragSearch.search({
@@ -404,21 +396,21 @@ router.post('/ask', authenticateJWT, async (req, res) => {
                 success: true,
                 data: {
                     ...retrieved,
-                    provider: 'rag-template',
+                    provider: "rag-template",
                     answer: retrieved.answer
                 }
             });
         }
 
         const messages = buildRagPrompt({ query, subject, citations: retrieved.citations });
-        let answer = '';
-        let provider = 'local';
+        let answer = "";
+        let provider = "local";
         try {
             const result = await llmGateway.chat({ messages, temperature: 0.35, maxTokens: 1800 });
-            answer = result.content || '';
+            answer = result.content || "";
             provider = result.provider;
         } catch (error) {
-            provider = 'rag-template';
+            provider = "rag-template";
             answer = retrieved.answer;
         }
 
@@ -428,12 +420,12 @@ router.post('/ask', authenticateJWT, async (req, res) => {
                 ...retrieved,
                 answer: answer || retrieved.answer,
                 provider,
-                model: provider === 'local' ? undefined : provider
+                model: provider === "local" ? undefined : provider
             }
         });
     } catch (error) {
-        console.error('RAG本地问答失败:', error);
-        res.status(500).json({ success: false, message: '服务器错误' });
+        console.error("RAG本地问答失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
     }
 });
 

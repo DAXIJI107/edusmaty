@@ -19,37 +19,34 @@ class SafetyAgent {
             /(论文代写|作业代做)/i
         ];
 
-        this.hallucinationKeywords = [
-            '可能', '也许', '大概', '据说', '听说',
-            '不一定', '可能是', '似乎', '好像'
-        ];
+        this.hallucinationKeywords = ["可能", "也许", "大概", "据说", "听说", "不一定", "可能是", "似乎", "好像"];
 
         this.academicFactCheck = {
-            '数学': ['定理', '公式', '证明', '推导'],
-            '物理': ['定律', '公式', '实验', '原理'],
-            '化学': ['反应', '方程式', '元素', '化合物'],
-            '英语': ['语法', '词汇', '时态', '句型'],
-            '编程': ['语法', '函数', '类', '算法']
+            数学: ["定理", "公式", "证明", "推导"],
+            物理: ["定律", "公式", "实验", "原理"],
+            化学: ["反应", "方程式", "元素", "化合物"],
+            英语: ["语法", "词汇", "时态", "句型"],
+            编程: ["语法", "函数", "类", "算法"]
         };
     }
 
     async handleMessage(message) {
-        console.log('SafetyAgent received message:', message);
+        console.log("SafetyAgent received message:", message);
         try {
             switch (message.type) {
-                case 'validate':
+                case "validate":
                     return this.validateContent(message.content);
-                case 'check_hallucination':
+                case "check_hallucination":
                     return this.checkHallucination(message.content);
-                case 'filter':
+                case "filter":
                     return this.filterContent(message.content);
-                case 'fact_check':
+                case "fact_check":
                     return this.factCheck(message.content, message.subject);
                 default:
-                    throw new Error('Unsupported message type');
+                    throw new Error("Unsupported message type");
             }
         } catch (error) {
-            console.error('SafetyAgent error:', error);
+            console.error("SafetyAgent error:", error);
             return { error: error.message };
         }
     }
@@ -60,7 +57,7 @@ class SafetyAgent {
         for (const pattern of this.forbiddenPatterns) {
             if (pattern.test(content)) {
                 violations.push({
-                    type: 'content_filter',
+                    type: "content_filter",
                     message: `检测到敏感内容`,
                     pattern: pattern.toString()
                 });
@@ -70,16 +67,16 @@ class SafetyAgent {
         // 检查内容长度
         if (content.length > 10000) {
             violations.push({
-                type: 'length_limit',
-                message: '内容长度超出限制'
+                type: "length_limit",
+                message: "内容长度超出限制"
             });
         }
 
         // 检查内容为空
         if (!content.trim()) {
             violations.push({
-                type: 'empty_content',
-                message: '内容为空'
+                type: "empty_content",
+                message: "内容为空"
             });
         }
 
@@ -92,44 +89,37 @@ class SafetyAgent {
 
     checkHallucination(content) {
         const indicators = [];
-        
+
         // 检查不确定性关键词
         for (const keyword of this.hallucinationKeywords) {
             if (content.includes(keyword)) {
                 indicators.push({
-                    type: 'uncertainty',
+                    type: "uncertainty",
                     keyword: keyword,
-                    count: (content.match(new RegExp(keyword, 'g')) || []).length
+                    count: (content.match(new RegExp(keyword, "g")) || []).length
                 });
             }
         }
 
         // 检查过度自信表述
-        const overconfidencePatterns = [
-            /(绝对|完全|一定|必然|无疑)/i,
-            /(100%|百分之百)/i,
-            /(唯一|最佳|顶级)/i
-        ];
+        const overconfidencePatterns = [/(绝对|完全|一定|必然|无疑)/i, /(100%|百分之百)/i, /(唯一|最佳|顶级)/i];
         for (const pattern of overconfidencePatterns) {
             if (pattern.test(content)) {
                 indicators.push({
-                    type: 'overconfidence',
+                    type: "overconfidence",
                     pattern: pattern.toString()
                 });
             }
         }
 
         // 检查事实性陈述
-        const factPatterns = [
-            /(研究表明|数据显示|科学证明)/i,
-            /(根据.*研究|依据.*报告)/i
-        ];
+        const factPatterns = [/(研究表明|数据显示|科学证明)/i, /(根据.*研究|依据.*报告)/i];
         let hasFactualClaims = false;
         for (const pattern of factPatterns) {
             if (pattern.test(content)) {
                 hasFactualClaims = true;
                 indicators.push({
-                    type: 'factual_claim',
+                    type: "factual_claim",
                     pattern: pattern.toString()
                 });
             }
@@ -138,7 +128,7 @@ class SafetyAgent {
         const riskLevel = this.calculateRiskLevel(indicators, hasFactualClaims);
 
         return {
-            hasHallucinationRisk: riskLevel >= 'medium',
+            hasHallucinationRisk: riskLevel >= "medium",
             riskLevel: riskLevel,
             indicators: indicators,
             suggestion: this.getSuggestion(riskLevel)
@@ -146,21 +136,21 @@ class SafetyAgent {
     }
 
     calculateRiskLevel(indicators, hasFactualClaims) {
-        const uncertaintyCount = indicators.filter(i => i.type === 'uncertainty').length;
-        const overconfidenceCount = indicators.filter(i => i.type === 'overconfidence').length;
-        
-        if (overconfidenceCount > 2) return 'high';
-        if (uncertaintyCount > 3 && hasFactualClaims) return 'high';
-        if (overconfidenceCount > 0 && hasFactualClaims) return 'medium';
-        if (uncertaintyCount > 2) return 'medium';
-        return 'low';
+        const uncertaintyCount = indicators.filter(i => i.type === "uncertainty").length;
+        const overconfidenceCount = indicators.filter(i => i.type === "overconfidence").length;
+
+        if (overconfidenceCount > 2) return "high";
+        if (uncertaintyCount > 3 && hasFactualClaims) return "high";
+        if (overconfidenceCount > 0 && hasFactualClaims) return "medium";
+        if (uncertaintyCount > 2) return "medium";
+        return "low";
     }
 
     getSuggestion(riskLevel) {
         const suggestions = {
-            high: '内容存在较高幻觉风险，建议人工复核或引用权威来源验证',
-            medium: '内容存在一定幻觉风险，建议标注不确定性或提供参考资料',
-            low: '内容风险较低，可以正常使用'
+            high: "内容存在较高幻觉风险，建议人工复核或引用权威来源验证",
+            medium: "内容存在一定幻觉风险，建议标注不确定性或提供参考资料",
+            low: "内容风险较低，可以正常使用"
         };
         return suggestions[riskLevel];
     }
@@ -170,12 +160,12 @@ class SafetyAgent {
 
         // 替换敏感内容
         for (const pattern of this.forbiddenPatterns) {
-            filtered = filtered.replace(pattern, '[内容已过滤]');
+            filtered = filtered.replace(pattern, "[内容已过滤]");
         }
 
         // 脱敏处理
-        filtered = filtered.replace(/(\d{3})\d{4}(\d{4})/g, '$1****$2');
-        filtered = filtered.replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)/g, '***@***');
+        filtered = filtered.replace(/(\d{3})\d{4}(\d{4})/g, "$1****$2");
+        filtered = filtered.replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)/g, "***@***");
 
         return {
             originalLength: content.length,
@@ -187,11 +177,11 @@ class SafetyAgent {
 
     async factCheck(content, subject) {
         const checks = [];
-        
+
         if (!subject) {
             return {
                 checked: false,
-                message: '未指定学科，跳过事实检查'
+                message: "未指定学科，跳过事实检查"
             };
         }
 
@@ -205,21 +195,22 @@ class SafetyAgent {
         }
 
         checks.push({
-            type: 'keyword_check',
+            type: "keyword_check",
             subject: subject,
             expectedKeywords: expectedKeywords,
             foundKeywords: foundKeywords,
-            coverage: expectedKeywords.length > 0 
-                ? (foundKeywords.length / expectedKeywords.length * 100).toFixed(1) 
-                : 'N/A'
+            coverage:
+                expectedKeywords.length > 0
+                    ? ((foundKeywords.length / expectedKeywords.length) * 100).toFixed(1)
+                    : "N/A"
         });
 
         // 检查逻辑一致性
         const consistencyScore = this.checkLogicalConsistency(content);
         checks.push({
-            type: 'logical_consistency',
+            type: "logical_consistency",
             score: consistencyScore,
-            message: consistencyScore >= 70 ? '逻辑一致性良好' : '建议检查逻辑连贯性'
+            message: consistencyScore >= 70 ? "逻辑一致性良好" : "建议检查逻辑连贯性"
         });
 
         return {
@@ -232,22 +223,22 @@ class SafetyAgent {
     checkLogicalConsistency(content) {
         // 简单的逻辑一致性检查
         const sentences = content.split(/[。！？\n]/).filter(s => s.trim().length > 5);
-        
+
         if (sentences.length < 3) return 100;
 
         let consistentCount = 0;
         for (let i = 0; i < sentences.length - 1; i++) {
             const current = sentences[i].toLowerCase();
             const next = sentences[i + 1].toLowerCase();
-            
+
             // 检查是否有明显矛盾
             const contradictingPairs = [
-                ['正确', '错误'],
-                ['是', '不是'],
-                ['有', '没有'],
-                ['可以', '不可以']
+                ["正确", "错误"],
+                ["是", "不是"],
+                ["有", "没有"],
+                ["可以", "不可以"]
             ];
-            
+
             let isConsistent = true;
             for (const [positive, negative] of contradictingPairs) {
                 if (current.includes(positive) && next.includes(negative)) {
@@ -255,7 +246,7 @@ class SafetyAgent {
                     break;
                 }
             }
-            
+
             if (isConsistent) consistentCount++;
         }
 
@@ -267,39 +258,39 @@ class SafetyAgent {
         let weightSum = 0;
 
         for (const check of checks) {
-            if (check.type === 'keyword_check') {
+            if (check.type === "keyword_check") {
                 total += parseFloat(check.coverage) * 0.6;
                 weightSum += 0.6;
-            } else if (check.type === 'logical_consistency') {
+            } else if (check.type === "logical_consistency") {
                 total += check.score * 0.4;
                 weightSum += 0.4;
             }
         }
 
-        return weightSum > 0 ? (total / weightSum).toFixed(1) : 'N/A';
+        return weightSum > 0 ? (total / weightSum).toFixed(1) : "N/A";
     }
 
     async validateAndFilter(content, subject = null) {
         const validation = this.validateContent(content);
-        
+
         if (!validation.valid) {
             return {
                 passed: false,
-                reason: '内容验证失败',
+                reason: "内容验证失败",
                 violations: validation.violations
             };
         }
 
         const hallucinationCheck = this.checkHallucination(content);
         const filtered = this.filterContent(content);
-        
+
         let factCheckResult = null;
         if (subject) {
             factCheckResult = await this.factCheck(content, subject);
         }
 
         return {
-            passed: hallucinationCheck.riskLevel !== 'high',
+            passed: hallucinationCheck.riskLevel !== "high",
             content: filtered.filteredContent,
             hallucinationRisk: hallucinationCheck.riskLevel,
             hallucinationSuggestion: hallucinationCheck.suggestion,

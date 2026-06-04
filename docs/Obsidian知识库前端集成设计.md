@@ -7,6 +7,7 @@
 ## 现有架构分析
 
 ### 前端结构
+
 - **单页应用(SPA)**：原生JavaScript实现
 - **路由系统**：`routeToView()`函数通过URL hash映射到视图
 - **状态管理**：全局`state`对象存储所有状态
@@ -14,18 +15,19 @@
 - **已有视图**：home、smartNotes、knowledgeGraph、asset、path、intelligence等
 
 ### 已有的后端API
+
 ```javascript
 // src/modules/obsidian.js 已注册的API
-GET /api/obsidian/knowledge-base  // 获取知识库索引
-GET /api/obsidian/graph           // 获取知识图谱
-GET /api/obsidian/search          // 搜索
-GET /api/obsidian/note            // 获取单个笔记
-POST /api/obsidian/notes/write    // 写入笔记
-POST /api/obsidian/paths/write    // 写入学习路径
-GET /api/obsidian/status          // 获取题库状态
-POST /api/obsidian/sync/questions // 同步题库到数据库
-POST /api/obsidian/sync-rag       // 同步到RAG
-GET /api/obsidian/stats           // 知识库统计
+GET / api / obsidian / knowledge - base; // 获取知识库索引
+GET / api / obsidian / graph; // 获取知识图谱
+GET / api / obsidian / search; // 搜索
+GET / api / obsidian / note; // 获取单个笔记
+POST / api / obsidian / notes / write; // 写入笔记
+POST / api / obsidian / paths / write; // 写入学习路径
+GET / api / obsidian / status; // 获取题库状态
+POST / api / obsidian / sync / questions; // 同步题库到数据库
+POST / api / obsidian / sync - rag; // 同步到RAG
+GET / api / obsidian / stats; // 知识库统计
 ```
 
 ## 设计方案
@@ -36,10 +38,10 @@ GET /api/obsidian/stats           // 知识库统计
 
 ```javascript
 // 在 navGroups() 函数中修改 "学习资源" 组
-{ 
-    label: "学习资源", 
-    icon: "layers", 
-    desc: "资源 · 教程 · 题库 · 视频", 
+{
+    label: "学习资源",
+    icon: "layers",
+    desc: "资源 · 教程 · 题库 · 视频",
     items: [
         { view: "resources", icon: "layers", label: "资源中心", desc: "编程学习资源汇总" },
         { view: "tutorials", icon: "book", label: "在线教程", desc: "菜鸟教程等在线资料" },
@@ -103,7 +105,7 @@ async function loadObsidianStatus(force = false) {
 
 // 同步题库
 async function syncObsidianQuestions() {
-    const json = await request("/api/obsidian/sync/questions", { 
+    const json = await request("/api/obsidian/sync/questions", {
         method: "POST",
         body: JSON.stringify({})
     });
@@ -124,39 +126,42 @@ async function loadObsidianStats(force = false) {
 设计分为以下几个区域：
 
 #### 4.1 顶部区域
+
 - 标题和简介
 - 快速操作按钮
 - 统计卡片
 
 #### 4.2 标签切换区
+
 - 知识库浏览
 - 题库
 - 知识图谱
 - 我的笔记
 
 #### 4.3 主内容区
+
 根据标签显示对应内容
 
 ### 5. 完整视图函数代码
 
 ```javascript
 function obsidianView() {
-    const tab = ["knowledge", "questions", "graph", "myNotes"].includes(state.data.obsidianTab) 
-        ? state.data.obsidianTab 
+    const tab = ["knowledge", "questions", "graph", "myNotes"].includes(state.data.obsidianTab)
+        ? state.data.obsidianTab
         : "knowledge";
-    
+
     const kb = state.data.obsidianKnowledgeBase || {};
     const notes = kb.notes || [];
     const folders = kb.folders || [];
     const tags = kb.tags || [];
     const recent = kb.recent || [];
-    
+
     const status = state.data.obsidianStatus || {};
     const qCount = status.questions || 0;
     const subjects = status.subjects || {};
-    
+
     const graph = state.data.obsidianGraph || { nodes: [], edges: [] };
-    
+
     // 标签内容
     const tabContent = {
         knowledge: obsidianKnowledgeTab(folders, notes, tags, recent),
@@ -164,7 +169,7 @@ function obsidianView() {
         graph: obsidianGraphTab(graph),
         myNotes: obsidianMyNotesTab(recent)
     };
-    
+
     return `<main class="page obsidian-page">
         <section class="hero-row">
             <div class="hero">
@@ -204,7 +209,7 @@ function obsidianMetricCards() {
     const stats = state.data.obsidianStats || {};
     const kb = state.data.obsidianKnowledgeBase || {};
     const status = state.data.obsidianStatus || {};
-    
+
     return `<div class="metric-row">
         <article class="metric-card interactive">
             <div class="metric-top">
@@ -252,20 +257,21 @@ function obsidianMetricCards() {
 function obsidianKnowledgeTab(folders, notes, tags, recent) {
     const selectedNote = state.data.obsidianSelectedNote || null;
     const searchQuery = state.data.obsidianSearch || "";
-    
+
     let filteredNotes = notes;
     if (searchQuery) {
-        filteredNotes = notes.filter(note => 
-            note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (note.preview && note.preview.toLowerCase().includes(searchQuery.toLowerCase()))
+        filteredNotes = notes.filter(
+            note =>
+                note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (note.preview && note.preview.toLowerCase().includes(searchQuery.toLowerCase()))
         );
     }
-    
+
     // 筛选有内容的文件夹
     const folderList = Object.entries(folders)
         .filter(([_, count]) => count > 0)
         .sort((a, b) => b[1] - a[1]);
-    
+
     return `<div class="obsidian-grid">
         <aside class="side-card obsidian-sidebar">
             <article class="card">
@@ -283,12 +289,16 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                     <h2 class="section-title">${icon("folder", 18)} 目录</h2>
                 </div>
                 <div class="list">
-                    ${folderList.map(([folder, count]) => `
+                    ${folderList
+                        .map(
+                            ([folder, count]) => `
                         <button class="list-row action-row" data-obsidian-folder="${escapeHtml(folder)}">
                             <span>${escapeHtml(folder)}<small>${count} 个文件</small></span>
                             <span class="pill">${count}</span>
                         </button>
-                    `).join("")}
+                    `
+                        )
+                        .join("")}
                 </div>
             </article>
             
@@ -297,11 +307,16 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                     <h2 class="section-title">${icon("list", 18)} 标签</h2>
                 </div>
                 <div class="tag-row">
-                    ${tags.slice(0, 15).map(([tag, count]) => `
+                    ${tags
+                        .slice(0, 15)
+                        .map(
+                            ([tag, count]) => `
                         <span class="pill interactive" data-obsidian-tag="${escapeHtml(tag)}">
                             ${escapeHtml(tag)} · ${count}
                         </span>
-                    `).join("")}
+                    `
+                        )
+                        .join("")}
                 </div>
             </article>
         </aside>
@@ -314,7 +329,11 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                 </button>
             </div>
             <div class="obsidian-note-list">
-                ${filteredNotes.length ? filteredNotes.map(note => `
+                ${
+                    filteredNotes.length
+                        ? filteredNotes
+                              .map(
+                                  note => `
                     <button class="obsidian-note-item ${selectedNote?.path === note.path ? "active" : ""}"
                             data-obsidian-note="${escapeAttr(note.path)}">
                         <div class="note-item-header">
@@ -325,21 +344,34 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                             ${escapeHtml(note.folder)} · ${formatDate(note.updatedAt)}
                         </small>
                         <p class="note-preview">${escapeHtml(note.preview || "")}</p>
-                        ${note.tags?.length ? `
+                        ${
+                            note.tags?.length
+                                ? `
                             <div class="tag-row compact">
-                                ${note.tags.slice(0, 3).map(tag => `<span class="pill tiny">${escapeHtml(tag)}</span>`).join("")}
+                                ${note.tags
+                                    .slice(0, 3)
+                                    .map(tag => `<span class="pill tiny">${escapeHtml(tag)}</span>`)
+                                    .join("")}
                             </div>
-                        ` : ""}
+                        `
+                                : ""
+                        }
                     </button>
-                `).join("") : `
+                `
+                              )
+                              .join("")
+                        : `
                     <div class="empty-state">
                         <p>未找到匹配的笔记，尝试其他关键词。</p>
                     </div>
-                `}
+                `
+                }
             </div>
         </article>
         
-        ${selectedNote ? `
+        ${
+            selectedNote
+                ? `
         <aside class="side-card obsidian-detail">
             <article class="card">
                 <div class="card-head">
@@ -357,16 +389,24 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                     ${renderMarkdownLite(selectedNote.content || selectedNote.preview || "")}
                 </div>
                 <div class="obsidian-note-links">
-                    ${selectedNote.links?.length ? `
+                    ${
+                        selectedNote.links?.length
+                            ? `
                         <h4>双链关联</h4>
                         <div class="tag-row">
-                            ${selectedNote.links.map(link => `
+                            ${selectedNote.links
+                                .map(
+                                    link => `
                                 <span class="pill interactive" data-obsidian-note="${escapeAttr(link)}">
                                     ${escapeHtml(link)}
                                 </span>
-                            `).join("")}
+                            `
+                                )
+                                .join("")}
                         </div>
-                    ` : ""}
+                    `
+                            : ""
+                    }
                 </div>
                 <div class="obsidian-note-actions">
                     <button class="btn ghost" data-obsidian-open-external="${escapeAttr(selectedNote.obsidianUri || "")}">
@@ -378,14 +418,16 @@ function obsidianKnowledgeTab(folders, notes, tags, recent) {
                 </div>
             </article>
         </aside>
-        ` : ""}
+        `
+                : ""
+        }
     </div>`;
 }
 
 function obsidianQuestionsTab(status, subjects) {
     const subjectList = Object.entries(subjects || {});
     const samples = status.sample || [];
-    
+
     return `<div class="obsidian-grid">
         <aside class="side-card obsidian-sidebar">
             <article class="card">
@@ -393,12 +435,16 @@ function obsidianQuestionsTab(status, subjects) {
                     <h2 class="section-title">${icon("db", 18)} 题库统计</h2>
                 </div>
                 <div class="list">
-                    ${subjectList.map(([subject, count]) => `
+                    ${subjectList
+                        .map(
+                            ([subject, count]) => `
                         <div class="list-row">
                             <span>${escapeHtml(subject)}<small>${count} 道题</small></span>
                             <span class="pill">${count}</span>
                         </div>
-                    `).join("")}
+                    `
+                        )
+                        .join("")}
                 </div>
             </article>
             
@@ -423,7 +469,9 @@ function obsidianQuestionsTab(status, subjects) {
                 <small>共 ${status.questions || 0} 道题</small>
             </div>
             <div class="obsidian-question-list">
-                ${samples.map((q, i) => `
+                ${samples
+                    .map(
+                        (q, i) => `
                     <div class="obsidian-question-item">
                         <div class="question-header">
                             <span class="question-number">Q${i + 1}</span>
@@ -437,7 +485,9 @@ function obsidianQuestionsTab(status, subjects) {
                             <code>${escapeHtml(q.answer || "")}</code>
                         </div>
                     </div>
-                `).join("")}
+                `
+                    )
+                    .join("")}
             </div>
         </article>
     </div>`;
@@ -446,7 +496,7 @@ function obsidianQuestionsTab(status, subjects) {
 function obsidianGraphTab(graph) {
     const nodes = graph.nodes || [];
     const edges = graph.edges || [];
-    
+
     return `<div class="obsidian-single">
         <article class="card">
             <div class="card-head">
@@ -556,10 +606,7 @@ function handleObsidianClearNote() {
 async function handleObsidianRefresh() {
     state.data.obsidianKnowledgeBase = null;
     state.data.obsidianStats = null;
-    await Promise.all([
-        loadObsidianKnowledgeBase(true),
-        loadObsidianStats(true)
-    ]);
+    await Promise.all([loadObsidianKnowledgeBase(true), loadObsidianStats(true)]);
     toast("知识库已刷新");
     render();
 }
@@ -606,12 +653,12 @@ async function handleObsidianGraphRefresh() {
 
 ```javascript
 // Obsidian 标签切换
-document.addEventListener("click", (e) => {
+document.addEventListener("click", e => {
     const tabBtn = e.target.closest("[data-obsidian-tab]");
     if (tabBtn) {
         handleObsidianTab(tabBtn.dataset.obsidianTab);
     }
-    
+
     const searchInput = e.target.closest("[data-obsidian-search]");
     if (searchInput) {
         // 防抖处理
@@ -620,37 +667,37 @@ document.addEventListener("click", (e) => {
             handleObsidianSearch(searchInput.value);
         }, 300);
     }
-    
+
     const noteBtn = e.target.closest("[data-obsidian-note]");
     if (noteBtn) {
         handleObsidianNote(noteBtn.dataset.obsidianNote);
     }
-    
+
     const clearNoteBtn = e.target.closest("[data-obsidian-clear-note]");
     if (clearNoteBtn) {
         handleObsidianClearNote();
     }
-    
+
     const refreshBtn = e.target.closest("[data-obsidian-refresh]");
     if (refreshBtn) {
         handleObsidianRefresh();
     }
-    
+
     const syncBtn = e.target.closest("[data-obsidian-sync-questions]");
     if (syncBtn) {
         handleObsidianSyncQuestions();
     }
-    
+
     const openExtBtn = e.target.closest("[data-obsidian-open-external]");
     if (openExtBtn) {
         handleObsidianOpenExternal(openExtBtn.dataset.obsidianOpenExternal);
     }
-    
+
     const addNoteBtn = e.target.closest("[data-obsidian-add-note]");
     if (addNoteBtn) {
         handleObsidianAddNote(addNoteBtn.dataset.obsidianAddNote);
     }
-    
+
     const graphRefreshBtn = e.target.closest("[data-obsidian-graph-refresh]");
     if (graphRefreshBtn) {
         handleObsidianGraphRefresh();
@@ -658,7 +705,7 @@ document.addEventListener("click", (e) => {
 });
 
 // 搜索框输入事件
-document.addEventListener("input", (e) => {
+document.addEventListener("input", e => {
     if (e.target.matches("[data-obsidian-search]")) {
         clearTimeout(state._obsidianSearchTimer);
         state._obsidianSearchTimer = setTimeout(() => {
@@ -687,7 +734,8 @@ if (state.view === "obsidian") {
 
 ```css
 /* Obsidian 页面样式 */
-.obsidian-page { }
+.obsidian-page {
+}
 
 .obsidian-tabs {
     margin-bottom: 20px;
@@ -703,10 +751,14 @@ if (state.view === "obsidian") {
     grid-template-columns: 260px 1fr 380px;
 }
 
-.obsidian-sidebar { }
-.obsidian-main { }
-.obsidian-detail { }
-.obsidian-single { }
+.obsidian-sidebar {
+}
+.obsidian-main {
+}
+.obsidian-detail {
+}
+.obsidian-single {
+}
 
 .obsidian-search input {
     width: 100%;
@@ -878,10 +930,23 @@ if (state.view === "obsidian") {
     line-height: 1.7;
 }
 
-.markdown-preview h1 { font-size: 24px; margin: 20px 0 12px; font-weight: 700; }
-.markdown-preview h2 { font-size: 20px; margin: 18px 0 10px; font-weight: 600; }
-.markdown-preview h3 { font-size: 18px; margin: 16px 0 8px; font-weight: 600; }
-.markdown-preview ul, .markdown-preview ol {
+.markdown-preview h1 {
+    font-size: 24px;
+    margin: 20px 0 12px;
+    font-weight: 700;
+}
+.markdown-preview h2 {
+    font-size: 20px;
+    margin: 18px 0 10px;
+    font-weight: 600;
+}
+.markdown-preview h3 {
+    font-size: 18px;
+    margin: 16px 0 8px;
+    font-weight: 600;
+}
+.markdown-preview ul,
+.markdown-preview ol {
     padding-left: 24px;
     margin: 10px 0;
 }
@@ -912,6 +977,7 @@ if (state.view === "obsidian") {
 ## 实现步骤
 
 ### 阶段 1：基础集成（1-2小时）
+
 1. 添加导航入口
 2. 添加路由映射
 3. 创建基础视图函数
@@ -919,18 +985,21 @@ if (state.view === "obsidian") {
 5. 添加数据加载函数
 
 ### 阶段 2：知识库浏览（2-3小时）
+
 1. 完成知识库标签页
 2. 实现搜索和筛选
 3. 实现笔记选择和详情查看
 4. 添加样式
 
 ### 阶段 3：题库和图谱（2-3小时）
+
 1. 完成题库标签页
 2. 完成知识图谱标签页
 3. 完成我的笔记标签页
 4. 添加所有事件处理
 
 ### 阶段 4：优化和测试（1-2小时）
+
 1. 完善样式和交互
 2. 添加加载状态
 3. 测试所有功能
@@ -940,16 +1009,17 @@ if (state.view === "obsidian") {
 
 需要修改/创建的文件：
 
-| 文件 | 操作 |
-|------|------|
-| `apps/web/public/js/edusmart-app.js` | 修改：添加新功能 |
-| `apps/web/public/css/edusmart-pro.css` | 添加：新样式 |
-| `src/server/route-manifest.js` | 已有，无需修改 |
-| `src/modules/obsidian.js` | 已有，无需修改 |
+| 文件                                   | 操作             |
+| -------------------------------------- | ---------------- |
+| `apps/web/public/js/edusmart-app.js`   | 修改：添加新功能 |
+| `apps/web/public/css/edusmart-pro.css` | 添加：新样式     |
+| `src/server/route-manifest.js`         | 已有，无需修改   |
+| `src/modules/obsidian.js`              | 已有，无需修改   |
 
 ## 预期效果
 
 ### 1. 知识库浏览
+
 - 可以浏览Obsidian知识库中的所有笔记
 - 按文件夹、标签筛选
 - 实时搜索
@@ -957,17 +1027,20 @@ if (state.view === "obsidian") {
 - 在Obsidian中打开笔记
 
 ### 2. 题库功能
+
 - 查看题库统计
 - 按学科筛选题目
 - 预览题目内容
 - 一键同步到数据库
 
 ### 3. 知识图谱
+
 - 可视化双链图谱
 - 查看节点关联
 - 交互式浏览
 
 ### 4. 我的笔记
+
 - 查看和管理用户笔记
 - 新建笔记
 - 从知识库添加笔记
@@ -983,15 +1056,19 @@ if (state.view === "obsidian") {
 ## 扩展功能（可选）
 
 ### 1. RAG问答集成
+
 在知识库页面添加问答功能，直接调用本地RAG。
 
 ### 2. 笔记编辑
+
 支持直接在EduSmart中编辑Obsidian笔记。
 
 ### 3. 导入/导出
+
 支持导入外部资料到Obsidian，或导出学习资料。
 
 ### 4. 学习路径生成
+
 基于知识库自动生成学习路径。
 
 ## 总结

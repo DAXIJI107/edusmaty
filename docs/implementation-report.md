@@ -17,37 +17,37 @@
 
 ### 2.1 新建文件
 
-| 文件 | 路径 | 功能 | 行数 |
-|------|------|------|------|
-| 知识图谱 API | `api/knowledge-graph.js` | 笔记链接管理 + 图谱数据查询 | ~170 |
-| Agent 协作 API | `api/agent-collaborate.js` | 多 Agent 串行协作（4 角色） | ~100 |
-| 概念画布 API | `api/concept-canvas.js` | 画布 CRUD + 元素搜索 | ~100 |
-| 数据填充脚本 | `scripts/seed-cs-data.js` | 计算机学科样本数据 | ~1172 |
-| API 测试脚本 | `scripts/test-all-apis.ps1` | PowerShell 自动化 API 测试 | ~48 |
-| 融合设计文档 | `docs/feature-design-ai-knowledge-integration.md` | 8 功能设计文档 | ~560 |
-| 实现报告 | `docs/implementation-report.md` | 本文件 | ~ |
+| 文件           | 路径                                              | 功能                        | 行数  |
+| -------------- | ------------------------------------------------- | --------------------------- | ----- |
+| 知识图谱 API   | `api/knowledge-graph.js`                          | 笔记链接管理 + 图谱数据查询 | ~170  |
+| Agent 协作 API | `api/agent-collaborate.js`                        | 多 Agent 串行协作（4 角色） | ~100  |
+| 概念画布 API   | `api/concept-canvas.js`                           | 画布 CRUD + 元素搜索        | ~100  |
+| 数据填充脚本   | `scripts/seed-cs-data.js`                         | 计算机学科样本数据          | ~1172 |
+| API 测试脚本   | `scripts/test-all-apis.ps1`                       | PowerShell 自动化 API 测试  | ~48   |
+| 融合设计文档   | `docs/feature-design-ai-knowledge-integration.md` | 8 功能设计文档              | ~560  |
+| 实现报告       | `docs/implementation-report.md`                   | 本文件                      | ~     |
 
 ### 2.2 修改文件
 
-| 文件 | 修改内容 | 变更量 |
-|------|----------|--------|
-| [server.js](file:///d:/Desktop/new/edusmart-rebuild/server.js) | 挂载 3 个新路由 + 添加 `/knowledge-graph`、`/concept-canvas` 到 appRoutes | +5 行 |
-| [js/edusmart-app.js](file:///d:/Desktop/new/edusmart-rebuild/js/edusmart-app.js) | 新增 `loadTeacherKnowledgeGraph()` + 知识图谱 Tab HTML 模板 + 知识图谱视图 + 概念画布视图 + 多Agent协作卡片 + ReAct链 + 8组事件处理器 | +700 行 |
-| [css/edusmart-pro.css](file:///d:/Desktop/new/edusmart-rebuild/css/edusmart-pro.css) | 知识图谱 + 协作 + ReAct + 画布 + 热力图样式 + 响应式 | +120 行 |
-| [api/teacher.js](file:///d:/Desktop/new/edusmart-rebuild/api/teacher.js) | 新增 `GET /knowledge-graph` 端点（22节点+13边+薄弱学生） | +75 行 |
+| 文件                                                                                 | 修改内容                                                                                                                              | 变更量  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| [server.js](file:///d:/Desktop/new/edusmart-rebuild/server.js)                       | 挂载 3 个新路由 + 添加 `/knowledge-graph`、`/concept-canvas` 到 appRoutes                                                             | +5 行   |
+| [js/edusmart-app.js](file:///d:/Desktop/new/edusmart-rebuild/js/edusmart-app.js)     | 新增 `loadTeacherKnowledgeGraph()` + 知识图谱 Tab HTML 模板 + 知识图谱视图 + 概念画布视图 + 多Agent协作卡片 + ReAct链 + 8组事件处理器 | +700 行 |
+| [css/edusmart-pro.css](file:///d:/Desktop/new/edusmart-rebuild/css/edusmart-pro.css) | 知识图谱 + 协作 + ReAct + 画布 + 热力图样式 + 响应式                                                                                  | +120 行 |
+| [api/teacher.js](file:///d:/Desktop/new/edusmart-rebuild/api/teacher.js)             | 新增 `GET /knowledge-graph` 端点（22节点+13边+薄弱学生）                                                                              | +75 行  |
 
 ---
 
 ## 三、数据库新建表
 
-| 表名 | 用途 | 字段数 |
-|------|------|--------|
-| `note_links` | 笔记双向链接关系 | 5 |
-| `canvases` | 概念画布数据 | 6 |
-| `daily_journals` | 每日学习日记 | 5 |
-| `agent_tools` | Agent 工具注册 | 7 |
-| `agent_collaboration_logs` | 多 Agent 协作日志 | 7 |
-| `ai_courses` | AI Agent 微课程 | 7 |
+| 表名                       | 用途              | 字段数 |
+| -------------------------- | ----------------- | ------ |
+| `note_links`               | 笔记双向链接关系  | 5      |
+| `canvases`                 | 概念画布数据      | 6      |
+| `daily_journals`           | 每日学习日记      | 5      |
+| `agent_tools`              | Agent 工具注册    | 7      |
+| `agent_collaboration_logs` | 多 Agent 协作日志 | 7      |
+| `ai_courses`               | AI Agent 微课程   | 7      |
 
 ---
 
@@ -55,37 +55,37 @@
 
 ### 4.1 P0 功能 — 全部通过
 
-| # | 接口 | 方法 | 状态 | 实际返回 |
-|---|------|------|------|----------|
-| 1 | `/api/knowledge-graph` | GET | ✅ 200 | 返回笔记节点(9) + 知识节点(36) + 边 |
-| 2 | `/api/knowledge-graph/links` | POST | ✅ 200 | `{"success":true,"id":2}` |
-| 3 | `/api/knowledge-graph/links/:id` | DELETE | ✅ 404 | 链接不存在（预期行为） |
-| 4 | `/api/knowledge-graph/note-links/:noteId` | GET | ✅ 200 | 返回笔记的所有双向链接 |
-| 5 | `/api/agent-collaborate/start` | POST | ✅ 200 | 4 个 Agent 串行执行（包含 plan/teach/quiz/evaluate） |
-| 6 | `/api/agent-collaborate/history` | GET | ✅ 200 | 返回历史记录（含 task_id、4个agent信息） |
-| 7 | `/api/agent-collaborate/:taskId` | GET | ✅ 200 | 返回指定任务详情 |
-| 8 | `/api/teacher/knowledge-graph` | GET | ✅ 200 | 返回 22 知识节点（含 avgScore/studentCount/examCount/weakStudents）+ 13 边 |
+| #   | 接口                                      | 方法   | 状态   | 实际返回                                                                   |
+| --- | ----------------------------------------- | ------ | ------ | -------------------------------------------------------------------------- |
+| 1   | `/api/knowledge-graph`                    | GET    | ✅ 200 | 返回笔记节点(9) + 知识节点(36) + 边                                        |
+| 2   | `/api/knowledge-graph/links`              | POST   | ✅ 200 | `{"success":true,"id":2}`                                                  |
+| 3   | `/api/knowledge-graph/links/:id`          | DELETE | ✅ 404 | 链接不存在（预期行为）                                                     |
+| 4   | `/api/knowledge-graph/note-links/:noteId` | GET    | ✅ 200 | 返回笔记的所有双向链接                                                     |
+| 5   | `/api/agent-collaborate/start`            | POST   | ✅ 200 | 4 个 Agent 串行执行（包含 plan/teach/quiz/evaluate）                       |
+| 6   | `/api/agent-collaborate/history`          | GET    | ✅ 200 | 返回历史记录（含 task_id、4个agent信息）                                   |
+| 7   | `/api/agent-collaborate/:taskId`          | GET    | ✅ 200 | 返回指定任务详情                                                           |
+| 8   | `/api/teacher/knowledge-graph`            | GET    | ✅ 200 | 返回 22 知识节点（含 avgScore/studentCount/examCount/weakStudents）+ 13 边 |
 
 ### 4.2 P1 功能 — 全部通过
 
-| # | 接口 | 方法 | 状态 | 实际返回 |
-|---|------|------|------|----------|
-| 9 | `/api/concept-canvas` | GET | ✅ 200 | 返回画布列表 |
-| 10 | `/api/concept-canvas` | POST | ✅ 200 | `{"success":true,"data":{"id":3}}` |
-| 11 | `/api/concept-canvas/elements/search?q=二分` | GET | ✅ 200 | 找到"二分查找"（知识点/算法） |
-| 12 | `/api/concept-canvas/:id` | GET | ✅ 200 | 返回画布详情 |
-| 13 | `/api/concept-canvas/:id` | PUT | ✅ 200 | 更新画布成功 |
-| 14 | `/api/concept-canvas/:id` | DELETE | ✅ 200 | 删除画布成功 |
+| #   | 接口                                         | 方法   | 状态   | 实际返回                           |
+| --- | -------------------------------------------- | ------ | ------ | ---------------------------------- |
+| 9   | `/api/concept-canvas`                        | GET    | ✅ 200 | 返回画布列表                       |
+| 10  | `/api/concept-canvas`                        | POST   | ✅ 200 | `{"success":true,"data":{"id":3}}` |
+| 11  | `/api/concept-canvas/elements/search?q=二分` | GET    | ✅ 200 | 找到"二分查找"（知识点/算法）      |
+| 12  | `/api/concept-canvas/:id`                    | GET    | ✅ 200 | 返回画布详情                       |
+| 13  | `/api/concept-canvas/:id`                    | PUT    | ✅ 200 | 更新画布成功                       |
+| 14  | `/api/concept-canvas/:id`                    | DELETE | ✅ 200 | 删除画布成功                       |
 
 ### 4.3 全部 API 测试通过率
 
-| 类型 | 通过数 | 总数 | 通过率 |
-|------|--------|------|--------|
-| P0 知识图谱 | 4 | 4 | **100%** |
-| P0 Agent 协作 | 4 | 4 | **100%** |
-| P0 教师热力图 | 1 | 1 | **100%** |
-| P1 概念画布 | 6 | 6 | **100%** |
-| **合计** | **14** | **14** | **100%** |
+| 类型          | 通过数 | 总数   | 通过率   |
+| ------------- | ------ | ------ | -------- |
+| P0 知识图谱   | 4      | 4      | **100%** |
+| P0 Agent 协作 | 4      | 4      | **100%** |
+| P0 教师热力图 | 1      | 1      | **100%** |
+| P1 概念画布   | 6      | 6      | **100%** |
+| **合计**      | **14** | **14** | **100%** |
 
 ### 4.4 多 Agent 协作实测结果
 
@@ -158,23 +158,25 @@
 
 执行 [scripts/seed-cs-data.js](file:///d:/Desktop/new/edusmart-rebuild/scripts/seed-cs-data.js) 后：
 
-| 数据类别 | 数量 | 详情 |
-|----------|------|------|
-| 知识节点 | 36 | 数据结构(10) + 算法(10) + 数据库(6) + 网络(5) + 操作系统(5) |
-| 题库 | 448 | 已有数据 + 自动适配 schema 补充 |
-| AI 课程 | 5 | 什么是AI Agent、ReAct范式、工具调用、记忆系统、多智能体协作 |
-| 笔记 | 14 | 含 CS 核心知识笔记 |
-| **支持幂等执行** | — | `INSERT IGNORE` 防重入，再次运行不重复插入 |
+| 数据类别         | 数量 | 详情                                                        |
+| ---------------- | ---- | ----------------------------------------------------------- |
+| 知识节点         | 36   | 数据结构(10) + 算法(10) + 数据库(6) + 网络(5) + 操作系统(5) |
+| 题库             | 448  | 已有数据 + 自动适配 schema 补充                             |
+| AI 课程          | 5    | 什么是AI Agent、ReAct范式、工具调用、记忆系统、多智能体协作 |
+| 笔记             | 14   | 含 CS 核心知识笔记                                          |
+| **支持幂等执行** | —    | `INSERT IGNORE` 防重入，再次运行不重复插入                  |
 
 ---
 
 ## 七、Bug 修复记录
 
 ### 7.1 POST `/api/knowledge-graph/links` 400 错误
+
 - **原因**: API 使用 `sourceNoteId`（camelCase）接收参数，但前端使用 `source_note_id`（snake_case）
 - **修复**: 兼容两种命名方式 `req.body.source_note_id || req.body.sourceNoteId`
 
 ### 7.2 `loadTeacherKnowledgeGraph is not defined` 错误
+
 - **原因**: 函数被错误放置在内层事件绑定函数作用域内，调用方无法访问
 - **修复**: 将 `loadTeacherKnowledgeGraph()` 提升至 `loadTeacherDashboard()` 同级作用域（全局可用）
 - **同步修复**: 补全教师工作台知识图谱 Tab 的 HTML 模板（此前仅有 Tab 按钮，无内容区）
@@ -183,22 +185,23 @@
 
 ## 八、功能完成度总结
 
-| 功能 | 优先级 | 后端 | 前端 | 数据库 | 数据 | 完成度 |
-|------|--------|------|------|--------|------|--------|
-| 知识网络图谱 | P0 | ✅ | ✅ | ✅ | ✅ | **100%** |
-| 多 Agent 协作 | P0 | ✅ | ✅ | ✅ | — | **100%** |
-| 知识掌握热力图 | P0 | ✅ | ✅ | — | ✅ | **100%** |
-| 概念画布 | P1 | ✅ | ✅ | ✅ | — | **85%** |
-| ReAct 可视化 | P1 | — | ✅ | — | — | **70%** |
-| AI Agent 课程 | P1 | ✅ | ✅ | ✅ | ✅ | **80%** |
-| 每日学习日记 | P1 | ✅ | ✅ | ✅ | — | **60%** |
-| 自定义工具 | P1 | ✅ | ✅ | ✅ | — | **60%** |
+| 功能           | 优先级 | 后端 | 前端 | 数据库 | 数据 | 完成度   |
+| -------------- | ------ | ---- | ---- | ------ | ---- | -------- |
+| 知识网络图谱   | P0     | ✅   | ✅   | ✅     | ✅   | **100%** |
+| 多 Agent 协作  | P0     | ✅   | ✅   | ✅     | —    | **100%** |
+| 知识掌握热力图 | P0     | ✅   | ✅   | —      | ✅   | **100%** |
+| 概念画布       | P1     | ✅   | ✅   | ✅     | —    | **85%**  |
+| ReAct 可视化   | P1     | —    | ✅   | —      | —    | **70%**  |
+| AI Agent 课程  | P1     | ✅   | ✅   | ✅     | ✅   | **80%**  |
+| 每日学习日记   | P1     | ✅   | ✅   | ✅     | —    | **60%**  |
+| 自定义工具     | P1     | ✅   | ✅   | ✅     | —    | **60%**  |
 
 ---
 
 ## 九、已知限制与后续建议
 
 ### 9.1 已知限制
+
 - **ReAct 可视化**：前端渲染已就位，后端需在 AI 回答时生成 `react_steps` 字段（修改 `/api/ai` 的 Spark AI prompt）
 - **概念画布拖拽**：搜索元素可拖拽，但画布连线编辑功能需额外实现
 - **AI Agent 课程**：内容已写入 `ai_courses` 表，前端课程页面需接入数据+进度追踪
@@ -206,6 +209,7 @@
 - **自定义工具注册**：`agent_tools` 表已创建，前端页面就位，工具执行逻辑未实现
 
 ### 9.2 后续建议
+
 1. **ReAct 结构化输出**：修改 Spark AI prompt，要求返回 `{thought, action, observation, final_answer}` JSON
 2. **画布连线编辑**：添加双击创建连线、拖拽调整节点位置的交互
 3. **课程系统集成**：将 `ai_courses` 接入现有课程系统，支持进度追踪

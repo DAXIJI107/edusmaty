@@ -1,12 +1,12 @@
 // core/ChromaClient.js
 // ChromaDB 向量数据库客户端 — HTTP API 封装
 // 用于存储和检索文本 Embedding 向量
-const axios = require('axios');
-const config = require('../config');
+const axios = require("axios");
+const config = require("../config");
 
 class ChromaClient {
     constructor() {
-        this.baseUrl = config.chroma.url.replace(/\/+$/, '');
+        this.baseUrl = config.chroma.url.replace(/\/+$/, "");
         this.collectionName = config.chroma.collectionName;
         this.timeoutMs = config.chroma.timeoutMs;
         this.collectionId = null;
@@ -48,15 +48,15 @@ class ChromaClient {
                 `${this.baseUrl}/api/v2/collections`,
                 {
                     name: this.collectionName,
-                    metadata: { description: 'EduSmart RAG knowledge base' }
+                    metadata: { description: "EduSmart RAG knowledge base" }
                 },
-                { timeout: this.timeoutMs, headers: { 'Content-Type': 'application/json' } }
+                { timeout: this.timeoutMs, headers: { "Content-Type": "application/json" } }
             );
             this.collectionId = createResp.data?.id;
             this.ready = true;
             return createResp.data;
         } catch (error) {
-            console.warn('ChromaDB 集合操作失败:', error.message);
+            console.warn("ChromaDB 集合操作失败:", error.message);
             return null;
         }
     }
@@ -73,16 +73,16 @@ class ChromaClient {
             const ids = items.map(i => i.id);
             const embeddings = items.map(i => i.embedding);
             const metadatas = items.map(i => i.metadata || {});
-            const documents = items.map(i => i.document || '');
+            const documents = items.map(i => i.document || "");
 
             await axios.post(
                 `${this.baseUrl}/api/v2/collections/${this.collectionId}/add`,
                 { ids, embeddings, metadatas, documents },
-                { timeout: this.timeoutMs * 2, headers: { 'Content-Type': 'application/json' } }
+                { timeout: this.timeoutMs * 2, headers: { "Content-Type": "application/json" } }
             );
             return items.length;
         } catch (error) {
-            console.warn('ChromaDB add 失败:', error.message);
+            console.warn("ChromaDB add 失败:", error.message);
             return 0;
         }
     }
@@ -101,17 +101,16 @@ class ChromaClient {
             const body = {
                 query_embeddings: [queryEmbedding],
                 n_results: nResults,
-                include: ['documents', 'metadatas', 'distances']
+                include: ["documents", "metadatas", "distances"]
             };
             if (whereFilter) {
                 body.where = whereFilter;
             }
 
-            const response = await axios.post(
-                `${this.baseUrl}/api/v2/collections/${this.collectionId}/query`,
-                body,
-                { timeout: this.timeoutMs, headers: { 'Content-Type': 'application/json' } }
-            );
+            const response = await axios.post(`${this.baseUrl}/api/v2/collections/${this.collectionId}/query`, body, {
+                timeout: this.timeoutMs,
+                headers: { "Content-Type": "application/json" }
+            });
 
             const data = response.data;
             if (!data?.ids?.[0]) return [];
@@ -120,7 +119,7 @@ class ChromaClient {
             for (let i = 0; i < data.ids[0].length; i++) {
                 results.push({
                     id: data.ids[0][i],
-                    document: data.documents?.[0]?.[i] || '',
+                    document: data.documents?.[0]?.[i] || "",
                     metadata: data.metadatas?.[0]?.[i] || {},
                     distance: data.distances?.[0]?.[i] ?? 1,
                     similarity: 1 - (data.distances?.[0]?.[i] ?? 1) // 距离转相似度
@@ -128,7 +127,7 @@ class ChromaClient {
             }
             return results;
         } catch (error) {
-            console.warn('ChromaDB query 失败:', error.message);
+            console.warn("ChromaDB query 失败:", error.message);
             return [];
         }
     }
@@ -142,11 +141,11 @@ class ChromaClient {
             await axios.post(
                 `${this.baseUrl}/api/v2/collections/${this.collectionId}/delete`,
                 { ids: Array.isArray(ids) ? ids : [ids] },
-                { timeout: this.timeoutMs, headers: { 'Content-Type': 'application/json' } }
+                { timeout: this.timeoutMs, headers: { "Content-Type": "application/json" } }
             );
             return Array.isArray(ids) ? ids.length : 1;
         } catch (error) {
-            console.warn('ChromaDB delete 失败:', error.message);
+            console.warn("ChromaDB delete 失败:", error.message);
             return 0;
         }
     }
@@ -158,10 +157,9 @@ class ChromaClient {
         if (!this.collectionId) await this.getOrCreateCollection();
         if (!this.collectionId) return 0;
         try {
-            const resp = await axios.get(
-                `${this.baseUrl}/api/v2/collections/${this.collectionId}`,
-                { timeout: this.timeoutMs }
-            );
+            const resp = await axios.get(`${this.baseUrl}/api/v2/collections/${this.collectionId}`, {
+                timeout: this.timeoutMs
+            });
             return resp.data?.count || 0;
         } catch (error) {
             return 0;

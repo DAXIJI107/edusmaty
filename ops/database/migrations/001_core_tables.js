@@ -1,7 +1,7 @@
 // migrations/001_core_tables.js
 // 核心表结构 — 首次迁移
 
-exports.up = async (db) => {
+exports.up = async db => {
     // ========== 用户与认证 ==========
     await db.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -328,21 +328,35 @@ exports.up = async (db) => {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    console.log('  → 核心表创建完成');
+    console.log("  → 核心表创建完成");
 };
 
-exports.down = async (db) => {
+exports.down = async db => {
     const tables = [
-        'feedback_loop', 'error_book', 'notifications', 'learning_events',
-        'rag_query_logs', 'rag_chunks', 'rag_documents', 'rag_sources',
-        'diagnostic_results', 'student_knowledge', 'student_profiles',
-        'user_answers', 'exam_records', 'exams', 'questions',
-        'prerequisites', 'knowledge_edges', 'knowledge_points', 'knowledge_nodes',
-        'course_materials'
+        "feedback_loop",
+        "error_book",
+        "notifications",
+        "learning_events",
+        "rag_query_logs",
+        "rag_chunks",
+        "rag_documents",
+        "rag_sources",
+        "diagnostic_results",
+        "student_knowledge",
+        "student_profiles",
+        "user_answers",
+        "exam_records",
+        "exams",
+        "questions",
+        "prerequisites",
+        "knowledge_edges",
+        "knowledge_points",
+        "knowledge_nodes",
+        "course_materials"
     ];
     for (const table of tables) {
         await db.query(`DROP TABLE IF EXISTS \`${table}\``);
     }
-    await db.query('DROP TABLE IF EXISTS users');
-    console.log('  ← 核心表已移除');
+    await db.query("DROP TABLE IF EXISTS users");
+    console.log("  ← 核心表已移除");
 };

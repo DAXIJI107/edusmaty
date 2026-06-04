@@ -16,7 +16,13 @@ class LearningAssessment {
             this.getResourceUsageStats()
         ]);
 
-        const scores = this.calculateDimensionScores(examStats, errorStats, studyTime, knowledgeProgress, resourceUsage);
+        const scores = this.calculateDimensionScores(
+            examStats,
+            errorStats,
+            studyTime,
+            knowledgeProgress,
+            resourceUsage
+        );
         const trend = await this.getLearningTrend();
         const recommendations = this.generateRecommendations(scores, trend);
 
@@ -25,56 +31,63 @@ class LearningAssessment {
             timestamp: new Date().toISOString(),
             dimensions: {
                 examPerformance: {
-                    label: '考试表现',
+                    label: "考试表现",
                     score: scores.examScore,
                     detail: examStats
                 },
                 errorAnalysis: {
-                    label: '错题分析',
+                    label: "错题分析",
                     score: scores.errorScore,
                     detail: errorStats
                 },
                 studyConsistency: {
-                    label: '学习持续性',
+                    label: "学习持续性",
                     score: scores.consistencyScore,
                     detail: studyTime
                 },
                 knowledgeMastery: {
-                    label: '知识掌握',
+                    label: "知识掌握",
                     score: scores.knowledgeScore,
                     detail: knowledgeProgress
                 },
                 resourceUtilization: {
-                    label: '资源利用',
+                    label: "资源利用",
                     score: scores.resourceScore,
                     detail: resourceUsage
                 },
                 improvementRate: {
-                    label: '进步速度',
+                    label: "进步速度",
                     score: scores.improvementScore,
                     detail: trend
                 }
             },
             overallScore: Math.round(
-                (scores.examScore + scores.errorScore + scores.consistencyScore +
-                 scores.knowledgeScore + scores.resourceScore + scores.improvementScore) / 6
+                (scores.examScore +
+                    scores.errorScore +
+                    scores.consistencyScore +
+                    scores.knowledgeScore +
+                    scores.resourceScore +
+                    scores.improvementScore) /
+                    6
             ),
             level: this.getLevel(scores),
             trend: trend,
             recommendations: recommendations,
             radarData: {
-                labels: ['考试表现', '错题改进', '学习持续', '知识掌握', '资源利用', '进步速度'],
-                datasets: [{
-                    label: '当前水平',
-                    data: [
-                        scores.examScore,
-                        scores.errorScore,
-                        scores.consistencyScore,
-                        scores.knowledgeScore,
-                        scores.resourceScore,
-                        scores.improvementScore
-                    ]
-                }]
+                labels: ["考试表现", "错题改进", "学习持续", "知识掌握", "资源利用", "进步速度"],
+                datasets: [
+                    {
+                        label: "当前水平",
+                        data: [
+                            scores.examScore,
+                            scores.errorScore,
+                            scores.consistencyScore,
+                            scores.knowledgeScore,
+                            scores.resourceScore,
+                            scores.improvementScore
+                        ]
+                    }
+                ]
             }
         };
     }
@@ -110,7 +123,7 @@ class LearningAssessment {
             recentScores: recentRows.map(r => ({
                 score: parseFloat(r.score) || 0,
                 total: parseFloat(r.total_score) || 100,
-                percent: Math.round((parseFloat(r.score) || 0) / (parseFloat(r.total_score) || 100) * 100),
+                percent: Math.round(((parseFloat(r.score) || 0) / (parseFloat(r.total_score) || 100)) * 100),
                 date: r.event_time
             }))
         };
@@ -138,9 +151,8 @@ class LearningAssessment {
 
         return {
             ...rows[0],
-            resolutionRate: rows[0].totalErrors > 0 
-                ? Math.round(rows[0].resolvedCount / rows[0].totalErrors * 100) 
-                : 0,
+            resolutionRate:
+                rows[0].totalErrors > 0 ? Math.round((rows[0].resolvedCount / rows[0].totalErrors) * 100) : 0,
             topErrorTypes: errorTypes
         };
     }
@@ -174,9 +186,7 @@ class LearningAssessment {
         return {
             ...rows[0],
             activeDays: activeDays,
-            consistencyScore: activeDays > 0 
-                ? Math.min(100, Math.round(activeDays / 30 * 100))
-                : 0,
+            consistencyScore: activeDays > 0 ? Math.min(100, Math.round((activeDays / 30) * 100)) : 0,
             dailyBreakdown: weeklyRows,
             totalHours: totalMinutes ? Math.round(totalMinutes / 60) : 0
         };
@@ -204,9 +214,7 @@ class LearningAssessment {
 
         return {
             ...rows[0],
-            masteryPercent: rows[0].totalNodes > 0
-                ? Math.round(rows[0].masteredCount / rows[0].totalNodes * 100)
-                : 0,
+            masteryPercent: rows[0].totalNodes > 0 ? Math.round((rows[0].masteredCount / rows[0].totalNodes) * 100) : 0,
             weakNodes: weakNodes
         };
     }
@@ -244,15 +252,15 @@ class LearningAssessment {
             [this.userId]
         );
 
-        let trend = 'stable';
+        let trend = "stable";
         if (rows.length >= 2) {
             const firstScore = parseFloat(rows[0].avgScore) || 0;
             const lastScore = parseFloat(rows[rows.length - 1].avgScore) || 0;
             const diff = lastScore - firstScore;
-            if (diff > 10) trend = 'rising';
-            else if (diff > 3) trend = 'slightly_rising';
-            else if (diff < -10) trend = 'declining';
-            else if (diff < -3) trend = 'slightly_declining';
+            if (diff > 10) trend = "rising";
+            else if (diff > 3) trend = "slightly_rising";
+            else if (diff < -10) trend = "declining";
+            else if (diff < -3) trend = "slightly_declining";
         }
 
         return {
@@ -264,109 +272,133 @@ class LearningAssessment {
 
     getTrendLabel(trend) {
         const map = {
-            rising: '快速上升',
-            slightly_rising: '稳步提升',
-            stable: '保持稳定',
-            slightly_declining: '略有下降',
-            declining: '需要关注'
+            rising: "快速上升",
+            slightly_rising: "稳步提升",
+            stable: "保持稳定",
+            slightly_declining: "略有下降",
+            declining: "需要关注"
         };
-        return map[trend] || '保持稳定';
+        return map[trend] || "保持稳定";
     }
 
     calculateDimensionScores(examStats, errorStats, studyTime, knowledgeProgress, resourceUsage) {
-        const examScore = Math.min(100, Math.round(
-            (parseFloat(examStats.avgScore) || 60) * 0.8 + (examStats.bestScore > 80 ? 20 : 10)
-        ));
+        const examScore = Math.min(
+            100,
+            Math.round((parseFloat(examStats.avgScore) || 60) * 0.8 + (examStats.bestScore > 80 ? 20 : 10))
+        );
 
-        const errorScore = Math.min(100, Math.round(
-            (errorStats.resolutionRate || 0) * 0.6 + (errorStats.redoCorrectCount > 0 ? 30 : 10) + 10
-        ));
+        const errorScore = Math.min(
+            100,
+            Math.round((errorStats.resolutionRate || 0) * 0.6 + (errorStats.redoCorrectCount > 0 ? 30 : 10) + 10)
+        );
 
-        const consistencyScore = Math.min(100, Math.round(
-            (studyTime.consistencyScore || 30) * 0.7 + 
-            (studyTime.totalHours >= 20 ? 30 : studyTime.totalHours >= 10 ? 20 : 10)
-        ));
+        const consistencyScore = Math.min(
+            100,
+            Math.round(
+                (studyTime.consistencyScore || 30) * 0.7 +
+                    (studyTime.totalHours >= 20 ? 30 : studyTime.totalHours >= 10 ? 20 : 10)
+            )
+        );
 
-        const knowledgeScore = Math.min(100, Math.round(
-            (knowledgeProgress.masteryPercent || 30) * 0.8 + 
-            ((parseFloat(knowledgeProgress.avgMastery) || 0.3) * 100 * 0.2)
-        ));
+        const knowledgeScore = Math.min(
+            100,
+            Math.round(
+                (knowledgeProgress.masteryPercent || 30) * 0.8 +
+                    (parseFloat(knowledgeProgress.avgMastery) || 0.3) * 100 * 0.2
+            )
+        );
 
-        const resourceScore = Math.min(100, Math.round(
-            ((resourceUsage.avgCompletionRate || 0) * 100) * 0.5 +
-            (resourceUsage.totalResources > 20 ? 30 : resourceUsage.totalResources > 10 ? 20 : 10) + 20
-        ));
+        const resourceScore = Math.min(
+            100,
+            Math.round(
+                (resourceUsage.avgCompletionRate || 0) * 100 * 0.5 +
+                    (resourceUsage.totalResources > 20 ? 30 : resourceUsage.totalResources > 10 ? 20 : 10) +
+                    20
+            )
+        );
 
-        const improvementScore = Math.min(100, Math.round(
-            (knowledgeProgress.masteryPercent || 30) * 0.4 +
-            (errorScore * 0.3) + (examScore * 0.3)
-        ));
+        const improvementScore = Math.min(
+            100,
+            Math.round((knowledgeProgress.masteryPercent || 30) * 0.4 + errorScore * 0.3 + examScore * 0.3)
+        );
 
         return { examScore, errorScore, consistencyScore, knowledgeScore, resourceScore, improvementScore };
     }
 
     getLevel(scores) {
         const avg = Math.round(
-            (scores.examScore + scores.errorScore + scores.consistencyScore +
-             scores.knowledgeScore + scores.resourceScore + scores.improvementScore) / 6
+            (scores.examScore +
+                scores.errorScore +
+                scores.consistencyScore +
+                scores.knowledgeScore +
+                scores.resourceScore +
+                scores.improvementScore) /
+                6
         );
-        if (avg >= 85) return { level: 'excellent', label: '优秀', color: '#10b981' };
-        if (avg >= 70) return { level: 'good', label: '良好', color: '#3b82f6' };
-        if (avg >= 55) return { level: 'average', label: '中等', color: '#f59e0b' };
-        return { level: 'need_improve', label: '待提升', color: '#ef4444' };
+        if (avg >= 85) return { level: "excellent", label: "优秀", color: "#10b981" };
+        if (avg >= 70) return { level: "good", label: "良好", color: "#3b82f6" };
+        if (avg >= 55) return { level: "average", label: "中等", color: "#f59e0b" };
+        return { level: "need_improve", label: "待提升", color: "#ef4444" };
     }
 
     generateRecommendations(scores, trend) {
         const recs = [];
 
-        if (scores.examScore < 60) recs.push({
-            type: 'exam',
-            priority: 'high',
-            message: '考试成绩偏低，建议增加模拟测试练习频次',
-            action: 'start_practice'
-        });
+        if (scores.examScore < 60)
+            recs.push({
+                type: "exam",
+                priority: "high",
+                message: "考试成绩偏低，建议增加模拟测试练习频次",
+                action: "start_practice"
+            });
 
-        if (scores.errorScore < 50) recs.push({
-            type: 'error',
-            priority: 'high',
-            message: '错题解决率较低，建议优先复习错题本并重做错题',
-            action: 'open_error_book'
-        });
+        if (scores.errorScore < 50)
+            recs.push({
+                type: "error",
+                priority: "high",
+                message: "错题解决率较低，建议优先复习错题本并重做错题",
+                action: "open_error_book"
+            });
 
-        if (scores.consistencyScore < 40) recs.push({
-            type: 'consistency',
-            priority: 'medium',
-            message: '学习持续性不足，建议制定固定的每日学习计划',
-            action: 'create_study_plan'
-        });
+        if (scores.consistencyScore < 40)
+            recs.push({
+                type: "consistency",
+                priority: "medium",
+                message: "学习持续性不足，建议制定固定的每日学习计划",
+                action: "create_study_plan"
+            });
 
-        if (scores.knowledgeScore < 50) recs.push({
-            type: 'knowledge',
-            priority: 'high',
-            message: '知识点掌握率偏低，建议从基础知识点开始系统学习',
-            action: 'start_course'
-        });
+        if (scores.knowledgeScore < 50)
+            recs.push({
+                type: "knowledge",
+                priority: "high",
+                message: "知识点掌握率偏低，建议从基础知识点开始系统学习",
+                action: "start_course"
+            });
 
-        if (scores.resourceScore < 40) recs.push({
-            type: 'resource',
-            priority: 'low',
-            message: '资源利用率较低，建议多使用系统生成的个性化学习资源',
-            action: 'explore_resources'
-        });
+        if (scores.resourceScore < 40)
+            recs.push({
+                type: "resource",
+                priority: "low",
+                message: "资源利用率较低，建议多使用系统生成的个性化学习资源",
+                action: "explore_resources"
+            });
 
-        if (trend.trend === 'declining' || trend.trend === 'slightly_declining') recs.push({
-            type: 'trend',
-            priority: 'high',
-            message: '学习成绩呈下降趋势，建议回顾最近的学习方法并调整策略',
-            action: 'review_strategy'
-        });
+        if (trend.trend === "declining" || trend.trend === "slightly_declining")
+            recs.push({
+                type: "trend",
+                priority: "high",
+                message: "学习成绩呈下降趋势，建议回顾最近的学习方法并调整策略",
+                action: "review_strategy"
+            });
 
-        if (recs.length === 0) recs.push({
-            type: 'positive',
-            priority: 'low',
-            message: '各维度表现良好，继续保持！可以尝试挑战更高难度的学习内容',
-            action: 'advance_learning'
-        });
+        if (recs.length === 0)
+            recs.push({
+                type: "positive",
+                priority: "low",
+                message: "各维度表现良好，继续保持！可以尝试挑战更高难度的学习内容",
+                action: "advance_learning"
+            });
 
         return recs;
     }
@@ -377,24 +409,24 @@ class LearningAssessment {
 
         if (assessment.dimensions.examPerformance.score < 50) {
             adjustments.push({
-                action: 'increase_quiz',
-                description: '增加练习题目推送比例',
+                action: "increase_quiz",
+                description: "增加练习题目推送比例",
                 newRatio: { quiz: 0.4, document: 0.3, video: 0.2, practice: 0.1 }
             });
         }
 
         if (assessment.dimensions.knowledgeMastery.score < 50) {
             adjustments.push({
-                action: 'increase_document',
-                description: '增加知识文档推送比例',
+                action: "increase_document",
+                description: "增加知识文档推送比例",
                 newRatio: { document: 0.5, video: 0.3, quiz: 0.1, mindmap: 0.1 }
             });
         }
 
         if (assessment.dimensions.resourceUtilization.score < 40) {
             adjustments.push({
-                action: 'increase_video',
-                description: '增加视频资源推送以提高学习兴趣',
+                action: "increase_video",
+                description: "增加视频资源推送以提高学习兴趣",
                 newRatio: { video: 0.4, document: 0.2, quiz: 0.2, mindmap: 0.2 }
             });
         }
@@ -403,9 +435,8 @@ class LearningAssessment {
             success: true,
             assessment: assessment.overallScore,
             adjustments: adjustments,
-            recommendation: adjustments.length > 0 
-                ? adjustments.map(a => a.description).join('；')
-                : '当前策略适宜，无需调整'
+            recommendation:
+                adjustments.length > 0 ? adjustments.map(a => a.description).join("；") : "当前策略适宜，无需调整"
         };
     }
 
@@ -414,10 +445,10 @@ class LearningAssessment {
             await this.pool.query(
                 `INSERT INTO resource_usage_logs (user_id, resource_type, completion_rate, feedback)
                  VALUES (?, ?, ?, ?)`,
-                [userId, resourceType, completionRate, feedback || 'neutral']
+                [userId, resourceType, completionRate, feedback || "neutral"]
             );
         } catch (error) {
-            console.error('记录资源使用日志失败:', error);
+            console.error("记录资源使用日志失败:", error);
         }
     }
 
@@ -429,7 +460,7 @@ class LearningAssessment {
                 [userId, durationMinutes, subject, activityType]
             );
         } catch (error) {
-            console.error('记录学习时段失败:', error);
+            console.error("记录学习时段失败:", error);
         }
     }
 }

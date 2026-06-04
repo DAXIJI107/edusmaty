@@ -3,16 +3,16 @@
 // 整合 BKT(贝叶斯知识追踪) + MasteryCalculator(时间衰减) + CognitiveDiagnosis(IRT诊断)
 // 生成加权融合结果 + 置信度评估 + 来源追踪
 
-const BKTModel = require('./BKTModel');
-const MasteryCalculator = require('./MasteryCalculator');
-const CognitiveDiagnosis = require('./CognitiveDiagnosis');
+const BKTModel = require("./BKTModel");
+const MasteryCalculator = require("./MasteryCalculator");
+const CognitiveDiagnosis = require("./CognitiveDiagnosis");
 
 // 融合权重配置（基于来源可靠性）
 const SOURCE_WEIGHTS = {
-    bkt:                0.35,  // BKT 概率估计
-    time_decay:         0.30,  // 时间衰减加权正确率
+    bkt: 0.35, // BKT 概率估计
+    time_decay: 0.3, // 时间衰减加权正确率
     cognitive_diagnosis: 0.25, // IRT 认知诊断
-    self_assessment:    0.10   // 用户自评（来自诊断问卷）
+    self_assessment: 0.1 // 用户自评（来自诊断问卷）
 };
 
 // 最小样本量要求
@@ -86,12 +86,13 @@ class MasteryFusion {
                 if (diagnosis && diagnosis.skillMastery) {
                     // 取该节点相关的技能掌握度平均值
                     const skillValues = Object.values(diagnosis.skillMastery).map(s => s.mastery);
-                    const avgSkillMastery = skillValues.length > 0
-                        ? Math.round(skillValues.reduce((a, b) => a + b, 0) / skillValues.length)
-                        : null;
+                    const avgSkillMastery =
+                        skillValues.length > 0
+                            ? Math.round(skillValues.reduce((a, b) => a + b, 0) / skillValues.length)
+                            : null;
                     results.cognitive_diagnosis = {
                         mastery: avgSkillMastery,
-                        confidence: Math.min(100, (diagnosis.overallMastery ? 50 : 30)),
+                        confidence: Math.min(100, diagnosis.overallMastery ? 50 : 30),
                         attempts: Object.values(diagnosis.skillMastery).reduce((s, v) => s + v.sampleSize, 0),
                         weight: SOURCE_WEIGHTS.cognitive_diagnosis,
                         reliable: true
@@ -107,14 +108,14 @@ class MasteryFusion {
 
         // 4. 用户自评（从 student_profiles 或 diagnostic_results）
         try {
-            const [profileRows] = await this.pool.query(
-                'SELECT profile_json FROM student_profiles WHERE user_id = ?',
-                [userId]
-            );
+            const [profileRows] = await this.pool.query("SELECT profile_json FROM student_profiles WHERE user_id = ?", [
+                userId
+            ]);
             if (profileRows.length > 0) {
-                const profile = typeof profileRows[0].profile_json === 'string'
-                    ? JSON.parse(profileRows[0].profile_json)
-                    : profileRows[0].profile_json;
+                const profile =
+                    typeof profileRows[0].profile_json === "string"
+                        ? JSON.parse(profileRows[0].profile_json)
+                        : profileRows[0].profile_json;
                 const selfAssess = profile.selfAssessment || profile.self_assessment || {};
                 // 自评分数 1-5 映射到 0-100
                 const rawScore = selfAssess.overall || selfAssess.csLevel || selfAssess.mathLevel;
@@ -173,7 +174,7 @@ class MasteryFusion {
             return {
                 mastery: 0,
                 confidence: 0,
-                diagnosis: '无数据 — 需要至少完成一次答题或诊断',
+                diagnosis: "无数据 — 需要至少完成一次答题或诊断",
                 sourceCount: 0,
                 primarySource: null
             };
@@ -202,11 +203,11 @@ class MasteryFusion {
 
         // 判断诊断等级
         let diagnosis;
-        if (finalMastery < 30) diagnosis = '未掌握 — 需要从头学习';
-        else if (finalMastery < 50) diagnosis = '薄弱 — 需要针对性练习';
-        else if (finalMastery < 70) diagnosis = '发展中 — 继续巩固';
-        else if (finalMastery < 85) diagnosis = '基本掌握 — 可进阶学习';
-        else diagnosis = '熟练掌握 — 可进入下一阶段';
+        if (finalMastery < 30) diagnosis = "未掌握 — 需要从头学习";
+        else if (finalMastery < 50) diagnosis = "薄弱 — 需要针对性练习";
+        else if (finalMastery < 70) diagnosis = "发展中 — 继续巩固";
+        else if (finalMastery < 85) diagnosis = "基本掌握 — 可进阶学习";
+        else diagnosis = "熟练掌握 — 可进入下一阶段";
 
         // 确定主要来源
         const primarySource = sourceContributions.sort((a, b) => b.contribution - a.contribution)[0];
@@ -226,9 +227,7 @@ class MasteryFusion {
      * 批量融合用户全部知识点的掌握度
      */
     async fuseAllForUser(userId) {
-        const [nodes] = await this.pool.query(
-            'SELECT id FROM knowledge_nodes WHERE is_active = 1'
-        );
+        const [nodes] = await this.pool.query("SELECT id FROM knowledge_nodes WHERE is_active = 1");
 
         const results = [];
         for (const node of nodes) {
@@ -242,19 +241,20 @@ class MasteryFusion {
 
         // 计算汇总统计
         const masteryValues = results.map(r => r.mastery).filter(m => m > 0);
-        const avgMastery = masteryValues.length > 0
-            ? Math.round(masteryValues.reduce((a, b) => a + b, 0) / masteryValues.length)
-            : 0;
+        const avgMastery =
+            masteryValues.length > 0 ? Math.round(masteryValues.reduce((a, b) => a + b, 0) / masteryValues.length) : 0;
 
         return {
             userId,
             nodeCount: results.length,
             avgMastery,
-            weakNodes: results.filter(r => r.mastery < 50).map(r => ({
-                nodeId: r.nodeId,
-                mastery: r.mastery,
-                diagnosis: r.diagnosis
-            })),
+            weakNodes: results
+                .filter(r => r.mastery < 50)
+                .map(r => ({
+                    nodeId: r.nodeId,
+                    mastery: r.mastery,
+                    diagnosis: r.diagnosis
+                })),
             details: results
         };
     }

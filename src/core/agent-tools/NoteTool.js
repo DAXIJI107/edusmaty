@@ -8,7 +8,9 @@ class NoteTool {
         const title = `AI学习任务卡：${focus.title || goal || "今日学习"}`;
         const body = [
             `目标：${goal || "完成今日智能学习闭环"}`,
-            focus.title ? `优先知识点：${focus.subject} / ${focus.title}，当前掌握度 ${focus.mastery}%。` : "优先完成一次诊断，建立基础画像。",
+            focus.title
+                ? `优先知识点：${focus.subject} / ${focus.title}，当前掌握度 ${focus.mastery}%。`
+                : "优先完成一次诊断，建立基础画像。",
             "学习步骤：先看概念，再做 3-5 道检验题，最后写一张主动回忆卡。",
             "复盘问题：我卡在哪里？正确思路的关键条件是什么？下次如何识别同类题？"
         ].join("\n\n");

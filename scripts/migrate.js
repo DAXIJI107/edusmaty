@@ -1,12 +1,12 @@
 // scripts/migrate.js
 // 轻量数据库 Migration 运行器
 // 用法: node scripts/migrate.js [up|down|status]
-const path = require('path');
-const fs = require('fs');
-const pool = require('../db');
+const path = require("path");
+const fs = require("fs");
+const pool = require("../db");
 
-const MIGRATIONS_DIR = path.join(__dirname, '..', 'ops', 'database', 'migrations');
-const MIGRATIONS_TABLE = '_migrations';
+const MIGRATIONS_DIR = path.join(__dirname, "..", "ops", "database", "migrations");
+const MIGRATIONS_TABLE = "_migrations";
 
 async function ensureMigrationsTable() {
     await pool.query(`
@@ -26,10 +26,11 @@ async function getAppliedMigrations() {
 
 function getMigrationFiles() {
     if (!fs.existsSync(MIGRATIONS_DIR)) {
-        console.log('ops/database/migrations/ 目录不存在，无需迁移');
+        console.log("ops/database/migrations/ 目录不存在，无需迁移");
         return [];
     }
-    return fs.readdirSync(MIGRATIONS_DIR)
+    return fs
+        .readdirSync(MIGRATIONS_DIR)
         .filter(f => /^\d{3}_.+\.js$/.test(f))
         .sort();
 }
@@ -66,7 +67,7 @@ async function runUp() {
         }
     }
 
-    console.log(count > 0 ? `\n成功应用 ${count} 个迁移` : '\n没有待应用的迁移');
+    console.log(count > 0 ? `\n成功应用 ${count} 个迁移` : "\n没有待应用的迁移");
 }
 
 async function runDown() {
@@ -75,7 +76,7 @@ async function runDown() {
     const lastApplied = files.filter(f => applied.has(f)).pop();
 
     if (!lastApplied) {
-        console.log('没有可回滚的迁移');
+        console.log("没有可回滚的迁移");
         return;
     }
 
@@ -103,32 +104,32 @@ async function runStatus() {
     const applied = await getAppliedMigrations();
     const files = getMigrationFiles();
 
-    console.log('迁移状态:\n');
+    console.log("迁移状态:\n");
     for (const file of files) {
-        const status = applied.has(file) ? '✓ 已应用' : '○ 待应用';
+        const status = applied.has(file) ? "✓ 已应用" : "○ 待应用";
         console.log(`  ${status}  ${file}`);
     }
 }
 
 async function main() {
-    const cmd = process.argv[2] || 'up';
+    const cmd = process.argv[2] || "up";
 
     try {
         switch (cmd) {
-            case 'up':
+            case "up":
                 await runUp();
                 break;
-            case 'down':
+            case "down":
                 await runDown();
                 break;
-            case 'status':
+            case "status":
                 await runStatus();
                 break;
             default:
-                console.log('用法: node scripts/migrate.js [up|down|status]');
+                console.log("用法: node scripts/migrate.js [up|down|status]");
         }
     } catch (error) {
-        console.error('\n迁移失败:', error.message);
+        console.error("\n迁移失败:", error.message);
         process.exit(1);
     } finally {
         await pool.end();

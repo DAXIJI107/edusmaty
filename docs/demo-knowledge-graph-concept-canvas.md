@@ -101,12 +101,12 @@
 
 ## API 接口参考
 
-| 方法 | 路径 | 用途 |
-|------|------|------|
-| GET | `/api/knowledge-graph` | 获取知识图谱数据 |
-| GET | `/api/concept-canvas` | 获取画布列表 |
-| GET | `/api/concept-canvas/:id` | 获取单个画布详情 |
-| POST | `/api/concept-canvas` | 创建新画布 |
-| PUT | `/api/concept-canvas/:id` | 保存画布内容 |
-| DELETE | `/api/concept-canvas/:id` | 删除画布 |
-| GET | `/api/concept-canvas/elements/search?q=xxx` | 搜索元素 |
+| 方法   | 路径                                        | 用途             |
+| ------ | ------------------------------------------- | ---------------- |
+| GET    | `/api/knowledge-graph`                      | 获取知识图谱数据 |
+| GET    | `/api/concept-canvas`                       | 获取画布列表     |
+| GET    | `/api/concept-canvas/:id`                   | 获取单个画布详情 |
+| POST   | `/api/concept-canvas`                       | 创建新画布       |
+| PUT    | `/api/concept-canvas/:id`                   | 保存画布内容     |
+| DELETE | `/api/concept-canvas/:id`                   | 删除画布         |
+| GET    | `/api/concept-canvas/elements/search?q=xxx` | 搜索元素         |

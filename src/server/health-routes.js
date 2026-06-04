@@ -1,27 +1,27 @@
-const pool = require('../db');
-const config = require('../config');
-const llmGateway = require('../core/llm/LlmGateway');
+const pool = require("../db");
+const config = require("../config");
+const llmGateway = require("../core/llm/LlmGateway");
 
 function registerHealthRoutes(app) {
-    app.get('/api/health', async (req, res) => {
+    app.get("/api/health", async (req, res) => {
         const health = {
             success: true,
-            service: 'edusmart-rebuild',
+            service: "edusmart-rebuild",
             time: new Date().toISOString(),
             demoMode: config.app.demoMode,
-            database: 'unknown',
+            database: "unknown",
             llm: {
                 provider: config.llm.provider,
                 model: config.llm.local.model,
-                status: 'unknown'
+                status: "unknown"
             }
         };
 
         try {
-            await pool.query('SELECT 1');
-            health.database = 'connected';
+            await pool.query("SELECT 1");
+            health.database = "connected";
         } catch (error) {
-            health.database = 'unavailable';
+            health.database = "unavailable";
             health.databaseMessage = error.message;
         }
 
@@ -30,12 +30,12 @@ function registerHealthRoutes(app) {
             health.llm = {
                 provider: llmHealth.provider,
                 model: llmHealth.model,
-                status: llmHealth.ok ? 'connected' : 'unavailable',
-                endpoint: config.llm.provider === 'spark' ? config.spark.httpApi : config.llm.local.baseUrl,
+                status: llmHealth.ok ? "connected" : "unavailable",
+                endpoint: config.llm.provider === "spark" ? config.spark.httpApi : config.llm.local.baseUrl,
                 message: llmHealth.error || undefined
             };
         } catch (error) {
-            health.llm.status = 'unavailable';
+            health.llm.status = "unavailable";
             health.llm.message = error.message;
         }
 

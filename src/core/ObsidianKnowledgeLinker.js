@@ -9,14 +9,14 @@
 //   3. 基于当前学习内容推荐关联知识点
 //   4. 生成学习路径建议
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const VAULT_DIR = path.join(__dirname, '..', '..', 'obsidian-vault');
-const SHARED_KB = path.join(VAULT_DIR, '01-共享知识库');
+const VAULT_DIR = path.join(__dirname, "..", "..", "obsidian-vault");
+const SHARED_KB = path.join(VAULT_DIR, "01-共享知识库");
 
 // 忽略目录
-const IGNORE_DIRS = new Set(['.obsidian', 'attachments', 'templates', '.trash', '09-系统管理', '06-可视化']);
+const IGNORE_DIRS = new Set([".obsidian", "attachments", "templates", ".trash", "09-系统管理", "06-可视化"]);
 
 class ObsidianKnowledgeLinker {
     constructor() {
@@ -70,9 +70,7 @@ class ObsidianKnowledgeLinker {
 
         // 构建邻接表
         for (const [title, info] of this.nodeMap) {
-            this.adjacencyList.set(title, [
-                ...new Set([...info.links, ...info.backlinks])
-            ]);
+            this.adjacencyList.set(title, [...new Set([...info.links, ...info.backlinks])]);
         }
 
         this.indexBuilt = true;
@@ -96,7 +94,7 @@ class ObsidianKnowledgeLinker {
             const matches = this._fuzzyMatch(topic);
             return matches.map(m => ({
                 title: m.title,
-                relation: '可能相关',
+                relation: "可能相关",
                 depth: 1,
                 tags: m.tags || []
             }));
@@ -113,15 +111,14 @@ class ObsidianKnowledgeLinker {
             const linkedNode = this.nodeMap.get(linkTitle);
             const isOutgoing = node.links.includes(linkTitle);
             const isIncoming = node.backlinks.includes(linkTitle);
-            const relation = isOutgoing && isIncoming ? '双向关联'
-                : isOutgoing ? '前置知识' : '后续知识';
+            const relation = isOutgoing && isIncoming ? "双向关联" : isOutgoing ? "前置知识" : "后续知识";
 
             result.push({
                 title: linkTitle,
                 relation,
                 depth: 1,
                 tags: linkedNode?.tags || [],
-                path: linkedNode?.path || ''
+                path: linkedNode?.path || ""
             });
         }
 
@@ -131,8 +128,9 @@ class ObsidianKnowledgeLinker {
                 const linkedNode = this.nodeMap.get(linkTitle);
                 if (!linkedNode) continue;
 
-                const indirectLinks = [...linkedNode.links, ...linkedNode.backlinks]
-                    .filter(l => !visited.has(l) && l !== node.title);
+                const indirectLinks = [...linkedNode.links, ...linkedNode.backlinks].filter(
+                    l => !visited.has(l) && l !== node.title
+                );
 
                 for (const indirectTitle of [...new Set(indirectLinks)].slice(0, 5)) {
                     visited.add(indirectTitle);
@@ -142,7 +140,7 @@ class ObsidianKnowledgeLinker {
                         relation: `通过「${linkTitle}」间接关联`,
                         depth: 2,
                         tags: indirectNode?.tags || [],
-                        path: indirectNode?.path || ''
+                        path: indirectNode?.path || ""
                     });
                 }
             }
@@ -166,8 +164,7 @@ class ObsidianKnowledgeLinker {
         if (topic) {
             const related = this.findRelated(topic, 2);
             const titles = new Set([topic, ...related.map(r => r.title)]);
-            entries = Array.from(this.nodeMap.entries())
-                .filter(([title]) => titles.has(title));
+            entries = Array.from(this.nodeMap.entries()).filter(([title]) => titles.has(title));
         } else {
             entries = Array.from(this.nodeMap.entries()).slice(0, maxNodes);
         }
@@ -196,7 +193,7 @@ class ObsidianKnowledgeLinker {
                     edges.push({
                         source: sourceId,
                         target: targetId,
-                        type: 'outgoing'
+                        type: "outgoing"
                     });
                 }
             }
@@ -220,10 +217,9 @@ class ObsidianKnowledgeLinker {
         for (let i = 0; i < steps; i++) {
             const related = this.findRelated(current, 1);
             // 优先推荐前置知识（incoming links），然后后续知识
-            const prereqs = related.filter(r => r.relation === '前置知识');
-            const nextTopics = related.filter(r => r.relation !== '前置知识');
-            const candidates = [...prereqs, ...nextTopics]
-                .filter(r => !visited.has(r.title));
+            const prereqs = related.filter(r => r.relation === "前置知识");
+            const nextTopics = related.filter(r => r.relation !== "前置知识");
+            const candidates = [...prereqs, ...nextTopics].filter(r => !visited.has(r.title));
 
             if (candidates.length === 0) break;
 
@@ -259,16 +255,16 @@ class ObsidianKnowledgeLinker {
             if (IGNORE_DIRS.has(entry.name)) continue;
             const fp = path.join(dir, entry.name);
             if (entry.isDirectory()) results.push(...this._scanMDFiles(fp));
-            else if (entry.name.endsWith('.md')) results.push(fp);
+            else if (entry.name.endsWith(".md")) results.push(fp);
         }
         return results;
     }
 
     _parseFile(filePath) {
         try {
-            const raw = fs.readFileSync(filePath, 'utf-8');
+            const raw = fs.readFileSync(filePath, "utf-8");
             const fm = this._parseFrontmatter(raw);
-            const body = fm.body || '';
+            const body = fm.body || "";
 
             // 提取wikilinks: [[xxx]] 或 [[xxx|alias]]
             const links = [];
@@ -281,12 +277,14 @@ class ObsidianKnowledgeLinker {
                 }
             }
 
-            const title = fm.meta?.title
-                || fm.meta?.alias
-                || path.basename(filePath, '.md');
+            const title = fm.meta?.title || fm.meta?.alias || path.basename(filePath, ".md");
 
             const tags = fm.meta?.tags
-                ? (Array.isArray(fm.meta.tags) ? fm.meta.tags : String(fm.meta.tags).split(/[,，]/).map(t => t.trim()))
+                ? Array.isArray(fm.meta.tags)
+                    ? fm.meta.tags
+                    : String(fm.meta.tags)
+                          .split(/[,，]/)
+                          .map(t => t.trim())
                 : [];
 
             return {
@@ -307,14 +305,20 @@ class ObsidianKnowledgeLinker {
         if (!match) return { meta: {}, body: content };
         const yamlBlock = match[1];
         const meta = {};
-        for (const line of yamlBlock.split('\n')) {
-            const ci = line.indexOf(':');
+        for (const line of yamlBlock.split("\n")) {
+            const ci = line.indexOf(":");
             if (ci === -1) continue;
             const key = line.slice(0, ci).trim();
-            let value = line.slice(ci + 1).trim().replace(/^["']|["']$/g, '');
+            let value = line
+                .slice(ci + 1)
+                .trim()
+                .replace(/^["']|["']$/g, "");
             // 处理数组
-            if (value.startsWith('[') && value.endsWith(']')) {
-                value = value.slice(1, -1).split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+            if (value.startsWith("[") && value.endsWith("]")) {
+                value = value
+                    .slice(1, -1)
+                    .split(",")
+                    .map(v => v.trim().replace(/^["']|["']$/g, ""));
             }
             meta[key] = value;
         }
@@ -322,10 +326,10 @@ class ObsidianKnowledgeLinker {
     }
 
     _normalizeTitle(title) {
-        return String(title || '')
+        return String(title || "")
             .toLowerCase()
-            .replace(/[【】\[\]《》"']/g, '')
-            .replace(/[\s_-]+/g, '')
+            .replace(/[【】\[\]《》"']/g, "")
+            .replace(/[\s_-]+/g, "")
             .trim();
     }
 
@@ -333,8 +337,7 @@ class ObsidianKnowledgeLinker {
         const normalized = this._normalizeTitle(query);
         const results = [];
         for (const [title, info] of this.nodeMap) {
-            if (this._normalizeTitle(title).includes(normalized) ||
-                normalized.includes(this._normalizeTitle(title))) {
+            if (this._normalizeTitle(title).includes(normalized) || normalized.includes(this._normalizeTitle(title))) {
                 results.push(info);
             }
         }

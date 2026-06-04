@@ -40,14 +40,14 @@ class BKTModel {
     }
 
     calculateNextReview(mastery, attempts) {
-        if (mastery < 40) return { days: 1, reason: '掌握度低，建议明天复习' };
-        if (mastery < 60) return { days: 3, reason: '基础薄弱，建议3天后复习' };
-        if (mastery < 80) return { days: 7, reason: '基本掌握，建议一周后复习' };
-        return { days: 14, reason: '掌握良好，建议两周后巩固' };
+        if (mastery < 40) return { days: 1, reason: "掌握度低，建议明天复习" };
+        if (mastery < 60) return { days: 3, reason: "基础薄弱，建议3天后复习" };
+        if (mastery < 80) return { days: 7, reason: "基本掌握，建议一周后复习" };
+        return { days: 14, reason: "掌握良好，建议两周后巩固" };
     }
 
     async batchUpdate(userId, pool) {
-        const [nodes] = await pool.query('SELECT id FROM knowledge_nodes WHERE is_active = 1');
+        const [nodes] = await pool.query("SELECT id FROM knowledge_nodes WHERE is_active = 1");
         const results = [];
         for (const node of nodes) {
             const result = await this.estimateMastery(userId, node.id, pool);

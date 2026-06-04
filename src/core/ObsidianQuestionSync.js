@@ -1,57 +1,66 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const DEFAULT_VAULT_DIR = path.join(__dirname, '..', '..', 'obsidian-vault');
-const QUESTION_BANK_DIR = path.join(DEFAULT_VAULT_DIR, '07-试题库');
+const DEFAULT_VAULT_DIR = path.join(__dirname, "..", "..", "obsidian-vault");
+const QUESTION_BANK_DIR = path.join(DEFAULT_VAULT_DIR, "07-试题库");
 const GENERATED_DIRS = {
-    notes: '智能笔记',
-    reviews: '错题复盘',
-    paths: '学习路径'
+    notes: "智能笔记",
+    reviews: "错题复盘",
+    paths: "学习路径"
 };
 
 const SUBJECT_LABELS = {
-    software_engineering: '软件工程',
-    programming_foundations: '程序设计基础',
-    computer_networks: '计算机网络',
-    operating_systems: '操作系统',
-    data_structures_algorithms: '数据结构与算法',
-    databases: '数据库',
-    artificial_intelligence: '人工智能'
+    software_engineering: "软件工程",
+    programming_foundations: "程序设计基础",
+    computer_networks: "计算机网络",
+    operating_systems: "操作系统",
+    data_structures_algorithms: "数据结构与算法",
+    databases: "数据库",
+    artificial_intelligence: "人工智能"
 };
 
 function normalizeText(value) {
-    return String(value || '').replace(/\r\n/g, '\n').trim();
+    return String(value || "")
+        .replace(/\r\n/g, "\n")
+        .trim();
 }
 
 function slugify(value) {
-    return String(value || 'note')
-        .trim()
-        .replace(/[\\/:*?"<>|]/g, '-')
-        .replace(/\s+/g, '-')
-        .slice(0, 80) || 'note';
+    return (
+        String(value || "note")
+            .trim()
+            .replace(/[\\/:*?"<>|]/g, "-")
+            .replace(/\s+/g, "-")
+            .slice(0, 80) || "note"
+    );
 }
 
 function readMarkdownFile(filePath, vaultDir = DEFAULT_VAULT_DIR) {
-    const markdown = fs.readFileSync(filePath, 'utf8');
-    const relativePath = path.relative(vaultDir, filePath).replace(/\\/g, '/');
+    const markdown = fs.readFileSync(filePath, "utf8");
+    const relativePath = path.relative(vaultDir, filePath).replace(/\\/g, "/");
     const frontmatter = readFrontmatter(markdown);
-    const body = markdown.replace(/^---\n[\s\S]*?\n---\n/, '');
-    const title = normalizeText(body.match(/^#\s+(.+)$/m)?.[1])
-        || normalizeText(frontmatter.title)
-        || path.basename(filePath, '.md');
+    const body = markdown.replace(/^---\n[\s\S]*?\n---\n/, "");
+    const title =
+        normalizeText(body.match(/^#\s+(.+)$/m)?.[1]) ||
+        normalizeText(frontmatter.title) ||
+        path.basename(filePath, ".md");
     const wikilinks = [...body.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g)]
         .map(match => normalizeText(match[1]))
         .filter(Boolean);
     const tags = [
-        ...String(frontmatter.tags || '').replace(/[\[\]]/g, '').split(','),
+        ...String(frontmatter.tags || "")
+            .replace(/[\[\]]/g, "")
+            .split(","),
         ...[...body.matchAll(/(^|\s)#([\u4e00-\u9fa5A-Za-z0-9_/-]+)/g)].map(match => match[2])
-    ].map(item => normalizeText(item).replace(/^#/, '')).filter(Boolean);
+    ]
+        .map(item => normalizeText(item).replace(/^#/, ""))
+        .filter(Boolean);
     const headings = [...body.matchAll(/^(#{1,4})\s+(.+)$/gm)].map(match => ({
         level: match[1].length,
         title: normalizeText(match[2])
     }));
     const stat = fs.statSync(filePath);
-    const folder = relativePath.includes('/') ? relativePath.split('/')[0] : '根目录';
+    const folder = relativePath.includes("/") ? relativePath.split("/")[0] : "根目录";
     const kind = inferNoteKind(relativePath, tags);
 
     return {
@@ -68,29 +77,29 @@ function readMarkdownFile(filePath, vaultDir = DEFAULT_VAULT_DIR) {
         size: stat.size,
         updatedAt: stat.mtime,
         createdAt: stat.birthtime,
-        preview: normalizeText(body.replace(/```[\s\S]*?```/g, '').replace(/[#>*_\-[\]()`]/g, ' ')).slice(0, 220),
+        preview: normalizeText(body.replace(/```[\s\S]*?```/g, "").replace(/[#>*_\-[\]()`]/g, " ")).slice(0, 220),
         content: markdown
     };
 }
 
 function inferNoteKind(relativePath, tags = []) {
-    if (relativePath.includes('07-试题库')) return 'question';
-    if (relativePath.includes('08-知识图谱')) return 'graph';
-    if (relativePath.includes('09-课程大纲')) return 'path';
-    if (relativePath.includes('10-项目文档')) return 'project';
-    if (relativePath.includes(GENERATED_DIRS.notes)) return 'smart-note';
-    if (relativePath.includes(GENERATED_DIRS.reviews)) return 'review';
-    if (relativePath.includes(GENERATED_DIRS.paths)) return 'path';
-    if (tags.includes('question-bank')) return 'question';
-    if (tags.includes('course')) return 'course';
-    return 'knowledge';
+    if (relativePath.includes("07-试题库")) return "question";
+    if (relativePath.includes("08-知识图谱")) return "graph";
+    if (relativePath.includes("09-课程大纲")) return "path";
+    if (relativePath.includes("10-项目文档")) return "project";
+    if (relativePath.includes(GENERATED_DIRS.notes)) return "smart-note";
+    if (relativePath.includes(GENERATED_DIRS.reviews)) return "review";
+    if (relativePath.includes(GENERATED_DIRS.paths)) return "path";
+    if (tags.includes("question-bank")) return "question";
+    if (tags.includes("course")) return "course";
+    return "knowledge";
 }
 
 function readFrontmatter(markdown) {
     const match = markdown.match(/^---\n([\s\S]*?)\n---\n/);
     if (!match) return {};
     const data = {};
-    for (const line of match[1].split('\n')) {
+    for (const line of match[1].split("\n")) {
         const pair = line.match(/^([A-Za-z0-9_-]+):\s*"?([^"\n]+)"?\s*$/);
         if (pair) data[pair[1]] = pair[2];
     }
@@ -98,20 +107,20 @@ function readFrontmatter(markdown) {
 }
 
 function subjectLabel(value) {
-    const normalized = String(value || '').trim();
-    return SUBJECT_LABELS[normalized] || normalized || '计算机综合';
+    const normalized = String(value || "").trim();
+    return SUBJECT_LABELS[normalized] || normalized || "计算机综合";
 }
 
 function extractField(block, label) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp(`- \\*\\*${escaped}\\*\\*：([\\s\\S]*?)(?=\\n- \\*\\*|\\n### |$)`);
     const match = block.match(pattern);
-    return normalizeText(match?.[1] || '');
+    return normalizeText(match?.[1] || "");
 }
 
 function buildChoiceOptions(answer, knowledgePoint) {
     const correct = normalizeText(answer).slice(0, 360);
-    const point = normalizeText(knowledgePoint) || '该知识点';
+    const point = normalizeText(knowledgePoint) || "该知识点";
     return [
         correct,
         `只记住“${point}”的名称，不需要结合场景或排错过程。`,
@@ -121,20 +130,20 @@ function buildChoiceOptions(answer, knowledgePoint) {
 }
 
 function parseQuestionMarkdown(filePath) {
-    const markdown = fs.readFileSync(filePath, 'utf8');
+    const markdown = fs.readFileSync(filePath, "utf8");
     const frontmatter = readFrontmatter(markdown);
-    const subject = subjectLabel(frontmatter.subject || path.basename(filePath).replace(/_试题库\.md$/i, ''));
-    const relativePath = path.relative(DEFAULT_VAULT_DIR, filePath).replace(/\\/g, '/');
+    const subject = subjectLabel(frontmatter.subject || path.basename(filePath).replace(/_试题库\.md$/i, ""));
+    const relativePath = path.relative(DEFAULT_VAULT_DIR, filePath).replace(/\\/g, "/");
     const blocks = markdown.split(/\n(?=###\s+Q\d+\s+\[[^\]]+\])/g);
     const questions = [];
 
     for (const block of blocks) {
         const head = block.match(/^###\s+Q(\d+)\s+\[([^\]]+)\]/m);
         if (!head) continue;
-        const knowledgePoint = extractField(block, '知识点');
-        const course = extractField(block, '课程');
-        const question = extractField(block, '问题');
-        const answer = extractField(block, '答案');
+        const knowledgePoint = extractField(block, "知识点");
+        const course = extractField(block, "课程");
+        const question = extractField(block, "问题");
+        const answer = extractField(block, "答案");
         if (!question || !answer) continue;
         questions.push({
             externalId: head[2],
@@ -145,8 +154,8 @@ function parseQuestionMarkdown(filePath) {
             question,
             answer,
             options: buildChoiceOptions(answer, knowledgePoint),
-            difficulty: 'medium',
-            sourceName: 'Obsidian试题库',
+            difficulty: "medium",
+            sourceName: "Obsidian试题库",
             sourceUrl: `obsidian://${relativePath}#${head[2]}`
         });
     }
@@ -155,10 +164,11 @@ function parseQuestionMarkdown(filePath) {
 }
 
 function listQuestionFiles(vaultDir = DEFAULT_VAULT_DIR) {
-    const dir = path.join(vaultDir, '07-试题库');
+    const dir = path.join(vaultDir, "07-试题库");
     if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir)
-        .filter(name => name.endsWith('.md') && !name.includes('总览'))
+    return fs
+        .readdirSync(dir)
+        .filter(name => name.endsWith(".md") && !name.includes("总览"))
         .map(name => path.join(dir, name));
 }
 
@@ -167,11 +177,11 @@ function listMarkdownFiles(vaultDir = DEFAULT_VAULT_DIR) {
     function walk(dir) {
         if (!fs.existsSync(dir)) return;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name === '.obsidian' || entry.name === 'node_modules') continue;
+            if (entry.name === ".obsidian" || entry.name === "node_modules") continue;
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 walk(fullPath);
-            } else if (entry.isFile() && entry.name.endsWith('.md')) {
+            } else if (entry.isFile() && entry.name.endsWith(".md")) {
                 files.push(fullPath);
             }
         }
@@ -185,7 +195,7 @@ function buildVaultIndex(vaultDir = DEFAULT_VAULT_DIR) {
     const byTitle = new Map();
     for (const note of notes) {
         byTitle.set(note.title, note);
-        byTitle.set(path.basename(note.path, '.md'), note);
+        byTitle.set(path.basename(note.path, ".md"), note);
     }
 
     const edges = [];
@@ -194,10 +204,15 @@ function buildVaultIndex(vaultDir = DEFAULT_VAULT_DIR) {
         for (const targetTitle of note.links) {
             const target = byTitle.get(targetTitle);
             if (target) {
-                edges.push({ source: note.path, target: target.path, type: 'wikilink', label: '双链' });
+                edges.push({ source: note.path, target: target.path, type: "wikilink", label: "双链" });
             } else {
                 unresolved.add(targetTitle);
-                edges.push({ source: note.path, target: `virtual:${targetTitle}`, type: 'unresolved', label: '待创建' });
+                edges.push({
+                    source: note.path,
+                    target: `virtual:${targetTitle}`,
+                    type: "unresolved",
+                    label: "待创建"
+                });
             }
         }
     }
@@ -211,7 +226,7 @@ function buildVaultIndex(vaultDir = DEFAULT_VAULT_DIR) {
         for (const tag of note.tags) tags[tag] = (tags[tag] || 0) + 1;
     }
 
-    const linkedTargets = new Set(edges.map(edge => edge.target).filter(item => !item.startsWith('virtual:')));
+    const linkedTargets = new Set(edges.map(edge => edge.target).filter(item => !item.startsWith("virtual:")));
     const linkedSources = new Set(edges.map(edge => edge.source));
     const isolated = notes
         .filter(note => !linkedTargets.has(note.path) && !linkedSources.has(note.path))
@@ -261,7 +276,7 @@ function buildVaultGraph(vaultDir = DEFAULT_VAULT_DIR, options = {}) {
     const index = buildVaultIndex(vaultDir);
     const limit = Math.min(Number(options.limit || 260), 600);
     const important = [...index.notes]
-        .sort((a, b) => (b.links.length + b.headings.length) - (a.links.length + a.headings.length))
+        .sort((a, b) => b.links.length + b.headings.length - (a.links.length + a.headings.length))
         .slice(0, limit);
     const allowed = new Set(important.map(note => note.path));
     const nodes = important.map(note => ({
@@ -276,9 +291,7 @@ function buildVaultGraph(vaultDir = DEFAULT_VAULT_DIR, options = {}) {
         preview: note.preview,
         obsidianUri: `obsidian://open?path=${encodeURIComponent(note.absolutePath)}`
     }));
-    const edges = index.edges
-        .filter(edge => allowed.has(edge.source) && allowed.has(edge.target))
-        .slice(0, limit * 3);
+    const edges = index.edges.filter(edge => allowed.has(edge.source) && allowed.has(edge.target)).slice(0, limit * 3);
     return {
         stats: index.stats,
         nodes,
@@ -295,7 +308,7 @@ function getVaultNote(relativePath, vaultDir = DEFAULT_VAULT_DIR) {
     const fullPath = path.resolve(vaultDir, safePath);
     const root = path.resolve(vaultDir);
     if (!fullPath.startsWith(root) || !fs.existsSync(fullPath)) {
-        throw new Error('笔记不存在或路径不安全');
+        throw new Error("笔记不存在或路径不安全");
     }
     return summarizeNote(readMarkdownFile(fullPath, vaultDir));
 }
@@ -306,11 +319,12 @@ function searchVault(query, vaultDir = DEFAULT_VAULT_DIR) {
     if (!keyword) return index.recent;
     return index.notes
         .map(note => {
-            const haystack = `${note.title}\n${note.path}\n${note.tags.join(' ')}\n${note.preview}`.toLowerCase();
-            const score = (note.title.toLowerCase().includes(keyword) ? 8 : 0)
-                + (note.path.toLowerCase().includes(keyword) ? 4 : 0)
-                + (note.tags.some(tag => tag.toLowerCase().includes(keyword)) ? 3 : 0)
-                + (haystack.includes(keyword) ? 2 : 0);
+            const haystack = `${note.title}\n${note.path}\n${note.tags.join(" ")}\n${note.preview}`.toLowerCase();
+            const score =
+                (note.title.toLowerCase().includes(keyword) ? 8 : 0) +
+                (note.path.toLowerCase().includes(keyword) ? 4 : 0) +
+                (note.tags.some(tag => tag.toLowerCase().includes(keyword)) ? 3 : 0) +
+                (haystack.includes(keyword) ? 2 : 0);
             return { note, score };
         })
         .filter(item => item.score > 0)
@@ -320,8 +334,10 @@ function searchVault(query, vaultDir = DEFAULT_VAULT_DIR) {
 }
 
 function normalizeRelativeVaultPath(relativePath) {
-    const clean = String(relativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
-    if (!clean || clean.includes('..')) throw new Error('路径不安全');
+    const clean = String(relativePath || "")
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "");
+    if (!clean || clean.includes("..")) throw new Error("路径不安全");
     return clean;
 }
 
@@ -329,12 +345,19 @@ function ensureVaultDir(vaultDir, relativeDir) {
     const safeDir = normalizeRelativeVaultPath(relativeDir);
     const fullDir = path.resolve(vaultDir, safeDir);
     const root = path.resolve(vaultDir);
-    if (!fullDir.startsWith(root)) throw new Error('目录不安全');
+    if (!fullDir.startsWith(root)) throw new Error("目录不安全");
     fs.mkdirSync(fullDir, { recursive: true });
     return fullDir;
 }
 
-function writeVaultMarkdown({ title, body, folder = GENERATED_DIRS.notes, tags = [], links = [], vaultDir = DEFAULT_VAULT_DIR }) {
+function writeVaultMarkdown({
+    title,
+    body,
+    folder = GENERATED_DIRS.notes,
+    tags = [],
+    links = [],
+    vaultDir = DEFAULT_VAULT_DIR
+}) {
     const dir = ensureVaultDir(vaultDir, folder);
     const now = new Date();
     const filename = `${now.toISOString().slice(0, 10)}-${slugify(title)}.md`;
@@ -342,49 +365,51 @@ function writeVaultMarkdown({ title, body, folder = GENERATED_DIRS.notes, tags =
     const uniqueLinks = [...new Set(links.map(normalizeText).filter(Boolean))];
     const uniqueTags = [...new Set(tags.map(normalizeText).filter(Boolean))];
     const markdown = [
-        '---',
-        `title: "${String(title || '智能笔记').replace(/"/g, '\\"')}"`,
+        "---",
+        `title: "${String(title || "智能笔记").replace(/"/g, '\\"')}"`,
         `created: "${now.toISOString()}"`,
         `source: "edusmart"`,
-        `tags: [${uniqueTags.map(tag => `"${tag.replace(/"/g, '\\"')}"`).join(', ')}]`,
-        '---',
-        '',
-        `# ${title || '智能笔记'}`,
-        '',
-        uniqueLinks.length ? `关联：${uniqueLinks.map(link => `[[${link}]]`).join(' ')}` : '',
-        '',
+        `tags: [${uniqueTags.map(tag => `"${tag.replace(/"/g, '\\"')}"`).join(", ")}]`,
+        "---",
+        "",
+        `# ${title || "智能笔记"}`,
+        "",
+        uniqueLinks.length ? `关联：${uniqueLinks.map(link => `[[${link}]]`).join(" ")}` : "",
+        "",
         normalizeText(body),
-        '',
-        '## 后续动作',
-        '- [ ] 复习本条笔记',
-        '- [ ] 关联至少一道练习题',
-        '- [ ] 更新对应知识点掌握状态',
-        ''
-    ].filter((line, index, arr) => line || arr[index - 1]).join('\n');
-    fs.writeFileSync(fullPath, markdown, 'utf8');
+        "",
+        "## 后续动作",
+        "- [ ] 复习本条笔记",
+        "- [ ] 关联至少一道练习题",
+        "- [ ] 更新对应知识点掌握状态",
+        ""
+    ]
+        .filter((line, index, arr) => line || arr[index - 1])
+        .join("\n");
+    fs.writeFileSync(fullPath, markdown, "utf8");
     return summarizeNote(readMarkdownFile(fullPath, vaultDir));
 }
 
 function writeLearningPathMarkdown({ title, goal, steps = [], links = [], vaultDir = DEFAULT_VAULT_DIR }) {
     const body = [
-        `目标：${goal || title || '完成学习路径'}`,
-        '',
-        '## 路径步骤',
+        `目标：${goal || title || "完成学习路径"}`,
+        "",
+        "## 路径步骤",
         ...steps.map((step, index) => {
             const stepTitle = normalizeText(step.title || step);
             const target = normalizeText(step.link || stepTitle);
-            return `- [ ] ${index + 1}. [[${target}]]${step.desc ? `：${step.desc}` : ''}`;
+            return `- [ ] ${index + 1}. [[${target}]]${step.desc ? `：${step.desc}` : ""}`;
         }),
-        '',
-        '## 项目回写',
-        '- 由 EduSmart 根据 Obsidian 知识库和学习画像生成',
-        '- 完成状态可以在 Obsidian 中继续维护'
-    ].join('\n');
+        "",
+        "## 项目回写",
+        "- 由 EduSmart 根据 Obsidian 知识库和学习画像生成",
+        "- 完成状态可以在 Obsidian 中继续维护"
+    ].join("\n");
     return writeVaultMarkdown({
-        title: title || '学习路径',
+        title: title || "学习路径",
         body,
         folder: GENERATED_DIRS.paths,
-        tags: ['learning-path', 'edusmart'],
+        tags: ["learning-path", "edusmart"],
         links,
         vaultDir
     });
@@ -403,7 +428,7 @@ function parseObsidianQuestionBank(vaultDir = DEFAULT_VAULT_DIR) {
 }
 
 async function tableExists(pool, tableName) {
-    const [rows] = await pool.query('SHOW TABLES LIKE ?', [tableName]);
+    const [rows] = await pool.query("SHOW TABLES LIKE ?", [tableName]);
     return rows.length > 0;
 }
 
@@ -413,29 +438,33 @@ async function columnExists(pool, tableName, columnName) {
 }
 
 async function detectQuestionSchema(pool) {
-    if (await tableExists(pool, 'knowledge_points')
-        && await columnExists(pool, 'questions', 'knowledge_id')
-        && await columnExists(pool, 'questions', 'question')
-        && await columnExists(pool, 'questions', 'correct_answer')) {
-        return 'app';
+    if (
+        (await tableExists(pool, "knowledge_points")) &&
+        (await columnExists(pool, "questions", "knowledge_id")) &&
+        (await columnExists(pool, "questions", "question")) &&
+        (await columnExists(pool, "questions", "correct_answer"))
+    ) {
+        return "app";
     }
-    if (await tableExists(pool, 'knowledge_nodes')
-        && await columnExists(pool, 'questions', 'content')
-        && await columnExists(pool, 'questions', 'answer')) {
-        return 'legacy';
+    if (
+        (await tableExists(pool, "knowledge_nodes")) &&
+        (await columnExists(pool, "questions", "content")) &&
+        (await columnExists(pool, "questions", "answer"))
+    ) {
+        return "legacy";
     }
-    return 'unknown';
+    return "unknown";
 }
 
 async function findOrCreateKnowledgePoint(pool, item) {
     const title = item.knowledgePoint || item.course || item.subject;
-    const [existing] = await pool.query(
-        'SELECT id FROM knowledge_points WHERE title = ? AND subject = ? LIMIT 1',
-        [title, item.subject]
-    );
+    const [existing] = await pool.query("SELECT id FROM knowledge_points WHERE title = ? AND subject = ? LIMIT 1", [
+        title,
+        item.subject
+    ]);
     if (existing.length) return existing[0].id;
     const [result] = await pool.query(
-        'INSERT INTO knowledge_points (title, subject, summary, mastery, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?)',
+        "INSERT INTO knowledge_points (title, subject, summary, mastery, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?)",
         [
             title,
             item.subject,
@@ -450,26 +479,33 @@ async function findOrCreateKnowledgePoint(pool, item) {
 
 async function findOrCreateKnowledgeNode(pool, item) {
     const name = item.knowledgePoint || item.course || item.subject;
-    const [existing] = await pool.query('SELECT id FROM knowledge_nodes WHERE name = ? LIMIT 1', [name]);
+    const [existing] = await pool.query("SELECT id FROM knowledge_nodes WHERE name = ? LIMIT 1", [name]);
     if (existing.length) return existing[0].id;
-    const hasSubject = await columnExists(pool, 'knowledge_nodes', 'subject');
+    const hasSubject = await columnExists(pool, "knowledge_nodes", "subject");
     if (hasSubject) {
         const [result] = await pool.query(
-            'INSERT INTO knowledge_nodes (name, description, difficulty, type, subject, video_platform) VALUES (?, ?, ?, ?, ?, ?)',
-            [name, `${item.course || item.subject}：来自 Obsidian 的试题关联知识点。`, 'medium', 'practice', item.subject, 'local']
+            "INSERT INTO knowledge_nodes (name, description, difficulty, type, subject, video_platform) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                name,
+                `${item.course || item.subject}：来自 Obsidian 的试题关联知识点。`,
+                "medium",
+                "practice",
+                item.subject,
+                "local"
+            ]
         );
         return result.insertId;
     }
     const [result] = await pool.query(
-        'INSERT INTO knowledge_nodes (name, description, difficulty, type, video_platform) VALUES (?, ?, ?, ?, ?)',
-        [name, `${item.course || item.subject}：来自 Obsidian 的试题关联知识点。`, 'medium', 'practice', 'local']
+        "INSERT INTO knowledge_nodes (name, description, difficulty, type, video_platform) VALUES (?, ?, ?, ?, ?)",
+        [name, `${item.course || item.subject}：来自 Obsidian 的试题关联知识点。`, "medium", "practice", "local"]
     );
     return result.insertId;
 }
 
 async function upsertAppQuestion(pool, item) {
     const knowledgeId = await findOrCreateKnowledgePoint(pool, item);
-    const [existing] = await pool.query('SELECT id FROM questions WHERE source_url = ? LIMIT 1', [item.sourceUrl]);
+    const [existing] = await pool.query("SELECT id FROM questions WHERE source_url = ? LIMIT 1", [item.sourceUrl]);
     const values = [
         knowledgeId,
         item.question,
@@ -486,21 +522,21 @@ async function upsertAppQuestion(pool, item) {
              WHERE id = ?`,
             [...values, existing[0].id]
         );
-        return 'updated';
+        return "updated";
     }
     await pool.query(
-        'INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        "INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
         values
     );
-    return 'inserted';
+    return "inserted";
 }
 
 async function upsertLegacyQuestion(pool, item) {
     const nodeId = await findOrCreateKnowledgeNode(pool, item);
-    const [existing] = await pool.query('SELECT id FROM questions WHERE content = ? LIMIT 1', [item.question]);
+    const [existing] = await pool.query("SELECT id FROM questions WHERE content = ? LIMIT 1", [item.question]);
     const values = [
         null,
-        'single',
+        "single",
         item.question,
         JSON.stringify(item.options),
         item.answer,
@@ -516,20 +552,20 @@ async function upsertLegacyQuestion(pool, item) {
              WHERE id = ?`,
             [...values, existing[0].id]
         );
-        return 'updated';
+        return "updated";
     }
     await pool.query(
-        'INSERT INTO questions (exam_id, type, content, options, answer, score, difficulty, subject, node_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        "INSERT INTO questions (exam_id, type, content, options, answer, score, difficulty, subject, node_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         values
     );
-    return 'inserted';
+    return "inserted";
 }
 
 async function syncObsidianQuestions(pool, options = {}) {
     const parsed = parseObsidianQuestionBank(options.vaultDir || DEFAULT_VAULT_DIR);
     const schema = await detectQuestionSchema(pool);
-    if (schema === 'unknown') {
-        throw new Error('未识别到项目题库表结构，请先运行 npm run db:rebuild 初始化数据库。');
+    if (schema === "unknown") {
+        throw new Error("未识别到项目题库表结构，请先运行 npm run db:rebuild 初始化数据库。");
     }
 
     const result = {
@@ -546,9 +582,8 @@ async function syncObsidianQuestions(pool, options = {}) {
 
     for (const item of parsed.questions) {
         try {
-            const action = schema === 'app'
-                ? await upsertAppQuestion(pool, item)
-                : await upsertLegacyQuestion(pool, item);
+            const action =
+                schema === "app" ? await upsertAppQuestion(pool, item) : await upsertLegacyQuestion(pool, item);
             result[action] += 1;
         } catch (error) {
             result.skipped += 1;

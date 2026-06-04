@@ -15,13 +15,13 @@ class SmartNoteEngine {
                 concept: node.name,
                 description: node.description || `${node.name}相关知识点`,
                 nodeId: node.id,
-                type: 'knowledge_link'
+                type: "knowledge_link"
             });
             enriched.relatedConcepts.push({
                 name: node.name,
                 id: node.id,
                 subject: node.subject,
-                relation: 'related'
+                relation: "related"
             });
         }
 
@@ -32,9 +32,30 @@ class SmartNoteEngine {
     }
 
     extractKeywords(text) {
-        const stopWords = ['的', '了', '是', '在', '和', '就', '都', '而', '及', '与',
-            '着', '或', '一个', '没有', '我们', '你们', '他们', '这个', '那个', '这些', '那些'];
-        const chars = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ');
+        const stopWords = [
+            "的",
+            "了",
+            "是",
+            "在",
+            "和",
+            "就",
+            "都",
+            "而",
+            "及",
+            "与",
+            "着",
+            "或",
+            "一个",
+            "没有",
+            "我们",
+            "你们",
+            "他们",
+            "这个",
+            "那个",
+            "这些",
+            "那些"
+        ];
+        const chars = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, " ");
         const words = chars.split(/\s+/).filter(w => w.length >= 2 && !stopWords.includes(w));
         return [...new Set(words)].slice(0, 10);
     }
@@ -71,10 +92,7 @@ class SmartNoteEngine {
         let result = text;
         for (const ann of annotations) {
             if (result.includes(ann.concept)) {
-                result = result.replace(
-                    ann.concept,
-                    `${ann.concept}`
-                );
+                result = result.replace(ann.concept, `${ann.concept}`);
             }
         }
         return result;
@@ -85,14 +103,14 @@ class SmartNoteEngine {
         const nodes = await this.findRelatedNodes(keywords, pool);
 
         const mindMap = {
-            root: { id: 'root', label: '笔记主题', children: [] },
+            root: { id: "root", label: "笔记主题", children: [] },
             nodes: [],
             edges: []
         };
 
         const subjectGroups = {};
         for (const node of nodes) {
-            const subject = node.subject || 'general';
+            const subject = node.subject || "general";
             if (!subjectGroups[subject]) subjectGroups[subject] = [];
             subjectGroups[subject].push(node);
         }
@@ -102,17 +120,17 @@ class SmartNoteEngine {
             mindMap.nodes.push({
                 id: subjectId,
                 label: subject,
-                type: 'subject',
+                type: "subject",
                 children: []
             });
-            mindMap.edges.push({ from: 'root', to: subjectId });
+            mindMap.edges.push({ from: "root", to: subjectId });
 
             for (const node of subjectNodes) {
                 const nodeId = `node_${node.id}`;
                 mindMap.nodes.push({
                     id: nodeId,
                     label: node.name,
-                    type: 'concept',
+                    type: "concept",
                     nodeId: node.id,
                     description: node.description
                 });
@@ -124,7 +142,7 @@ class SmartNoteEngine {
     }
 
     async findRelatedNotes(noteId, pool) {
-        const [note] = await pool.query('SELECT * FROM notes WHERE id = ?', [noteId]);
+        const [note] = await pool.query("SELECT * FROM notes WHERE id = ?", [noteId]);
         if (note.length === 0) return null;
 
         const keywords = this.extractKeywords(note[0].content);
@@ -178,7 +196,7 @@ class SmartNoteEngine {
 
         scoredSentences.sort((a, b) => b.score - a.score);
         const topSentences = scoredSentences.slice(0, 3).map(s => s.sentence);
-        return topSentences.join('。') + '。';
+        return topSentences.join("。") + "。";
     }
 }
 

@@ -1,8 +1,8 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
-const { buildVaultGraph } = require('../core/ObsidianQuestionSync');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
+const { buildVaultGraph } = require("../core/ObsidianQuestionSync");
 
 router.use(authenticateJWT);
 
@@ -20,7 +20,7 @@ async function ensureNoteLinksTable() {
     `);
 }
 
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
     try {
         const graph = buildVaultGraph(undefined, { limit: req.query.limit || 260 });
         return res.json({
@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
                 nodes: graph.nodes.map(node => ({
                     ...node,
                     label: node.label || node.title,
-                    type: node.kind || node.group || 'knowledge',
+                    type: node.kind || node.group || "knowledge",
                     subject: node.folder
                 })),
                 edges: graph.edges.map((edge, index) => ({
@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
             }
         });
     } catch (obsidianError) {
-        console.warn('Obsidian图谱读取失败，回退数据库图谱:', obsidianError.message);
+        console.warn("Obsidian图谱读取失败，回退数据库图谱:", obsidianError.message);
     }
     try {
         const userId = req.user.id;
@@ -61,7 +61,7 @@ router.get('/', async (req, res) => {
         const noteIds = notes.map(note => note.id);
         let noteLinks = [];
         if (noteIds.length) {
-            const placeholders = noteIds.map(() => '?').join(',');
+            const placeholders = noteIds.map(() => "?").join(",");
             [noteLinks] = await pool.query(
                 `SELECT id, source_note_id, target_title, target_note_id, created_at
                  FROM note_links
@@ -70,22 +70,20 @@ router.get('/', async (req, res) => {
             );
         }
 
-        const [knowledgeNodes] = await pool.query(
-            `SELECT id, name, subject FROM knowledge_nodes`
-        );
+        const [knowledgeNodes] = await pool.query(`SELECT id, name, subject FROM knowledge_nodes`);
 
         const nodes = [
             ...notes.map(note => ({
                 id: `note-${note.id}`,
                 label: note.title,
-                type: 'note',
+                type: "note",
                 subject: note.subject,
                 updatedAt: note.updated_at
             })),
             ...knowledgeNodes.map(kn => ({
                 id: `knowledge-${kn.id}`,
                 label: kn.name,
-                type: 'knowledge',
+                type: "knowledge",
                 subject: kn.subject
             }))
         ];
@@ -100,26 +98,23 @@ router.get('/', async (req, res) => {
 
         res.json({ success: true, data: { nodes, edges } });
     } catch (err) {
-        console.error('获取知识图谱失败:', err);
-        res.status(500).json({ success: false, message: '服务器内部错误' });
+        console.error("获取知识图谱失败:", err);
+        res.status(500).json({ success: false, message: "服务器内部错误" });
     }
 });
 
-router.post('/links', async (req, res) => {
+router.post("/links", async (req, res) => {
     try {
         const sourceNoteId = req.body.source_note_id || req.body.sourceNoteId;
         const targetTitle = req.body.target_title || req.body.targetTitle;
         if (!sourceNoteId || !targetTitle) {
-            return res.status(400).json({ success: false, message: 'source_note_id 和 target_title 不能为空' });
+            return res.status(400).json({ success: false, message: "source_note_id 和 target_title 不能为空" });
         }
         await ensureNoteLinksTable();
 
         let targetNoteId = req.body.target_note_id || req.body.targetNoteId || null;
         if (!targetNoteId) {
-            const [rows] = await pool.query(
-                `SELECT id FROM notes WHERE title = ? LIMIT 1`,
-                [targetTitle]
-            );
+            const [rows] = await pool.query(`SELECT id FROM notes WHERE title = ? LIMIT 1`, [targetTitle]);
             if (rows.length) {
                 targetNoteId = rows[0].id;
             }
@@ -133,39 +128,36 @@ router.post('/links', async (req, res) => {
 
         res.json({ success: true, id: result.insertId });
     } catch (err) {
-        console.error('创建笔记链接失败:', err);
-        res.status(500).json({ success: false, message: '服务器内部错误' });
+        console.error("创建笔记链接失败:", err);
+        res.status(500).json({ success: false, message: "服务器内部错误" });
     }
 });
 
-router.delete('/links/:id', async (req, res) => {
+router.delete("/links/:id", async (req, res) => {
     try {
         const { id } = req.params;
         if (!id || isNaN(parseInt(id))) {
-            return res.status(400).json({ success: false, message: '无效的ID' });
+            return res.status(400).json({ success: false, message: "无效的ID" });
         }
         await ensureNoteLinksTable();
 
-        const [result] = await pool.query(
-            `DELETE FROM note_links WHERE id = ?`,
-            [id]
-        );
+        const [result] = await pool.query(`DELETE FROM note_links WHERE id = ?`, [id]);
         if (!result.affectedRows) {
-            return res.status(404).json({ success: false, message: '链接不存在' });
+            return res.status(404).json({ success: false, message: "链接不存在" });
         }
 
         res.json({ success: true });
     } catch (err) {
-        console.error('删除笔记链接失败:', err);
-        res.status(500).json({ success: false, message: '服务器内部错误' });
+        console.error("删除笔记链接失败:", err);
+        res.status(500).json({ success: false, message: "服务器内部错误" });
     }
 });
 
-router.get('/note-links/:noteId', async (req, res) => {
+router.get("/note-links/:noteId", async (req, res) => {
     try {
         const { noteId } = req.params;
         if (!noteId || isNaN(parseInt(noteId))) {
-            return res.status(400).json({ success: false, message: '无效的笔记ID' });
+            return res.status(400).json({ success: false, message: "无效的笔记ID" });
         }
         await ensureNoteLinksTable();
 
@@ -179,8 +171,8 @@ router.get('/note-links/:noteId', async (req, res) => {
 
         res.json({ success: true, data: rows });
     } catch (err) {
-        console.error('查询笔记链接失败:', err);
-        res.status(500).json({ success: false, message: '服务器内部错误' });
+        console.error("查询笔记链接失败:", err);
+        res.status(500).json({ success: false, message: "服务器内部错误" });
     }
 });
 

@@ -1,11 +1,12 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
 
 router.use(authenticateJWT);
 
-pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+pool.query(
+    `CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     title VARCHAR(200) NOT NULL,
@@ -17,11 +18,12 @@ pool.query(`CREATE TABLE IF NOT EXISTS notifications (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user_unread (user_id, is_read),
     INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch(() => {});
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+).catch(() => {});
 
 pool.query("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(300)").catch(() => {});
 
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
     try {
         const { limit = 20, offset = 0 } = req.query;
         const [notifications] = await pool.query(
@@ -38,7 +40,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-router.get('/unread-count', async (req, res) => {
+router.get("/unread-count", async (req, res) => {
     try {
         const [[result]] = await pool.query(
             "SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -50,25 +52,22 @@ router.get('/unread-count', async (req, res) => {
     }
 });
 
-router.put('/:id/read', async (req, res) => {
+router.put("/:id/read", async (req, res) => {
     try {
-        await pool.query(
-            "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
-            [req.params.id, req.user.id]
-        );
+        await pool.query("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", [
+            req.params.id,
+            req.user.id
+        ]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-router.put('/mark-all-read', async (req, res) => {
+router.put("/mark-all-read", async (req, res) => {
     try {
-        await pool.query(
-            "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
-            [req.user.id]
-        );
-        res.json({ success: true, message: '全部已读' });
+        await pool.query("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", [req.user.id]);
+        res.json({ success: true, message: "全部已读" });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -80,7 +79,9 @@ async function createNotification(userId, title, content, type, relatedId = null
             "INSERT INTO notifications (user_id, title, content, type, related_id, link) VALUES (?, ?, ?, ?, ?, ?)",
             [userId, title, content, type, relatedId, link]
         );
-    } catch (e) { /* silent */ }
+    } catch (e) {
+        /* silent */
+    }
 }
 
 module.exports = router;

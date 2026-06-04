@@ -81,10 +81,10 @@ class ForgettingCurveEngine {
     }
 
     getReviewType(mastery, retention) {
-        if (retention < 0.3) return 'relearn';
-        if (retention < 0.5) return 'intensive_review';
-        if (retention < 0.7) return 'quick_review';
-        return 'light_consolidation';
+        if (retention < 0.3) return "relearn";
+        if (retention < 0.5) return "intensive_review";
+        if (retention < 0.7) return "quick_review";
+        return "light_consolidation";
     }
 
     async generateReviewMessage(userId, pool) {
@@ -95,7 +95,7 @@ class ForgettingCurveEngine {
             const nextUp = schedule.upcoming.slice(0, 3);
             if (nextUp.length === 0) return null;
             return {
-                type: 'upcoming',
+                type: "upcoming",
                 message: `你有 ${nextUp.length} 个知识点即将需要复习`,
                 items: nextUp.map(n => ({
                     name: n.nodeName,
@@ -108,16 +108,16 @@ class ForgettingCurveEngine {
         const urgentItems = dueToday.filter(d => d.reviewPriority >= 80);
         const normalItems = dueToday.filter(d => d.reviewPriority < 80);
 
-        let message = '';
+        let message = "";
         if (urgentItems.length > 0) {
-            message = `⚠️ 紧急！${urgentItems.length}个知识点即将遗忘：${urgentItems.map(u => u.nodeName).join('、')}。`;
+            message = `⚠️ 紧急！${urgentItems.length}个知识点即将遗忘：${urgentItems.map(u => u.nodeName).join("、")}。`;
         }
         if (normalItems.length > 0) {
             message += ` 还有${normalItems.length}个知识点需要复习巩固。`;
         }
 
         return {
-            type: 'due_today',
+            type: "due_today",
             message: message.trim(),
             urgentCount: urgentItems.length,
             totalDue: dueToday.length,
@@ -127,13 +127,14 @@ class ForgettingCurveEngine {
                 retentionRate: d.retentionRate,
                 priority: d.reviewPriority,
                 type: d.reviewType,
-                suggestion: d.reviewType === 'relearn'
-                    ? '建议重新学习基础知识'
-                    : d.reviewType === 'intensive_review'
-                    ? '建议做3-5道练习题巩固'
-                    : d.reviewType === 'quick_review'
-                    ? '快速浏览笔记即可'
-                    : '简单回顾即可'
+                suggestion:
+                    d.reviewType === "relearn"
+                        ? "建议重新学习基础知识"
+                        : d.reviewType === "intensive_review"
+                          ? "建议做3-5道练习题巩固"
+                          : d.reviewType === "quick_review"
+                            ? "快速浏览笔记即可"
+                            : "简单回顾即可"
             }))
         };
     }

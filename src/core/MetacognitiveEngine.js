@@ -1,5 +1,5 @@
 // core/MetacognitiveEngine.js
-const pool = require('../db'); // 假设你有一个数据库连接池文件
+const pool = require("../db"); // 假设你有一个数据库连接池文件
 
 class MetacognitiveEngine {
     constructor() {
@@ -9,8 +9,8 @@ class MetacognitiveEngine {
     // 加载苏格拉底问题模板（可根据知识点类型扩展）
     loadSocraticQuestions() {
         return {
-            review: (knowledgeName) => `在解决这个问题前，我们先回顾一下：${knowledgeName}的概念是什么？`,
-            step1: (topic) => `你觉得这个问题与我们已经学过的哪些概念相关？`,
+            review: knowledgeName => `在解决这个问题前，我们先回顾一下：${knowledgeName}的概念是什么？`,
+            step1: topic => `你觉得这个问题与我们已经学过的哪些概念相关？`,
             step2: () => `如果把这个复杂问题分解成几个小步骤，第一步应该做什么？`,
             step3: () => `为什么选择这个方法？还有别的思路吗？`,
             step4: () => `你的推理过程中，哪个假设最重要？如果这个假设不成立会怎样？`
@@ -22,16 +22,16 @@ class MetacognitiveEngine {
         // 简化版：从问题中提取关键词，去知识库中模糊匹配
         // 实际应用中可用NLP库如node-nlp，这里用简单的包含关系
         const keywords = question.split(/\s+/).filter(w => w.length > 1);
-        
+
         // 从数据库查询所有知识点
-        const [nodes] = await pool.query('SELECT id, name, description FROM knowledge_nodes');
-        
+        const [nodes] = await pool.query("SELECT id, name, description FROM knowledge_nodes");
+
         // 计算每个知识点与问题的匹配得分（关键词出现在名称或描述中）
         let bestNode = null;
         let maxScore = 0;
         for (const node of nodes) {
             let score = 0;
-            const text = (node.name + ' ' + node.description).toLowerCase();
+            const text = (node.name + " " + node.description).toLowerCase();
             for (const kw of keywords) {
                 if (text.includes(kw.toLowerCase())) score += 1;
             }
@@ -50,21 +50,21 @@ class MetacognitiveEngine {
         if (prereqIds.length === 0) return [];
 
         // 查询学生对这些知识点的掌握度
-        const placeholders = prereqIds.map(() => '?').join(',');
+        const placeholders = prereqIds.map(() => "?").join(",");
         const [rows] = await pool.query(
             `SELECT node_id, mastery FROM student_knowledge 
              WHERE user_id = ? AND node_id IN (${placeholders})`,
             [userId, ...prereqIds]
         );
         const masteryMap = {};
-        rows.forEach(row => masteryMap[row.node_id] = row.mastery || 0);
+        rows.forEach(row => (masteryMap[row.node_id] = row.mastery || 0));
 
         // 筛选出掌握度低于阈值的知识点
         const missing = [];
         for (const pid of prereqIds) {
             if ((masteryMap[pid] || 0) < threshold) {
                 // 获取知识点名称
-                const [nodeInfo] = await pool.query('SELECT name FROM knowledge_nodes WHERE id = ?', [pid]);
+                const [nodeInfo] = await pool.query("SELECT name FROM knowledge_nodes WHERE id = ?", [pid]);
                 if (nodeInfo[0]) {
                     missing.push({ id: pid, name: nodeInfo[0].name, mastery: masteryMap[pid] || 0 });
                 }
@@ -77,8 +77,8 @@ class MetacognitiveEngine {
     async getAllPrereqs(nodeId, visited = new Set()) {
         if (visited.has(nodeId)) return [];
         visited.add(nodeId);
-        
-        const [rows] = await pool.query('SELECT prereq_id FROM prerequisites WHERE node_id = ?', [nodeId]);
+
+        const [rows] = await pool.query("SELECT prereq_id FROM prerequisites WHERE node_id = ?", [nodeId]);
         let prereqs = [];
         for (const row of rows) {
             prereqs.push(row.prereq_id);
@@ -94,12 +94,12 @@ class MetacognitiveEngine {
         const nodeId = await this.analyzeConfusion(question, userId);
         if (!nodeId) {
             // 如果无法匹配知识点，返回通用引导
-            return [this.questionBank.step1(''), this.questionBank.step2()];
+            return [this.questionBank.step1(""), this.questionBank.step2()];
         }
 
         // 2. 获取缺失前置知识
         const missing = await this.getMissingPrereqs(nodeId, userId);
-        
+
         // 3. 生成引导链
         const guidance = [];
         if (missing.length > 0) {
@@ -124,13 +124,13 @@ class MetacognitiveEngine {
         let reflectionCount = 0;
 
         for (const log of interactionLogs) {
-            if (log.type === 'self_explain') selfExplainCount++;
-            if (log.type === 'question') {
+            if (log.type === "self_explain") selfExplainCount++;
+            if (log.type === "question") {
                 // 问题深度：根据长度简单判断
                 const length = log.content ? log.content.length : 0;
                 questionDepth += Math.min(length / 10, 5); // 最多5分
             }
-            if (log.type === 'reflect') reflectionCount++;
+            if (log.type === "reflect") reflectionCount++;
         }
 
         // 归一化并加权计算

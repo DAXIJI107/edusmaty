@@ -1,17 +1,12 @@
-const { spawnSync } = require('child_process');
+const { spawnSync } = require("child_process");
 
-const files = [
-    'server.js',
-    'src/server/app.js',
-    'src/modules/auth.js',
-    'apps/web/public/js/edusmart-app.js'
-];
+const files = ["server.js", "src/server/app.js", "src/modules/auth.js", "apps/web/public/js/edusmart-app.js"];
 
 let failed = false;
 
 for (const file of files) {
-    const result = spawnSync(process.execPath, ['--check', file], {
-        stdio: 'inherit',
+    const result = spawnSync(process.execPath, ["--check", file], {
+        stdio: "inherit",
         shell: false
     });
     if (result.status !== 0) {

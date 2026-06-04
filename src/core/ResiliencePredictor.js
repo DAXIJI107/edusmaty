@@ -19,10 +19,10 @@ class ResiliencePredictor {
     // 计算风险分数（0-1）
     async predictRisk(userId, pool) {
         const features = await this.getUserFeatures(userId, pool);
-        
+
         // 简单规则模型（可替换为机器学习）
         let risk = 0.3; // 基础风险
-        
+
         // 正确率过低
         if (features.avg_accuracy && features.avg_accuracy < 0.5) risk += 0.2;
         // 求助过多
@@ -41,21 +41,21 @@ class ResiliencePredictor {
     generateIntervention(risk, userProfile = {}) {
         if (risk > 0.7) {
             return {
-                type: 'HIGH_RISK',
-                message: '检测到学习困难，建议联系学习顾问或休息一下。需要我帮你预约辅导吗？',
-                action: 'contact_advisor'
+                type: "HIGH_RISK",
+                message: "检测到学习困难，建议联系学习顾问或休息一下。需要我帮你预约辅导吗？",
+                action: "contact_advisor"
             };
         } else if (risk > 0.4) {
             return {
-                type: 'MEDIUM_RISK',
-                message: '看起来这部分有点难，我们可以先做几道基础题巩固一下，或者换一种学习方式？',
-                action: 'adjust_difficulty'
+                type: "MEDIUM_RISK",
+                message: "看起来这部分有点难，我们可以先做几道基础题巩固一下，或者换一种学习方式？",
+                action: "adjust_difficulty"
             };
         } else {
             return {
-                type: 'LOW_RISK',
-                message: '你已经坚持学习了很久，真棒！继续保持！',
-                action: 'motivation'
+                type: "LOW_RISK",
+                message: "你已经坚持学习了很久，真棒！继续保持！",
+                action: "motivation"
             };
         }
     }

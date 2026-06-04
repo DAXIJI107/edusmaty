@@ -1,4 +1,4 @@
-const RagSearchService = require('../RagSearchService');
+const RagSearchService = require("../RagSearchService");
 
 class RagTool {
     constructor(pool) {
@@ -6,7 +6,7 @@ class RagTool {
         this.searchService = new RagSearchService(pool);
     }
 
-    async run({ query, subject = 'all', sourceName = null, userId = null }) {
+    async run({ query, subject = "all", sourceName = null, userId = null }) {
         const result = await this.searchService.search({
             query,
             subject,
@@ -18,7 +18,7 @@ class RagTool {
             ...result,
             summary: result.hitCount
                 ? `已从 ${result.hitCount} 条公开资料/平台知识片段中找到证据，最高相关来源为 ${result.citations[0].source.name}。`
-                : '没有检索到足够证据，建议先抓取公开资料或补充课程材料。'
+                : "没有检索到足够证据，建议先抓取公开资料或补充课程材料。"
         };
     }
 }

@@ -129,13 +129,13 @@ de852d1 chore: save current project baseline
 修改方式：
 
 1. 修复 `AIPathGenerator.getStyleWeights()`，读取：
-   - `profile.cognitiveStyle.type`
-   - `profile.multimodalPreferences`
-   - `profile.learningStyle`
+    - `profile.cognitiveStyle.type`
+    - `profile.multimodalPreferences`
+    - `profile.learningStyle`
 2. 修复时间字段读取：
-   - `learningPatterns.注意力持续时间`
-   - `analysis.summary.dailyStudyMinutes`
-   - `dailyTimeMinutes`
+    - `learningPatterns.注意力持续时间`
+    - `analysis.summary.dailyStudyMinutes`
+    - `dailyTimeMinutes`
 3. 返回 `profileContext` 到接口响应。
 4. 每个路径节点加入 `personalizedReason`。
 5. 将路径生成结果保存到 `study_plans` 或新的 `learning_paths` 快照表。
@@ -179,12 +179,12 @@ de852d1 chore: save current project baseline
 修改方式：
 
 1. AI 回复前加载：
-   - 学生画像
-   - 当前路径
-   - 今日计划
-   - 最近错题
-   - 最近笔记
-   - RAG 证据
+    - 学生画像
+    - 当前路径
+    - 今日计划
+    - 最近错题
+    - 最近笔记
+    - RAG 证据
 2. AI 回复后生成 `profileUpdateCandidate`。
 3. 高频问题自动进入薄弱点候选。
 4. 情绪词、拖延词、焦虑词进入陪伴状态。
@@ -435,15 +435,15 @@ profile_update_candidates
 4. 建立画像服务，接管已有画像写入。
 5. 修复路径生成器，让画像真实影响路径。
 6. 写一个闭环测试脚本：
-   - 登录
-   - 画像诊断
-   - 读取画像
-   - 生成路径
-   - 生成今日计划
-   - AI 问答
-   - 提交练习
-   - 复习卡生成
-   - 检查画像事件
+    - 登录
+    - 画像诊断
+    - 读取画像
+    - 生成路径
+    - 生成今日计划
+    - AI 问答
+    - 提交练习
+    - 复习卡生成
+    - 检查画像事件
 7. 再做首页体验。
 
 这样做的好处是：先让系统真实闭环，再让界面好看；先让数据可信，再让 AI 聪明。

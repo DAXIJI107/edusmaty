@@ -30,8 +30,8 @@ class MasteryCalculator {
 
             // 难度权重：难题权重高
             let difficultyWeight = 1.0;
-            if (row.difficulty === 'medium') difficultyWeight = 1.2;
-            if (row.difficulty === 'hard') difficultyWeight = 1.5;
+            if (row.difficulty === "medium") difficultyWeight = 1.2;
+            if (row.difficulty === "hard") difficultyWeight = 1.5;
 
             const weight = timeWeight * difficultyWeight;
             totalWeight += weight;
@@ -45,7 +45,7 @@ class MasteryCalculator {
     // 批量更新用户所有知识点的掌握度
     async updateAllMastery(userId, pool) {
         // 获取所有知识点
-        const [nodes] = await pool.query('SELECT id FROM knowledge_nodes');
+        const [nodes] = await pool.query("SELECT id FROM knowledge_nodes");
         for (const node of nodes) {
             const mastery = await this.calculateNodeMastery(userId, node.id, pool);
             await pool.query(

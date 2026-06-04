@@ -4,29 +4,34 @@ class ResourceTool {
     }
 
     async run({ subject = "all", weakPoints = [] }) {
-        const targetSubject = subject && subject !== "all"
-            ? subject
-            : weakPoints[0]?.subject || "数据结构与算法";
-        const [courses] = await this.pool.query(
-            `SELECT id, title, provider, subject, progress, source_url
+        const targetSubject = subject && subject !== "all" ? subject : weakPoints[0]?.subject || "数据结构与算法";
+        const [courses] = await this.pool
+            .query(
+                `SELECT id, title, provider, subject, progress, source_url
              FROM courses
              WHERE subject = ? OR ? = 'all'
              ORDER BY progress ASC, id
              LIMIT 6`,
-            [targetSubject, subject || "all"]
-        ).catch(() => [[]]);
-        const nodeIds = weakPoints.map(item => Number(item.id)).filter(Boolean).slice(0, 4);
+                [targetSubject, subject || "all"]
+            )
+            .catch(() => [[]]);
+        const nodeIds = weakPoints
+            .map(item => Number(item.id))
+            .filter(Boolean)
+            .slice(0, 4);
         let questions = [];
         if (nodeIds.length) {
             const placeholders = nodeIds.map(() => "?").join(",");
-            [questions] = await this.pool.query(
-                `SELECT id, knowledge_id, question, difficulty
+            [questions] = await this.pool
+                .query(
+                    `SELECT id, knowledge_id, question, difficulty
                  FROM questions
                  WHERE knowledge_id IN (${placeholders})
                  ORDER BY difficulty, id
                  LIMIT 8`,
-                nodeIds
-            ).catch(() => [[]]);
+                    nodeIds
+                )
+                .catch(() => [[]]);
         }
 
         return {

@@ -1,9 +1,9 @@
 class FeedbackLoopEngine {
     async recordCycle(pool, { userId, examRecordId }) {
-        const [exam] = await pool.query(
-            `SELECT * FROM exam_records WHERE id = ? AND user_id = ?`,
-            [examRecordId, userId]
-        );
+        const [exam] = await pool.query(`SELECT * FROM exam_records WHERE id = ? AND user_id = ?`, [
+            examRecordId,
+            userId
+        ]);
         if (exam.length === 0) return null;
 
         const [answers] = await pool.query(
@@ -18,10 +18,10 @@ class FeedbackLoopEngine {
 
         const beforeMastery = {};
         for (const nodeId of nodeIds) {
-            const [m] = await pool.query(
-                `SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?`,
-                [userId, nodeId]
-            );
+            const [m] = await pool.query(`SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?`, [
+                userId,
+                nodeId
+            ]);
             beforeMastery[nodeId] = m.length > 0 ? m[0].mastery : 0;
         }
 
@@ -43,28 +43,31 @@ class FeedbackLoopEngine {
         const [result] = await pool.query(
             `INSERT INTO feedback_loop (user_id, cycle_start, exam_record_id, weak_points, recommended_courses, error_solved_count)
              VALUES (?, CURDATE(), ?, ?, ?, ?)`,
-            [userId, examRecordId, JSON.stringify(weakPoints), JSON.stringify(recommendations.length > 0 ? recommendations[0] : {}), errors[0]?.count || 0]
+            [
+                userId,
+                examRecordId,
+                JSON.stringify(weakPoints),
+                JSON.stringify(recommendations.length > 0 ? recommendations[0] : {}),
+                errors[0]?.count || 0
+            ]
         );
 
         return { loopId: result.insertId, weakPoints, errorSolvedCount: errors[0]?.count || 0 };
     }
 
     async closeCycle(pool, { userId, loopId }) {
-        const [loop] = await pool.query(
-            `SELECT * FROM feedback_loop WHERE id = ? AND user_id = ?`,
-            [loopId, userId]
-        );
+        const [loop] = await pool.query(`SELECT * FROM feedback_loop WHERE id = ? AND user_id = ?`, [loopId, userId]);
         if (loop.length === 0) return null;
 
-        const weakPoints = typeof loop[0].weak_points === 'string'
-            ? JSON.parse(loop[0].weak_points) : (loop[0].weak_points || []);
+        const weakPoints =
+            typeof loop[0].weak_points === "string" ? JSON.parse(loop[0].weak_points) : loop[0].weak_points || [];
 
         const masteryImprovement = {};
         for (const wp of weakPoints) {
-            const [m] = await pool.query(
-                `SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?`,
-                [userId, wp.nodeId]
-            );
+            const [m] = await pool.query(`SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?`, [
+                userId,
+                wp.nodeId
+            ]);
             const newMastery = m.length > 0 ? m[0].mastery : 0;
             masteryImprovement[wp.nodeId] = {
                 before: wp.masteryBefore || 0,
@@ -74,9 +77,8 @@ class FeedbackLoopEngine {
         }
 
         const improvements = Object.values(masteryImprovement);
-        const effectiveness = improvements.length > 0
-            ? improvements.reduce((s, v) => s + v.improved, 0) / improvements.length
-            : 0;
+        const effectiveness =
+            improvements.length > 0 ? improvements.reduce((s, v) => s + v.improved, 0) / improvements.length : 0;
 
         await pool.query(
             `UPDATE feedback_loop SET cycle_end = CURDATE(), mastery_improvement = ?, cycle_effectiveness = ? WHERE id = ?`,
@@ -93,8 +95,9 @@ class FeedbackLoopEngine {
         );
         return rows.map(r => ({
             ...r,
-            weak_points: typeof r.weak_points === 'string' ? JSON.parse(r.weak_points) : r.weak_points,
-            mastery_improvement: typeof r.mastery_improvement === 'string' ? JSON.parse(r.mastery_improvement) : r.mastery_improvement
+            weak_points: typeof r.weak_points === "string" ? JSON.parse(r.weak_points) : r.weak_points,
+            mastery_improvement:
+                typeof r.mastery_improvement === "string" ? JSON.parse(r.mastery_improvement) : r.mastery_improvement
         }));
     }
 }

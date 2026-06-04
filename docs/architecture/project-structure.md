@@ -24,4 +24,3 @@ Design rules:
 - Keep startup, static hosting, health checks, and frontend fallback logic inside `src/server`.
 - Keep AI/domain algorithms in `src/core`; route files should orchestrate rather than own large algorithms.
 - Keep generated output, browser profiles, screenshots, and local datasets out of source scanning through `.gitignore` and `.aiignore`.
-

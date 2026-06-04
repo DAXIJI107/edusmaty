@@ -1,38 +1,40 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const pool = require('../db');
-const { authenticateJWT } = require('../middleware');
+const pool = require("../db");
+const { authenticateJWT } = require("../middleware");
 
 router.use(authenticateJWT);
 
 // POST / - 记录学习事件（单条或批量）
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
     try {
         const userId = req.user.id;
         const { events } = req.body;
         const eventList = events || [req.body];
 
         if (!eventList.length) {
-            return res.status(400).json({ success: false, message: '事件不能为空' });
+            return res.status(400).json({ success: false, message: "事件不能为空" });
         }
 
         const values = [];
-        const placeholders = eventList.map(evt => {
-            values.push(
-                userId,
-                evt.session_id || null,
-                evt.event_type,
-                evt.page || null,
-                evt.subject || null,
-                evt.knowledge_id || null,
-                evt.target_id || null,
-                evt.target_type || null,
-                evt.duration_ms || 0,
-                evt.context_json ? JSON.stringify(evt.context_json) : null,
-                evt.client_ts || Date.now()
-            );
-            return '(?,?,?,?,?,?,?,?,?,?,?)';
-        }).join(',');
+        const placeholders = eventList
+            .map(evt => {
+                values.push(
+                    userId,
+                    evt.session_id || null,
+                    evt.event_type,
+                    evt.page || null,
+                    evt.subject || null,
+                    evt.knowledge_id || null,
+                    evt.target_id || null,
+                    evt.target_type || null,
+                    evt.duration_ms || 0,
+                    evt.context_json ? JSON.stringify(evt.context_json) : null,
+                    evt.client_ts || Date.now()
+                );
+                return "(?,?,?,?,?,?,?,?,?,?,?)";
+            })
+            .join(",");
 
         await pool.query(
             `INSERT INTO learning_events (user_id, session_id, event_type, page, subject, knowledge_id, target_id, target_type, duration_ms, context_json, client_ts)
@@ -42,30 +44,30 @@ router.post('/', async (req, res) => {
 
         res.json({ success: true, count: eventList.length });
     } catch (e) {
-        console.error('记录学习事件失败:', e);
-        res.status(500).json({ success: false, message: '记录失败' });
+        console.error("记录学习事件失败:", e);
+        res.status(500).json({ success: false, message: "记录失败" });
     }
 });
 
 // GET / - 查询学习事件
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
     try {
         const userId = req.user.id;
         const { event_type, limit = 50, offset = 0, from, to } = req.query;
 
-        let where = 'WHERE user_id = ?';
+        let where = "WHERE user_id = ?";
         const params = [userId];
 
         if (event_type) {
-            where += ' AND event_type = ?';
+            where += " AND event_type = ?";
             params.push(event_type);
         }
         if (from) {
-            where += ' AND created_at >= ?';
+            where += " AND created_at >= ?";
             params.push(from);
         }
         if (to) {
-            where += ' AND created_at <= ?';
+            where += " AND created_at <= ?";
             params.push(to);
         }
 
@@ -76,13 +78,13 @@ router.get('/', async (req, res) => {
 
         res.json({ success: true, data: rows, total: rows.length });
     } catch (e) {
-        console.error('查询学习事件失败:', e);
-        res.status(500).json({ success: false, message: '查询失败' });
+        console.error("查询学习事件失败:", e);
+        res.status(500).json({ success: false, message: "查询失败" });
     }
 });
 
 // GET /stats - 行为统计
-router.get('/stats', async (req, res) => {
+router.get("/stats", async (req, res) => {
     try {
         const userId = req.user.id;
         const { days = 7 } = req.query;
@@ -106,16 +108,16 @@ router.get('/stats', async (req, res) => {
 
         res.json({ success: true, data: { daily, summary } });
     } catch (e) {
-        console.error('行为统计失败:', e);
-        res.status(500).json({ success: false, message: '统计失败' });
+        console.error("行为统计失败:", e);
+        res.status(500).json({ success: false, message: "统计失败" });
     }
 });
 
 // GET /behaviors — 行为画像摘要（用于推荐和路径调整）
-router.get('/behaviors', async (req, res) => {
+router.get("/behaviors", async (req, res) => {
     try {
         const userId = req.user.id;
-        const days = parseInt(req.query.days || '14');
+        const days = parseInt(req.query.days || "14");
 
         // 各类行为统计
         const [videoStats] = await pool.query(
@@ -160,14 +162,16 @@ router.get('/behaviors', async (req, res) => {
         });
 
         // 推断专注模式
-        let focusPattern = 'unknown';
+        let focusPattern = "unknown";
         const avgWatchMs = Number(videoStats[0]?.avg_duration_ms || 0);
-        if (avgWatchMs > 600000) focusPattern = 'deep_focus';        // > 10min average
-        else if (avgWatchMs > 180000) focusPattern = 'moderate';      // 3-10min
-        else if (avgWatchMs > 0) focusPattern = 'short_burst';       // < 3min
+        if (avgWatchMs > 600000)
+            focusPattern = "deep_focus"; // > 10min average
+        else if (avgWatchMs > 180000)
+            focusPattern = "moderate"; // 3-10min
+        else if (avgWatchMs > 0) focusPattern = "short_burst"; // < 3min
 
         // 推断学习偏好
-        let inferredStyle = 'reading';
+        let inferredStyle = "reading";
         const totalClicks = resourceClicks.reduce((s, r) => s + Number(r.count), 0);
         if (totalClicks > 0) {
             const videoRatio = (resourcePreference.video || 0) / totalClicks;
@@ -175,10 +179,10 @@ router.get('/behaviors', async (req, res) => {
             const quizRatio = (resourcePreference.quiz || 0) / totalClicks;
             const labRatio = (resourcePreference.lab || 0) / totalClicks;
 
-            if (videoRatio > 0.4) inferredStyle = 'visual';
-            else if (quizRatio > 0.35) inferredStyle = 'kinesthetic';
-            else if (labRatio > 0.3) inferredStyle = 'kinesthetic';
-            else if (docRatio > 0.35) inferredStyle = 'reading';
+            if (videoRatio > 0.4) inferredStyle = "visual";
+            else if (quizRatio > 0.35) inferredStyle = "kinesthetic";
+            else if (labRatio > 0.3) inferredStyle = "kinesthetic";
+            else if (docRatio > 0.35) inferredStyle = "reading";
         }
 
         res.json({
@@ -201,18 +205,18 @@ router.get('/behaviors', async (req, res) => {
                 inferred: {
                     focusPattern,
                     learningStyle: inferredStyle,
-                    confidence: totalClicks >= 5 ? 'medium' : 'low'
+                    confidence: totalClicks >= 5 ? "medium" : "low"
                 }
             }
         });
     } catch (e) {
-        console.error('行为画像查询失败:', e);
-        res.status(500).json({ success: false, message: '查询失败' });
+        console.error("行为画像查询失败:", e);
+        res.status(500).json({ success: false, message: "查询失败" });
     }
 });
 
 // POST /sync-profile — 将行为推断结果同步到 student_profiles
-router.post('/sync-profile', async (req, res) => {
+router.post("/sync-profile", async (req, res) => {
     try {
         const userId = req.user.id;
 
@@ -236,17 +240,17 @@ router.post('/sync-profile', async (req, res) => {
         );
 
         // 读取现有画像
-        const [profileRows] = await pool.query(
-            'SELECT profile_json, version FROM student_profiles WHERE user_id = ?',
-            [userId]
-        );
+        const [profileRows] = await pool.query("SELECT profile_json, version FROM student_profiles WHERE user_id = ?", [
+            userId
+        ]);
 
         let profile = {};
         let version = 1;
         if (profileRows.length > 0) {
-            profile = typeof profileRows[0].profile_json === 'string'
-                ? JSON.parse(profileRows[0].profile_json)
-                : profileRows[0].profile_json;
+            profile =
+                typeof profileRows[0].profile_json === "string"
+                    ? JSON.parse(profileRows[0].profile_json)
+                    : profileRows[0].profile_json;
             version = (profileRows[0].version || 1) + 1;
         }
 
@@ -274,13 +278,13 @@ router.post('/sync-profile', async (req, res) => {
 
         res.json({
             success: true,
-            message: '画像已同步',
+            message: "画像已同步",
             version,
             behavioral: profile.behavioral
         });
     } catch (e) {
-        console.error('同步画像失败:', e);
-        res.status(500).json({ success: false, message: '同步失败' });
+        console.error("同步画像失败:", e);
+        res.status(500).json({ success: false, message: "同步失败" });
     }
 });
 

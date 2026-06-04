@@ -41,19 +41,19 @@ class AdaptivePracticeEngine {
     }
 
     async getMastery(userId, nodeId, pool) {
-        const [rows] = await pool.query(
-            'SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?',
-            [userId, nodeId]
-        );
+        const [rows] = await pool.query("SELECT mastery FROM student_knowledge WHERE user_id = ? AND node_id = ?", [
+            userId,
+            nodeId
+        ]);
         return rows.length > 0 ? rows[0].mastery : 0;
     }
 
     calculateTargetDifficulty(mastery) {
-        if (mastery < 30) return 'easy';
-        if (mastery < 50) return 'easy';
-        if (mastery < 70) return 'medium';
-        if (mastery < 85) return 'hard';
-        return 'hard';
+        if (mastery < 30) return "easy";
+        if (mastery < 50) return "easy";
+        if (mastery < 70) return "medium";
+        if (mastery < 85) return "hard";
+        return "hard";
     }
 
     calculateOptimalCount(mastery) {
@@ -67,44 +67,41 @@ class AdaptivePracticeEngine {
     getPracticeStrategy(mastery) {
         if (mastery < 30) {
             return {
-                focus: '基础概念理解',
-                approach: '从定义和基本应用开始',
-                tips: '建议先观看相关视频教程再做题'
+                focus: "基础概念理解",
+                approach: "从定义和基本应用开始",
+                tips: "建议先观看相关视频教程再做题"
             };
         }
         if (mastery < 50) {
             return {
-                focus: '核心概念巩固',
-                approach: '通过典型例题掌握基本应用',
-                tips: '注意总结每道题的解题步骤'
+                focus: "核心概念巩固",
+                approach: "通过典型例题掌握基本应用",
+                tips: "注意总结每道题的解题步骤"
             };
         }
         if (mastery < 70) {
             return {
-                focus: '综合应用提升',
-                approach: '练习跨知识点的综合题',
-                tips: '尝试一题多解，拓展思路'
+                focus: "综合应用提升",
+                approach: "练习跨知识点的综合题",
+                tips: "尝试一题多解，拓展思路"
             };
         }
         if (mastery < 85) {
             return {
-                focus: '高阶应用挑战',
-                approach: '解决复杂场景问题',
-                tips: '关注解题效率和最优方法'
+                focus: "高阶应用挑战",
+                approach: "解决复杂场景问题",
+                tips: "关注解题效率和最优方法"
             };
         }
         return {
-            focus: '创新应用',
-            approach: '探索非常规问题解法',
-            tips: '尝试自己出题或教别人'
+            focus: "创新应用",
+            approach: "探索非常规问题解法",
+            tips: "尝试自己出题或教别人"
         };
     }
 
     async analyzeAnswer(userId, questionId, userAnswer, pool) {
-        const [question] = await pool.query(
-            'SELECT * FROM questions WHERE id = ?',
-            [questionId]
-        );
+        const [question] = await pool.query("SELECT * FROM questions WHERE id = ?", [questionId]);
         if (question.length === 0) return null;
 
         const q = question[0];
@@ -121,7 +118,7 @@ class AdaptivePracticeEngine {
         if (!isCorrect) {
             feedback.explanation = await this.generateExplanation(q, userAnswer);
             feedback.misconception = this.detectMisconception(q, userAnswer);
-            feedback.nextDifficulty = 'easy';
+            feedback.nextDifficulty = "easy";
         } else {
             feedback.nextDifficulty = this.getNextDifficulty(q.difficulty);
         }
@@ -135,33 +132,33 @@ class AdaptivePracticeEngine {
 
     detectMisconception(question, userAnswer) {
         const patterns = [
-            { pattern: /公式记错|记错公式/, diagnosis: '公式记忆不牢固' },
-            { pattern: /计算错误|算错了/, diagnosis: '计算过程粗心' },
-            { pattern: /概念混淆|混淆/, diagnosis: '概念理解不清晰' },
-            { pattern: /审题不清|看错了/, diagnosis: '审题习惯需要改进' }
+            { pattern: /公式记错|记错公式/, diagnosis: "公式记忆不牢固" },
+            { pattern: /计算错误|算错了/, diagnosis: "计算过程粗心" },
+            { pattern: /概念混淆|混淆/, diagnosis: "概念理解不清晰" },
+            { pattern: /审题不清|看错了/, diagnosis: "审题习惯需要改进" }
         ];
 
         for (const p of patterns) {
             if (p.pattern.test(userAnswer)) return p.diagnosis;
         }
-        return '需要进一步分析错误原因';
+        return "需要进一步分析错误原因";
     }
 
     getNextDifficulty(currentDifficulty) {
-        const levels = ['easy', 'medium', 'hard'];
+        const levels = ["easy", "medium", "hard"];
         const idx = levels.indexOf(currentDifficulty);
         if (idx < levels.length - 1) return levels[idx + 1];
-        return 'hard';
+        return "hard";
     }
 
     async generateAdaptiveTest(userId, pool, options = {}) {
         const count = options.count || 10;
         const subjects = options.subjects || [];
 
-        let subjectFilter = '';
+        let subjectFilter = "";
         const params = [userId];
         if (subjects.length > 0) {
-            subjectFilter = `AND kn.subject IN (${subjects.map(() => '?').join(',')})`;
+            subjectFilter = `AND kn.subject IN (${subjects.map(() => "?").join(",")})`;
             params.push(...subjects);
         }
 
@@ -189,12 +186,14 @@ class AdaptivePracticeEngine {
                 [node.nodeId, difficulty, nodeCount]
             );
 
-            questions.push(...qs.map(q => ({
-                ...q,
-                nodeName: node.name,
-                subject: node.subject,
-                nodeMastery: node.mastery
-            })));
+            questions.push(
+                ...qs.map(q => ({
+                    ...q,
+                    nodeName: node.name,
+                    subject: node.subject,
+                    nodeMastery: node.mastery
+                }))
+            );
             remainingCount -= qs.length;
         }
 
@@ -213,10 +212,10 @@ class AdaptivePracticeEngine {
 
         return {
             testId: `adaptive_${Date.now()}`,
-            type: 'adaptive',
+            type: "adaptive",
             totalQuestions: questions.length,
             estimatedTime: questions.length * 2,
-            difficulty: 'mixed',
+            difficulty: "mixed",
             questions: questions.map(q => ({
                 id: q.id,
                 content: q.content,
