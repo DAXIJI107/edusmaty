@@ -1,5 +1,4 @@
 const CourseDesignTool = require("./CourseDesignTool");
-const MasteryTool = require("./MasteryTool");
 const NoteTool = require("./NoteTool");
 const PathTool = require("./PathTool");
 const PracticeTool = require("./PracticeTool");
@@ -16,7 +15,6 @@ const definitions = [
     ["note", "生成并写回复盘任务卡", "medium", NoteTool],
     ["path", "生成并写回学习路径任务", "medium", PathTool],
     ["courseDesign", "生成并保存多日课程设计", "medium", CourseDesignTool],
-    ["mastery", "读取和更新知识掌握度", "high", MasteryTool],
     ["rag", "从平台知识库执行混合检索", "low", RagTool],
     ["publicSource", "抓取公开资料并写入知识库", "high", PublicSourceTool]
 ];

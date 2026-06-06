@@ -24,6 +24,7 @@ module.exports = [
     ["/api/ai-config", "../modules/ai-config"],
     ["/api/config", "../modules/config"],
     ["/api/learning-events", "../modules/learning-events"],
+    ["/api/learning-loop", "../modules/learning-loop"],
     ["/api/report", "../modules/report"],
     ["/api/knowledge", "../modules/knowledge"],
     ["/api/knowledge-base", "../modules/knowledge-base"],

@@ -108,6 +108,8 @@
             studyPlanWeek: null,
             studyPlanMonth: null,
             studyPlanTab: "today",
+            learningLoop: null,
+            learningLoopAnswers: {},
             activities: [],
             notifications: [],
             unreadCount: 0,
@@ -467,6 +469,11 @@
 
     async function loadStudyPlan(force = false) {
         if (state.data.studyPlan && !force) return;
+        try {
+            state.data.learningLoop = await request("/api/learning-loop/status");
+        } catch {
+            state.data.learningLoop = null;
+        }
         const center = await loadPathCenter(force);
         const tasks = (center.tasks || []).map(task => ({
             id: task.id,
@@ -2123,6 +2130,46 @@
         </article>`;
     }
 
+    function learningLoopDiagnosisCard(loop) {
+        const questions = loop?.questions || [];
+        if (loop?.stage !== "diagnosis_required" || !questions.length) return "";
+        return `<section class="card" style="margin-bottom:18px">
+            <div class="card-head">
+                <div>
+                    <span class="pill warn">数据不足，先诊断</span>
+                    <h2 class="section-title">${icon("brain", 18)}${escapeHtml(loop.knowledge?.title || "目标知识点")}基线诊断</h2>
+                    <p>${escapeHtml(loop.message || "完成诊断后生成真实学习计划。")}</p>
+                </div>
+                <span class="pill">置信度 ${Math.round(Number(loop.confidence || 0) * 100)}%</span>
+            </div>
+            <form data-learning-loop-diagnosis>
+                ${questions
+                    .map(
+                        (
+                            question,
+                            index
+                        ) => `<fieldset style="border:0;padding:16px 0;margin:0;border-bottom:1px solid var(--line)">
+                            <legend style="font-weight:700;margin-bottom:10px">${index + 1}. ${escapeHtml(question.content)}</legend>
+                            <div class="list">
+                                ${(question.options || [])
+                                    .map(
+                                        option => `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+                                            <input type="radio" name="question_${question.id}" value="${escapeHtml(option)}" required>
+                                            <span>${escapeHtml(option)}</span>
+                                        </label>`
+                                    )
+                                    .join("")}
+                            </div>
+                        </fieldset>`
+                    )
+                    .join("")}
+                <div class="hero-actions" style="margin-top:18px">
+                    <button class="btn primary glow" type="submit">${icon("check", 17)}提交诊断并生成 3 天计划</button>
+                </div>
+            </form>
+        </section>`;
+    }
+
     function studyPlanWeekView() {
         const days = state.data.studyPlanWeek?.days || [];
         return `<section class="card">
@@ -2163,6 +2210,7 @@
     function studyPlanView() {
         const tasks = state.data.studyPlanTasks || [];
         const plan = state.data.studyPlan || {};
+        const learningLoop = state.data.learningLoop;
         const progress = state.data.studyPlanProgress || {};
         const today = progress.today || {};
         const stats = progress.stats || {};
@@ -2202,6 +2250,7 @@
                         .join("")}</select></div>
                     <button class="btn primary" data-study-plan-agent-generate>${icon("calendar", 17)}生成今日计划</button>
                 </section>
+                ${learningLoopDiagnosisCard(learningLoop)}
             </main>`;
         }
         return `<main class="page">
@@ -10722,13 +10771,15 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     const goal = state.data.pathGoal || "系统掌握计算机核心能力";
                     const subject = state.data.pathSubject || "all";
                     const intensity = state.data.pathIntensity || "normal";
-                    await request("/api/app/path/generate", {
+                    const result = await request("/api/app/path/generate", {
                         method: "POST",
                         body: JSON.stringify({ goal, subject, intensity })
                     });
+                    state.data.learningLoop = result;
                     state.data.pathCenter = null;
                     state.data.studyPlan = null;
                     await loadStudyPlan(true);
+                    updateOnboardingProgress({ pathDone: result.stage === "plan_ready" });
                     await render();
                     toast("Agent 今日计划已重新生成");
                 } catch (error) {
@@ -10750,6 +10801,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     state.data.pathCenter = null;
                     state.data.studyPlan = null;
                     await loadStudyPlan(true);
+                    updateOnboardingProgress({ pathDone: true });
                     await render();
                 } catch (error) {
                     toast(error.message);
@@ -10799,15 +10851,50 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                         method: "POST",
                         body: JSON.stringify({ goal, subject, intensity })
                     });
+                    state.data.learningLoop = result;
                     state.data.pathCenter = null;
                     state.data.studyPlan = null;
                     await loadStudyPlan(true);
                     await render();
-                    toast(`Agent 已生成 ${result.generated || 0} 个今日计划任务`);
+                    toast(
+                        result.stage === "diagnosis_required"
+                            ? "当前证据不足，请先完成 5 道诊断题"
+                            : `Agent 已生成 ${result.generated || 0} 天学习计划`
+                    );
                 } catch (error) {
                     toast(error.message);
                 } finally {
                     el.classList.remove("is-loading");
+                }
+            })
+        );
+        document.querySelectorAll("[data-learning-loop-diagnosis]").forEach(form =>
+            form.addEventListener("submit", async event => {
+                event.preventDefault();
+                const loop = state.data.learningLoop;
+                const formData = new FormData(form);
+                const answers = {};
+                (loop?.questions || []).forEach(question => {
+                    answers[question.id] = formData.get(`question_${question.id}`) || "";
+                });
+                const button = form.querySelector('button[type="submit"]');
+                button?.classList.add("is-loading");
+                try {
+                    const result = await request("/api/learning-loop/diagnosis/submit", {
+                        method: "POST",
+                        body: JSON.stringify({ goalId: loop.goalId, answers })
+                    });
+                    state.data.learningLoop = result;
+                    state.data.pathCenter = null;
+                    state.data.studyPlan = null;
+                    await loadStudyPlan(true);
+                    updateOnboardingProgress({ pathDone: true });
+                    await render();
+                    toast(`诊断完成，已生成 ${result.generated || 3} 天真实学习计划`);
+                } catch (error) {
+                    toast(error.message);
+                } finally {
+                    button?.classList.remove("is-loading");
                 }
             })
         );
@@ -12369,13 +12456,18 @@ zhaoliu,赵六"></textarea>
                         method: "POST",
                         body: JSON.stringify({ goal, subject, intensity })
                     });
+                    state.data.learningLoop = result;
                     state.loaded = false;
                     state.data.pathCenter = null;
                     await loadData(true);
                     await loadPathCenter(true);
-                    updateOnboardingProgress({ pathDone: true });
+                    updateOnboardingProgress({ pathDone: result.stage === "plan_ready" });
                     render();
-                    toast(`已生成 ${result.generated} 个路径任务`);
+                    toast(
+                        result.stage === "diagnosis_required"
+                            ? "需要先完成目标知识点诊断"
+                            : `已生成 ${result.generated} 天学习计划`
+                    );
                 } catch (error) {
                     toast(error.message);
                 } finally {
@@ -14072,8 +14164,19 @@ zhaoliu,赵六"></textarea>
                     const apiMode = mode === "onlineExam" ? "exam" : mode;
                     const result = await request("/api/app/practice/submit-set", {
                         method: "POST",
-                        body: JSON.stringify({ mode: apiMode, answers })
+                        body: JSON.stringify({
+                            mode: apiMode,
+                            answers,
+                            learningGoalId: state.data.learningLoop?.goal?.id || state.data.learningLoop?.goalId || null
+                        })
                     });
+                    if (result.stage === "plan_adjusted") {
+                        state.data.learningLoop = await request(
+                            `/api/learning-loop/status?goalId=${encodeURIComponent(result.goalId)}`
+                        );
+                        state.data.pathCenter = null;
+                        state.data.studyPlan = null;
+                    }
                     state.data.notesCenter = null;
                     const subject = mode === "test" ? state.data.selectedSubject : "all";
                     const key = `${mode}:${subject}`;

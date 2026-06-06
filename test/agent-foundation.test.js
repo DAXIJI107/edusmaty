@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { buildAgentRunMetadata, detectMissingInputs } = require("../src/core/AgentRunMetadata");
 const AgentRuntime = require("../src/core/AgentRuntime");
+const createToolRegistry = require("../src/core/agent-tools/createToolRegistry");
 const ToolRegistry = require("../src/core/agent-tools/ToolRegistry");
 const RagTool = require("../src/core/agent-tools/RagTool");
 const agentMigration = require("../ops/database/migrations/002_agent_memory_and_evaluations");
@@ -47,6 +48,14 @@ test("tool registry rejects unknown tools in an execution plan", () => {
     const registry = new ToolRegistry().register({ name: "profile" }, { run: async () => ({}) });
     assert.throws(() => registry.validatePlan([{ tool: "missing" }]), /unknown tools/i);
     assert.deepEqual(registry.validatePlan([{ tool: "profile" }]), [{ tool: "profile" }]);
+});
+
+test("production tool registry only registers executable tools", () => {
+    const registry = createToolRegistry({});
+    assert.ok(registry.describe().length >= 8);
+    for (const definition of registry.describe()) {
+        assert.equal(typeof registry.get(definition.name).run, "function");
+    }
 });
 
 test("RagTool uses hybrid search and reports BM25 fallback", async () => {

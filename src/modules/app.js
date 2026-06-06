@@ -1733,10 +1733,13 @@ router.get("/path/center", async (req, res, next) => {
         const [agentTasks] = await pool.query(
             `SELECT st.id, st.knowledge_id, st.title, st.subtitle, st.icon, st.estimated_minutes,
                     st.status, st.sort_order, st.source,
-                    kp.title AS knowledge_title, kp.subject, kp.mastery, kp.summary
+                    kp.title AS knowledge_title, kp.subject,
+                    COALESCE(sk.mastery, 0) AS mastery, kp.summary
              FROM study_tasks st
              LEFT JOIN knowledge_points kp ON kp.id = st.knowledge_id
-             WHERE st.user_id = ? AND st.task_date = CURDATE() AND st.source IN ('agent-runtime', 'custom-agent')
+             LEFT JOIN student_knowledge sk ON sk.node_id = st.knowledge_id AND sk.user_id = st.user_id
+             WHERE st.user_id = ? AND st.task_date = CURDATE()
+               AND st.source IN ('agent-runtime', 'custom-agent', 'agent-learning-loop')
              ORDER BY st.sort_order, st.id`,
             [userId]
         );
@@ -1866,24 +1869,16 @@ router.post("/path/generate", async (req, res, next) => {
         const userId = req.user.id || 1;
         const goal = String(req.body?.goal || "系统掌握计算机核心能力").trim();
         const subject = String(req.body?.subject || "all");
-        const intensity = String(req.body?.intensity || "normal");
-        const result = await agentRuntime.run({
-            userId,
-            message: goal,
-            intent: "design_course",
-            context: { goal, subject, intensity, durationDays: req.body?.durationDays || 7 }
-        });
-        res.json({
-            success: true,
-            generated: result.path?.generated || 0,
-            goal,
-            subject,
-            intensity,
-            sessionId: result.sessionId,
-            traces: result.traces,
-            courseDesign: result.courseDesign,
-            path: result.path
-        });
+        const LearningLoopService = require("../core/LearningLoopService");
+        const learningLoop = new LearningLoopService(pool);
+        res.json(
+            await learningLoop.start({
+                userId,
+                goal,
+                subject,
+                durationDays: req.body?.durationDays || 3
+            })
+        );
     } catch (error) {
         next(error);
     }
@@ -2512,7 +2507,18 @@ router.post("/report/generate", async (req, res, next) => {
 router.post("/practice/submit-set", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
-        const { mode = "practice", answers = {} } = req.body || {};
+        const { mode = "practice", answers = {}, learningGoalId = null } = req.body || {};
+        if (learningGoalId) {
+            const LearningLoopService = require("../core/LearningLoopService");
+            const learningLoop = new LearningLoopService(pool);
+            return res.json(
+                await learningLoop.submitPractice({
+                    userId,
+                    goalId: Number(learningGoalId),
+                    answers
+                })
+            );
+        }
         const ids = Object.keys(answers).map(Number).filter(Boolean);
         if (!ids.length) return res.status(400).json({ success: false, message: "请先完成至少一道题" });
 
