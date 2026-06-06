@@ -1,16 +1,36 @@
-const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
 
-const files = ["server.js", "src/server/app.js", "src/modules/auth.js", "apps/web/public/js/edusmart-app.js"];
+function collectJavaScriptFiles(root) {
+    return fs.readdirSync(root, { withFileTypes: true }).flatMap(entry => {
+        const target = path.join(root, entry.name);
+        if (entry.isDirectory()) return collectJavaScriptFiles(target);
+        return entry.isFile() && entry.name.endsWith(".js") ? [target] : [];
+    });
+}
+
+const files = [
+    "server.js",
+    "config.js",
+    "db.js",
+    "middleware.js",
+    ...collectJavaScriptFiles("src"),
+    ...collectJavaScriptFiles("scripts"),
+    ...collectJavaScriptFiles("ops/database/migrations"),
+    ...collectJavaScriptFiles("test"),
+    ...collectJavaScriptFiles("apps/web/public/js")
+];
 
 let failed = false;
 
 for (const file of files) {
-    const result = spawnSync(process.execPath, ["--check", file], {
-        stdio: "inherit",
-        shell: false
-    });
-    if (result.status !== 0) {
+    try {
+        const source = fs.readFileSync(file, "utf8").replace(/^#!.*\r?\n/, "");
+        new vm.Script(source, { filename: file });
+    } catch (error) {
         failed = true;
+        console.error(error.stack || error.message);
     }
 }
 

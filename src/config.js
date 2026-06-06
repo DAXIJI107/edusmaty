@@ -5,7 +5,7 @@ const bool = value => String(value || "").toLowerCase() === "true";
 module.exports = {
     app: {
         name: "EduSmart",
-        demoMode: bool(process.env.DEMO_MODE || "true")
+        demoMode: bool(process.env.DEMO_MODE || "false")
     },
     server: {
         port: Number(process.env.PORT || 3020),
