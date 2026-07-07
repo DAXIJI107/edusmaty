@@ -15,9 +15,19 @@ demo-walkthrough/
 .vs/
 .codewhale/
 .deepseek/
+.codebuddy/
+.qa_deps/
 
 # Large local knowledge/runtime bundles
 Python/
 obsidian-vault/
 rag_software_engineering_bundle/
+
+# Build output
+dist/
+dist_old/
+
+# SQLite database
+data/
+*.sqlite
 

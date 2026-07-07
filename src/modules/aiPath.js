@@ -180,13 +180,27 @@ async function buildTodayCard(step) {
 }
 
 // POST /api/ai/learning-path
+// 默认使用星火大模型增强路径生成（LLM优化 + Agent推理）
+// 可通过 ?mode=rule 降级为纯规则引擎
 router.post("/learning-path", authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const subject = req.body?.subject || req.query?.subject || null;
+        const mode = req.body?.mode || req.query?.mode || "agent";
         await ensurePathData(pool, userId);
         const generator = new AIPathGenerator();
-        const result = await generator.generate(userId, pool, subject);
+
+        let result;
+        if (mode === "rule") {
+            // 纯规则引擎（不调用大模型）
+            result = await generator.generate(userId, pool, subject);
+        } else if (mode === "llm") {
+            // 规则引擎 + 星火大模型审查优化
+            result = await generator.generateWithLLM(userId, pool, subject);
+        } else {
+            // 默认：Agent 推理增强（星火大模型驱动）
+            result = await generator.generateWithAgent(userId, pool, subject);
+        }
         const steps = result.steps || [];
         const total = steps.length;
         const mastered = steps.filter(s => s.mastery >= 80).length;

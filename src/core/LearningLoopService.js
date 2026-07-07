@@ -6,52 +6,70 @@ class LearningLoopService {
         this.rag = new RagSearchService(pool);
     }
 
+    async addColumnIfNotExists(tableName, columnName, columnType) {
+        try {
+            const [rows] = await this.pool.query(`PRAGMA table_info("${tableName}")`);
+            if (!rows.some(row => row.name === columnName)) {
+                await this.pool.query(`ALTER TABLE "${tableName}" ADD COLUMN ${columnName} ${columnType}`);
+            }
+        } catch (e) {
+            // ignore - column may already exist
+        }
+    }
+
     async ensureSchema() {
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS learning_goals (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 goal VARCHAR(500) NOT NULL,
                 subject VARCHAR(80),
-                knowledge_id INT,
+                knowledge_id INTEGER,
                 status VARCHAR(32) DEFAULT 'diagnosis_required',
-                duration_days INT DEFAULT 3,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_lg_user_status (user_id, status)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                duration_days INTEGER DEFAULT 3,
+                created_at TEXT DEFAULT (DATETIME('now')),
+                updated_at TEXT DEFAULT (DATETIME('now'))
+            )
         `);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_lg_user_status ON learning_goals (user_id, status)`);
+
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS student_knowledge (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                node_id INT NOT NULL,
-                mastery INT DEFAULT 0,
-                confidence DECIMAL(4,3) DEFAULT 0.200,
-                evidence_count INT DEFAULT 0,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                node_id INTEGER NOT NULL,
+                mastery INTEGER DEFAULT 0,
+                confidence REAL DEFAULT 0.200,
+                evidence_count INTEGER DEFAULT 0,
                 trend VARCHAR(24) DEFAULT 'unknown',
-                last_practice_at DATETIME NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_sk_user_node (user_id, node_id),
-                INDEX idx_sk_user (user_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                last_practice_at TEXT NULL,
+                updated_at TEXT DEFAULT (DATETIME('now')),
+                UNIQUE (user_id, node_id)
+            )
         `);
+        await this.addColumnIfNotExists('student_knowledge', 'confidence', 'REAL DEFAULT 0.200');
+        await this.addColumnIfNotExists('student_knowledge', 'evidence_count', 'INTEGER DEFAULT 0');
+        await this.addColumnIfNotExists('student_knowledge', 'trend', "VARCHAR(24) DEFAULT 'unknown'");
+        await this.addColumnIfNotExists('student_knowledge', 'last_practice_at', 'TEXT NULL');
+        await this.addColumnIfNotExists('student_knowledge', 'updated_at', "TEXT DEFAULT (DATETIME('now'))");
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_sk_user ON student_knowledge (user_id)`);
+
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS agent_learning_plans (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                goal_id BIGINT NOT NULL,
-                user_id INT NOT NULL,
-                version INT DEFAULT 1,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                version INTEGER DEFAULT 1,
                 status VARCHAR(24) DEFAULT 'active',
-                plan_json JSON NOT NULL,
-                evidence_json JSON,
-                adjustment_json JSON,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_alp_user_status (user_id, status),
-                INDEX idx_alp_goal (goal_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                plan_json TEXT NOT NULL,
+                evidence_json TEXT,
+                adjustment_json TEXT,
+                created_at TEXT DEFAULT (DATETIME('now')),
+                updated_at TEXT DEFAULT (DATETIME('now'))
+            )
         `);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_alp_user_status ON agent_learning_plans (user_id, status)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_alp_goal ON agent_learning_plans (goal_id)`);
     }
 
     normalizeGoal(goal) {
@@ -231,9 +249,13 @@ class LearningLoopService {
         await this.pool.query(
             `INSERT INTO student_knowledge
                 (user_id, node_id, mastery, confidence, evidence_count, trend, last_practice_at)
-             VALUES (?, ?, ?, ?, ?, 'baseline', NOW())
-             ON DUPLICATE KEY UPDATE mastery = VALUES(mastery), confidence = VALUES(confidence),
-                evidence_count = evidence_count + VALUES(evidence_count), trend = 'baseline', last_practice_at = NOW()`,
+             VALUES (?, ?, ?, ?, ?, 'baseline', DATETIME('now'))
+             ON CONFLICT(user_id, node_id) DO UPDATE SET 
+                mastery = excluded.mastery, 
+                confidence = excluded.confidence,
+                evidence_count = evidence_count + excluded.evidence_count, 
+                trend = 'baseline', 
+                last_practice_at = DATETIME('now')`,
             [userId, goal.knowledge_id, mastery, Math.min(0.85, 0.35 + result.total * 0.08), result.total]
         );
         await this.pool.query("UPDATE learning_goals SET status = 'active' WHERE id = ?", [goalId]);

@@ -1,2 +1,17 @@
-// Compatibility entry. The real Express bootstrap lives in src/server.
-require("./src/server");
+/**
+ * =============================================================================
+ * 兼容转发：server.js → src/server/index.js
+ * =============================================================================
+ *
+ * @file       server.js (根目录)
+ * @description
+ *   旧脚本兼容入口，直接转发到新的启动入口 src/server/index.js。
+ *   新代码请直接使用 npm start 或 node src/server。
+ *
+ * @author     EduSmart Team
+ * @since      v2.0.0
+ * @refactored 2026-06-27 - 更新注释，标注兼容用途
+ * =============================================================================
+ */
+
+require('./src/server');

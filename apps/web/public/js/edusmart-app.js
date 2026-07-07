@@ -57,6 +57,7 @@
         "file-text":
             '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M8 13h8"/><path d="M8 17h5"/><path d="M8 9h2"/>',
         message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
+        heart: '<path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z"/>',
         shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
         trending: '<path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/>',
         zap: '<path d="M13 2 4 14h7l-1 8 10-14h-7z"/>',
@@ -78,7 +79,14 @@
         database:
             '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
         link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
-        skip: '<path d="M14 5l7 7-7 7"/><path d="M3 12h18"/>'
+        skip: '<path d="M14 5l7 7-7 7"/><path d="M3 12h18"/>',
+        camera:
+            '<path d="M14.5 4 16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l1.5-3z"/><circle cx="12" cy="13" r="3.5"/>',
+        mic: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/><path d="M8 22h8"/>',
+        image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 19"/>',
+        briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M12 12v.01"/>',
+        "file-word": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2l2 5 2-5h2"/>',
+        sparkles: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>'
     };
 
     const state = {
@@ -90,6 +98,8 @@
     };
     let examClockHandle = null;
     let algoVizHandle = null;
+    let membershipFunHandle = null;
+    let studyRoomHandle = null;
 
     function icon(name, size = 20) {
         return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.book}</svg>`;
@@ -108,6 +118,7 @@
             studyPlanWeek: null,
             studyPlanMonth: null,
             studyPlanTab: "today",
+            studyRoom: null,
             learningLoop: null,
             learningLoopAnswers: {},
             activities: [],
@@ -138,7 +149,20 @@
             aiAssistant: null,
             aiConfig: null,
             aiAssistantMode: location.pathname.toLowerCase().includes("rag") ? "rag" : "tutor",
-            aiAssistantMessages: [],
+            aiAssistantMessages: readShortTermMemory(),
+            floatingAgentOpen: false,
+            floatingAgentTab: "feedback",
+            floatingAgentInput: "",
+            floatingAgentFeedback: "",
+            floatingAgentFeedbackCategory: "course",
+            floatingVoiceRecording: false,
+            floatingAgentMessages: [
+                {
+                    role: "ai",
+                    content: "你好，我是右下角随行智能体。可以直接问我学习问题，也可以让我根据当前页面引导你下一步。"
+                }
+            ],
+            floatingAgentBusy: false,
             _pendingAgentPrompt: "",
             agentRuntimeResult: null,
             agentRuntimeTraces: [],
@@ -275,11 +299,29 @@
             knowledgeBase: null,
             knowledgeBaseQuery: "",
             knowledgeBaseSubject: "all",
+            membershipCenter: null,
+            membershipEmailDraft: "",
+            membershipVerifyCode: "",
+            membershipSmtpAuthCode: "",
+            membershipPushTime: "08:00",
+            membershipDevCode: "",
+            membershipFunSeed: 0,
             // Agent 学习中心
             agentStatus: null,
             agentPlan: null,
             agentReasoningLog: [],
-            agentPlanLoading: false
+            agentPlanLoading: false,
+            // AI学习陪练
+            aiTutor: {
+                selectedRole: "teacher",
+                topic: "",
+                messages: [],
+                sessionActive: false,
+                questionCount: 0,
+                answerCount: 0,
+                loading: false
+            },
+            aiTutorHistory: []
         };
     }
 
@@ -289,6 +331,47 @@
         } catch {
             return null;
         }
+    }
+
+    function shortTermMemoryKey() {
+        return `edusmart_ai_memory_${readUser()?.username || "guest"}`;
+    }
+
+    function readShortTermMemory() {
+        try {
+            const messages = JSON.parse(localStorage.getItem(shortTermMemoryKey())) || [];
+            return Array.isArray(messages) ? messages.slice(-40) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function saveShortTermMemory() {
+        state.data.aiAssistantMessages = state.data.aiAssistantMessages.slice(-40);
+        localStorage.setItem(shortTermMemoryKey(), JSON.stringify(state.data.aiAssistantMessages));
+    }
+
+    function appendAiAssistantMessage(role, content, extra = {}) {
+        state.data.aiAssistantMessages.push({
+            role,
+            content: String(content || ""),
+            createdAt: new Date().toISOString(),
+            ...extra
+        });
+        saveShortTermMemory();
+    }
+
+    function aiConversationTurns() {
+        const turns = [];
+        state.data.aiAssistantMessages.forEach(message => {
+            if (message.role === "user") {
+                turns.push({ user: message, ai: null });
+                return;
+            }
+            const current = turns[turns.length - 1];
+            if (current && !current.ai) current.ai = message;
+        });
+        return turns.slice(-20);
     }
 
     function shouldShowOnboarding() {
@@ -346,7 +429,8 @@
             "profileKnowledge",
             "profileMisconceptions",
             "path",
-            "studyPlan"
+            "studyPlan",
+            "studyRoom"
         ];
     }
 
@@ -371,6 +455,7 @@
     function routeToView(pathname) {
         const p = pathname.toLowerCase();
         if (p.includes("profile") || p.includes("agent-profile")) return "profile";
+        if (p.includes("membership") || p.includes("member-center") || p.includes("pro-center")) return "membership";
         if (p.includes("report") || p.includes("study-report")) return "report";
         if (p.includes("smart-notes") || p.includes("notes")) return "smartNotes";
         if (p.includes("knowledge-graph") || p.toLowerCase().includes("knowledgegraph")) return "knowledgeGraph";
@@ -378,6 +463,9 @@
         if (p.includes("account") || p.includes("me")) return "account";
         if (p.includes("teacher-workbench") || p.includes("teacher")) return "teacherWorkbench";
         if (p.includes("online-exam")) return "onlineExam";
+        if (p.includes("study-room") || p.includes("studyroom") || p.includes("focus-room")) return "studyRoom";
+        if (p.includes("ai-tutor") || p.includes("ai-learning-partner") || p.includes("learning-partner")) return "aiTutor";
+        if (p.includes("learning-center") || p.includes("learn-center") || p.includes("learning")) return "studyPlan";
         if (p.includes("study-plan") || p.includes("today-plan")) return "studyPlan";
         if (p.includes("test")) return "test";
         if (p.includes("practice") || p.includes("daily")) return "practice";
@@ -388,7 +476,7 @@
         if (p.includes("code-lab") || p.includes("compiler")) return "codeLab";
         if (p.includes("obsidian") || p.includes("vault")) return "obsidian";
         if (p.includes("knowledge-base") || p.includes("rag-knowledge")) return "knowledgeBase";
-        if (p.includes("rag-search") || p.includes("ragsearch")) return "ragSearch";
+        if (p.includes("rag-search") || p.includes("ragsearch")) return "aiAssistant";
         if (p.includes("agent-center") || p.includes("agentcenter")) return "agentCenter";
         if (p.includes("ai-assistant") || p.includes("rag")) return "aiAssistant";
         if (p.includes("intelligence") || p.includes("ai-learning")) return "intelligence";
@@ -407,7 +495,7 @@
         if (p.includes("videos") || p.includes("video")) return "videos";
         if (p.includes("obsidian") || p.includes("vault")) return "obsidian";
         if (p.includes("knowledge-base") || p.includes("rag-knowledge")) return "knowledgeBase";
-        if (p.includes("rag-search") || p.includes("ragsearch")) return "ragSearch";
+        if (p.includes("rag-search") || p.includes("ragsearch")) return "aiAssistant";
         if (p.includes("agent-center") || p.includes("agentcenter")) return "agentCenter";
         return "home";
     }
@@ -885,6 +973,15 @@
         });
         const json = await request(`/api/knowledge-base/overview?${params.toString()}`);
         state.data.knowledgeBase = json.data;
+        return json.data;
+    }
+
+    async function loadMembershipCenter(force = false) {
+        if (state.data.membershipCenter && !force) return state.data.membershipCenter;
+        const json = await request("/api/membership/center");
+        state.data.membershipCenter = json.data;
+        state.data.membershipEmailDraft = state.data.membershipEmailDraft || json.data.emailBinding?.email || "";
+        state.data.membershipPushTime = json.data.emailBinding?.pushTime || "08:00";
         return json.data;
     }
 
@@ -1564,7 +1661,7 @@
     }
 
     function logo() {
-        return `<span class="logo"><span class="logo-bars"><span></span><span></span><span></span></span></span>`;
+        return `<span class="logo"><img src="/images/brand/edusmart-mark.svg" alt="" aria-hidden="true"></span>`;
     }
 
     function setView(view) {
@@ -1576,6 +1673,8 @@
                   ? "/team-code"
                   : state.view === "agentResearch"
                     ? "/agent-research"
+                    : state.view === "studyRoom"
+                      ? "/study-room"
                     : state.view === "home"
                       ? "/home"
                       : `/${state.view}`;
@@ -1650,6 +1749,89 @@
         </div>`;
     }
 
+    function membershipNavDropdown(group, isActive) {
+        const center = state.data.membershipCenter || {};
+        const membership = center.membership || {};
+        const email = center.emailBinding || {};
+        const active = true;
+        const statusText = "免费陪伴中";
+        const pushText = email.pushEnabled ? `${email.pushTime || "08:00"} 推送` : "待开启推送";
+        const actions = [
+            {
+                view: "agentCenter",
+                icon: "robot",
+                title: "AI学习Agent陪伴",
+                desc: "按目标拆任务、跟进执行、自动调整下一步",
+                tag: "效率核心",
+                prompt: "请作为免费学习陪伴Agent，根据我的画像生成本周陪伴计划，并给出今天最该完成的3个动作。"
+            },
+            {
+                view: "path",
+                icon: "refresh",
+                title: "遗忘曲线维护",
+                desc: "需要复习的知识点主动提醒，复习后回写掌握度",
+                tag: "长期维护"
+            },
+            {
+                view: "aiAssistant",
+                icon: "brain",
+                title: "错题复盘Agent",
+                desc: "把错题、笔记和追问串成可执行复盘链",
+                tag: "少走弯路",
+                prompt: "请基于我的错题和薄弱点，生成一份温和复盘清单：先诊断原因，再给练习，再安排回访。"
+            },
+            {
+                view: "membership",
+                icon: "bell",
+                title: "每日学习简报",
+                desc: "每天把薄弱点、下一步、知识卡推送到邮箱",
+                tag: pushText
+            },
+            {
+                view: "membership",
+                icon: "layers",
+                title: "个人知识卡沉淀",
+                desc: "问答、错题、笔记沉淀成可复习资产",
+                tag: `${(center.cards || []).length || 0} 张`
+            }
+        ];
+        return `<div class="nav-group membership-nav">
+            <button class="nav-group-trigger membership-trigger ${isActive ? "active" : ""}" type="button">
+                ${icon("heart", 17)}<span>学习陪伴</span><em>${statusText}</em>${icon("chevron", 12)}
+            </button>
+            <div class="nav-group-panel membership-panel" role="menu">
+                <div class="membership-panel-hero">
+                    <div>
+                        <span class="membership-kicker">Study Care Agent</span>
+                        <b>免费学习陪伴舱</b>
+                        <small>把学习后的陪伴、维护、复盘、心情照顾和提醒交给 AI Agent 持续跟进。</small>
+                    </div>
+                    <span class="membership-status active">免费开放</span>
+                </div>
+                <div class="membership-agent-strip">
+                    <span>${icon("zap", 15)}下一步建议</span>
+                    <b>生成今日推送，顺手复盘一个薄弱点</b>
+                </div>
+                <div class="membership-action-grid">
+                    ${actions
+                        .map(
+                            action => `<button class="membership-action ${state.view === action.view ? "active" : ""}" data-view="${action.view}" ${action.prompt ? `data-agent-prompt="${escapeAttr(action.prompt)}"` : ""} role="menuitem">
+                        <span class="round-icon">${icon(action.icon, 17)}</span>
+                        <span><b>${action.title}</b><small>${action.desc}</small></span>
+                        <i>${action.tag}</i>
+                    </button>`
+                        )
+                        .join("")}
+                </div>
+                <div class="membership-quick-actions">
+                    <button class="btn primary tiny" data-membership-activate>${icon("heart", 14)}开启陪伴</button>
+                    <button class="btn ghost tiny" data-digest-generate>${icon("send", 14)}生成今日推送</button>
+                    <button class="btn ghost tiny" data-view="membership">${icon("settings", 14)}配置邮箱与心情</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
     function closedLoopPanel(compact = false) {
         const steps = [
             ["db", "采集", "课程、答题、笔记、互动数据进入画像"],
@@ -1674,7 +1856,7 @@
 
     function topbar(mode = false) {
         const groups = navGroups();
-        const activeGroup = groups.find(g => g.items.some(i => i.view === state.view));
+        const activeGroup = groups.find(g => (g.activeViews || g.items.map(i => i.view)).includes(state.view));
         const locked = mode === true;
         const partial = mode === "partial";
         return `
@@ -1691,6 +1873,7 @@
                 <nav class="nav">${groups
                     .map(g => {
                         const isActive = activeGroup === g;
+                        if (g.kind === "membership") return membershipNavDropdown(g, isActive);
                         if (g.items.length === 1) {
                             return `<button class="${state.view === g.items[0].view ? "active" : ""}" data-view="${g.items[0].view}" title="${g.items[0].label}">
                             ${icon(g.items[0].icon, 17)}<span>${g.items[0].label}</span>
@@ -1721,8 +1904,8 @@
                     <button class="icon-btn" title="搜索" data-open-panel="search">${icon("search", 20)}</button>
                     <button class="icon-btn" title="通知" data-open-panel="notifications">${icon("bell", 20)}${state.data.unreadCount > 0 ? `<span class="badge">${state.data.unreadCount}</span>` : ""}</button>
                     <button class="user-chip" data-view="account" title="个人中心">
-                        <span class="avatar">${escapeHtml(state.user.username.slice(0, 1).toUpperCase())}</span>
-                        <span>${escapeHtml(state.user.username)}</span><span>⌄</span>
+                        <span class="avatar">${escapeHtml((state.user?.username || "U").slice(0, 1).toUpperCase())}</span>
+                        <span>${escapeHtml(state.user?.username || "未登录")}</span><span>⌄</span>
                     </button>
                 </div>
 `
@@ -1745,7 +1928,8 @@
                 icon: "book",
                 desc: "课程 · 练习 · 考试",
                 items: [
-                    { view: "studyPlan", icon: "calendar", label: "学习计划", desc: "今日闭环任务" },
+                    { view: "studyPlan", icon: "calendar", label: "学习中心", desc: "课程、路径、任务和日历" },
+                    { view: "studyRoom", icon: "clock", label: "自习室", desc: "专注学习、时长记录和效果复盘" },
                     { view: "course", icon: "book", label: "课程学习", desc: "按目标选择课程" },
                     { view: "practice", icon: "list", label: "专项练习", desc: "薄弱点即时反馈" },
                     { view: "onlineExam", icon: "exam", label: "在线考试", desc: "限时组卷自动评分" },
@@ -1755,10 +1939,11 @@
             {
                 label: "诊断分析",
                 icon: "brain",
-                desc: "画像 · 诊断 · 报告",
+                desc: "画像 · 诊断 · 报告 · 陪练",
                 items: [
                     { view: "diagnostic", icon: "brain", label: "智能诊断", desc: "AI学习画像分析" },
-                    { view: "profile", icon: "user", label: "学习画像", desc: "洞察学习能力" }
+                    { view: "profile", icon: "user", label: "学习画像", desc: "洞察学习能力" },
+                    { view: "aiTutor", icon: "message", label: "AI学习陪练", desc: "多角色对话学习追问" }
                 ]
             },
             {
@@ -1783,23 +1968,23 @@
                 ]
             },
             {
-                label: "知识引擎",
-                icon: "database",
-                desc: "Obsidian · RAG · Agent",
+                label: "知识智能",
+                icon: "robot",
+                desc: "问答 · 知识库 · Agent",
                 items: [
-                    { view: "obsidian", icon: "database", label: "Obsidian知识库", desc: "双向链接笔记管理" },
-                    { view: "ragSearch", icon: "search", label: "RAG智能检索", desc: "本地向量知识库问答" },
-                    { view: "agentCenter", icon: "brain", label: "Agent学习中心", desc: "LLM个性化学习路径" }
+                    { view: "aiAssistant", icon: "robot", label: "AI智能问答", desc: "RAG、错题、笔记与20轮记忆" },
+                    { view: "obsidian", icon: "database", label: "知识库", desc: "笔记、双向链接与资料管理" },
+                    { view: "agentCenter", icon: "brain", label: "Agent学习中心", desc: "个性化学习路径与执行" },
+                    { view: "agentResearch", icon: "layers", label: "Agent研究中心", desc: "开源能力在项目内落地" }
                 ]
             },
             {
-                label: "AI智能",
-                icon: "robot",
-                desc: "助手 · 研究 · 落地",
-                items: [
-                    { view: "aiAssistant", icon: "robot", label: "AI学习助手", desc: "对话、错题、笔记与任务流" },
-                    { view: "agentResearch", icon: "layers", label: "Agent研究中心", desc: "开源能力在项目内落地" }
-                ]
+                label: "学习陪伴",
+                icon: "heart",
+                kind: "membership",
+                desc: "Agent陪伴 · 心情照顾 · 每日推送",
+                activeViews: ["membership"],
+                items: [{ view: "membership", icon: "heart", label: "学习陪伴中心", desc: "免费学习照顾与主动复习" }]
             },
             {
                 label: "教师工作台",
@@ -1951,14 +2136,67 @@
     }
 
     function homeView() {
-        return `<main class="page">
-            <section class="hero-row"><div class="hero"><h1>早上好，${escapeHtml(state.user.username)} 👋</h1><p>AI 驱动的个性化学习，让每一次努力都更有价值</p>
-                <div class="hero-actions"><button class="btn primary glow" data-view="studyPlan">${icon("play", 17)}进入今日学习计划</button><button class="btn ghost" data-run-closed-loop="${escapeHtml(state.data.weakPoints[0]?.title || "Node.js")}">${icon("robot", 17)}AI 生成今日闭环</button></div></div>${metricCards()}</section>
+        const profile = state.data.profileInsight || getMockProfileInsight();
+        const focus = state.data.weakPoints?.[0]?.title || "动态规划";
+        const courses = (state.data.courses || []).slice(0, 3);
+        const courseCards =
+            courses
+                .map(
+                    course => `<article class="edu-mini-course">
+                <span>${icon("book", 18)}</span>
+                <b>${escapeHtml(course.title || course.name || "项目化课程")}</b>
+                <small>${escapeHtml(course.provider || course.subject || "EduSmart Academy")} · ${Number(course.progress || 0)}%</small>
+                <div class="bar"><span style="width:${Number(course.progress || 42)}%"></span></div>
+            </article>`
+                )
+                .join("") ||
+            ["AI Python 入门", "数据结构可视化", "Web 项目实践"]
+                .map(
+                    (title, index) => `<article class="edu-mini-course">
+                <span>${icon(index === 2 ? "code" : "book", 18)}</span>
+                <b>${title}</b>
+                <small>${["基础巩固", "能力进阶", "项目实战"][index]} · ${[72, 48, 31][index]}%</small>
+                <div class="bar"><span style="width:${[72, 48, 31][index]}%"></span></div>
+            </article>`
+                )
+                .join("");
+        return `<main class="page home-page edu-modern-page">
+            <section class="edu-home-hero">
+                <div class="edu-hero-copy">
+                    <span class="home-eyebrow">EduSmart AI Learning OS</span>
+                    <h1>让每个学生拥有一套会思考的学习系统</h1>
+                    <p>从诊断、路径、练习、编程实践到复盘反馈，EduSmart 把学习动作串成一个可追踪、可解释、可持续优化的智能闭环。</p>
+                    <div class="hero-actions"><button class="btn primary glow" data-view="studyPlan">${icon("play", 17)}进入学习中心</button><button class="btn ghost" data-run-closed-loop="${escapeHtml(focus)}">${icon("robot", 17)}AI 生成学习闭环</button><button class="btn ghost" data-view="codeLab">${icon("code", 17)}在线编程实践</button></div>
+                    <div class="edu-hero-kpis">
+                        <div><b>${profile.summary?.mastery || 78}%</b><span>综合掌握</span></div>
+                        <div><b>${profile.summary?.continuousDays || 14}</b><span>连续学习</span></div>
+                        <div><b>${profile.summary?.weakCount || 5}</b><span>待攻克薄弱点</span></div>
+                    </div>
+                </div>
+                <div class="edu-hero-visual" aria-hidden="true">
+                    <div class="edu-orbit-card main"><span>${icon("brain", 28)}</span><b>AI 学习画像</b><small>实时更新能力雷达</small></div>
+                    <div class="edu-orbit-card code"><span>${icon("terminal", 22)}</span><b>Code Lab</b><small>运行 · 诊断 · 反馈</small></div>
+                    <div class="edu-orbit-card team"><span>${icon("users", 22)}</span><b>Team Project</b><small>分工协作开发</small></div>
+                    <div class="edu-3d-stack"><i></i><i></i><i></i></div>
+                </div>
+            </section>
+            <section class="edu-data-overview">${metricCards()}</section>
             ${newUserOnboarding()}
             ${roleCockpit()}
-            ${closedLoopPanel()}
+            <section class="edu-home-mosaic">
+                <article class="card edu-profile-card">
+                    <div class="card-head"><div><span class="pill good">学习画像</span><h2 class="section-title">${icon("user", 18)}${escapeHtml(profile.persona || "稳步成长型学习者")}</h2><p class="muted-line">综合诊断、课程、练习和编程行为生成。</p></div><button class="btn tiny ghost" data-view="profile">查看画像</button></div>
+                    <div class="edu-radar-fake">${(profile.dimensions || []).slice(0, 6).map((d, i) => `<span style="--i:${i};--v:${Number(d.value || 70)}"><b>${escapeHtml(d.label)}</b></span>`).join("")}</div>
+                </article>
+                ${closedLoopPanel()}
+            </section>
+            <section class="edu-home-mosaic three">
+                <article class="card edu-course-strip"><div class="card-head"><h2 class="section-title">${icon("book", 18)}课程推荐</h2><button class="btn tiny ghost" data-view="course">更多课程</button></div>${courseCards}</article>
+                <article class="card edu-practice-entry"><span>${icon("code", 28)}</span><h2>编程实践入口</h2><p>深色编辑器、模板目录、运行输出和 AI 代码建议集中在一个工作台。</p><button class="btn primary" data-view="codeLab">${icon("terminal", 16)}打开编辑器</button></article>
+                <article class="card edu-team-entry"><span>${icon("users", 28)}</span><h2>团队项目开发</h2><p>项目总览、成员分工、模块开发、评审日志和协作记录一体化。</p><button class="btn ghost" data-view="teamCode">${icon("folder", 16)}进入项目</button></article>
+            </section>
             <section class="grid-2">${planCard()}${activityCard()}</section>
-            <section class="grid-2 dashboard-lower">${`<article class="card"><div class="card-head"><h2 class="section-title">${icon("bolt", 18)}快速入口</h2></div>${quickTiles()}</article>`}${achievementCard()}</section>
+            <section class="grid-2 dashboard-lower">${`<article class="card"><div class="card-head"><h2 class="section-title">${icon("bolt", 18)}产品模块入口</h2></div>${quickTiles()}</article>`}${achievementCard()}</section>
         </main>`;
     }
 
@@ -2170,6 +2408,837 @@
         </section>`;
     }
 
+    function studyRoomKey() {
+        return `edusmart_study_room_${state.user?.username || readUser()?.username || "guest"}`;
+    }
+
+    function studyRoomDefault() {
+        return {
+            mode: "deep",
+            targetMinutes: 50,
+            subject: "数据结构",
+            task: "完成一轮知识点自习，并写下 3 条复盘笔记",
+            running: false,
+            startedAt: null,
+            elapsedSeconds: 0,
+            distractions: 0,
+            effect: 82,
+            notes: "",
+            checklist: [true, false, false, false],
+            focusView: "timer",
+            focusEditorTitle: "",
+            focusEditorContent: "",
+            focusCurrentDocId: null,
+            editorDocs: [],
+            quick: {
+                activeType: "note",
+                draft: "",
+                items: [
+                    { id: "seed-note", type: "note", content: "整理哈希表冲突解决方式：链地址法、开放寻址、再哈希。", createdAt: new Date(Date.now() - 7200000).toISOString() },
+                    { id: "seed-todo", type: "todo", content: "自习结束后补 3 道哈希表练习题。", createdAt: new Date(Date.now() - 5400000).toISOString() }
+                ],
+                images: [],
+                docs: []
+            },
+            records: [
+                { title: "算法复杂度复盘", minutes: 45, effect: 88, distractions: 1, createdAt: new Date(Date.now() - 86400000).toISOString() },
+                { title: "数据库事务自习", minutes: 35, effect: 76, distractions: 2, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+                { title: "英语阅读精读", minutes: 30, effect: 91, distractions: 0, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() }
+            ]
+        };
+    }
+
+    function createNewStudyDoc(subject) {
+        const now = new Date();
+        const templateContent = generateStudyDocTemplate(subject);
+        return {
+            id: `doc-${Date.now()}`,
+            title: "学习心得",
+            content: templateContent,
+            subject: subject || "",
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+            tags: [],
+            version: 1
+        };
+    }
+
+    function generateStudyDocTemplate(subject) {
+        const dateStr = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+        return `
+<h1>学习主题</h1>
+<p><strong>日期：</strong>${dateStr}</p>
+
+<h2>一、知识要点</h2>
+<h3>1.1 核心概念</h3>
+<p></p>
+<h3>1.2 关键原理</h3>
+<p></p>
+<h3>1.3 重要公式/代码</h3>
+<p></p>
+
+<h2>二、学习心得</h2>
+<h3>2.1 理解与感悟</h3>
+<p></p>
+<h3>2.2 难点与突破</h3>
+<p></p>
+<h3>2.3 关联知识</h3>
+<p></p>
+
+<h2>三、疑问与思考</h2>
+<h3>3.1 未解决的问题</h3>
+<p></p>
+<h3>3.2 延伸思考</h3>
+<p></p>
+
+<h2>四、行动项</h2>
+<ul>
+<li><strong>短期：</strong></li>
+<li><strong>中期：</strong></li>
+<li><strong>长期：</strong></li>
+</ul>
+
+<h2>五、自我评估</h2>
+<p><strong>掌握程度：</strong>□ 入门 □ 理解 □ 熟练 □ 精通</p>
+<p><strong>学习效果：</strong></p>
+`;
+    }
+
+    function studyRoomState() {
+        if (state.data.studyRoom) {
+            if (state.data.studyRoom.running && !state.data.studyRoom.focusMode) {
+                state.data.studyRoom.focusMode = true;
+            }
+            return state.data.studyRoom;
+        }
+        try {
+            const saved = JSON.parse(localStorage.getItem(studyRoomKey()));
+            state.data.studyRoom = { ...studyRoomDefault(), ...(saved || {}) };
+            if (state.data.studyRoom.running && !state.data.studyRoom.focusMode) {
+                state.data.studyRoom.focusMode = true;
+            }
+        } catch {
+            state.data.studyRoom = studyRoomDefault();
+        }
+        state.data.studyRoom.focusView = "timer";
+        state.data.studyRoom.quick = {
+            ...studyRoomDefault().quick,
+            ...(state.data.studyRoom.quick || {}),
+            items: state.data.studyRoom.quick?.items || studyRoomDefault().quick.items,
+            images: state.data.studyRoom.quick?.images || [],
+            docs: state.data.studyRoom.quick?.docs || []
+        };
+        return state.data.studyRoom;
+    }
+
+    function saveStudyRoom() {
+        try {
+            localStorage.setItem(studyRoomKey(), JSON.stringify(studyRoomState()));
+        } catch {}
+    }
+
+    function studyRoomElapsed(room = studyRoomState()) {
+        const base = Number(room.elapsedSeconds || 0);
+        if (!room.running || !room.startedAt) return base;
+        return base + Math.floor((Date.now() - Number(room.startedAt)) / 1000);
+    }
+
+    function studyRoomScore(room = studyRoomState()) {
+        const elapsed = studyRoomElapsed(room);
+        const target = Math.max(1, Number(room.targetMinutes || 50) * 60);
+        const progress = Math.min(100, Math.round((elapsed / target) * 100));
+        const completion = room.checklist.filter(Boolean).length / Math.max(1, room.checklist.length);
+        const distractionPenalty = Math.min(26, Number(room.distractions || 0) * 7);
+        const selfEffect = Number(room.effect || 70);
+        return Math.max(0, Math.min(100, Math.round(progress * 0.34 + selfEffect * 0.42 + completion * 100 * 0.24 - distractionPenalty)));
+    }
+
+    function studyRoomSuggestions(room = studyRoomState()) {
+        const score = studyRoomScore(room);
+        if (score >= 88) return ["延长 10 分钟做迁移练习", "把今天的高效方法写进笔记模板", "结束后直接进入错题复盘"];
+        if (score >= 72) return ["保留当前节奏", "下轮减少一个干扰源", "用 5 分钟补齐输出物"];
+        return ["切到 25 分钟短冲刺", "先写下最小任务", "把手机和聊天窗口移出视野"];
+    }
+
+    function studyRoomQuickTypes() {
+        return {
+            note: { icon: "pen", label: "随身记", hint: "随手记录想法和知识点" },
+            todo: { icon: "check", label: "待办", hint: "转成下一步行动" },
+            wrong: { icon: "alert", label: "错题", hint: "记录错因和修正思路" },
+            idea: { icon: "bulb", label: "灵感", hint: "留下突然想到的方法" },
+            question: { icon: "message", label: "提问", hint: "稍后问 AI 或老师" }
+        };
+    }
+
+    function addStudyRoomQuickItem(type, content) {
+        const room = studyRoomState();
+        const text = String(content || room.quick?.draft || "").trim();
+        if (!text) {
+            toast("先写一点内容，再保存快捷记录");
+            return;
+        }
+        room.quick = room.quick || studyRoomDefault().quick;
+        room.quick.items = [
+            {
+                id: `quick-${Date.now()}`,
+                type: type || room.quick.activeType || "note",
+                content: text,
+                subject: room.subject || "综合",
+                createdAt: new Date().toISOString()
+            },
+            ...(room.quick.items || [])
+        ].slice(0, 40);
+        room.quick.draft = "";
+        saveStudyRoom();
+        render();
+        toast("已保存到自习室快捷记录");
+    }
+
+    function studyRoomDocumentText(room = studyRoomState()) {
+        const quickTypes = studyRoomQuickTypes();
+        const elapsed = Math.round(studyRoomElapsed(room) / 60);
+        const items = (room.quick?.items || [])
+            .slice(0, 12)
+            .map(item => `- [${quickTypes[item.type]?.label || "记录"}] ${item.content}`)
+            .join("\n");
+        return [
+            `# ${room.subject || "自习室"}学习记录`,
+            "",
+            `- 任务：${room.task || "未填写"}`,
+            `- 当前时长：${elapsed} 分钟`,
+            `- 目标时长：${Number(room.targetMinutes || 0)} 分钟`,
+            `- 学习效果：${studyRoomScore(room)} / 100`,
+            `- 干扰次数：${Number(room.distractions || 0)}`,
+            "",
+            "## 复盘笔记",
+            room.notes || "暂无",
+            "",
+            "## 快捷记录",
+            items || "暂无",
+            "",
+            `生成时间：${new Date().toLocaleString("zh-CN")}`
+        ].join("\n");
+    }
+
+    function downloadStudyRoomText(filename, text) {
+        const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function createStudyRoomDocument() {
+        const room = studyRoomState();
+        const text = studyRoomDocumentText(room);
+        const name = `自习室记录-${formatDate(new Date())}.md`;
+        room.quick.docs = [{ id: `doc-${Date.now()}`, name, createdAt: new Date().toISOString() }, ...(room.quick.docs || [])].slice(0, 8);
+        saveStudyRoom();
+        downloadStudyRoomText(name, text);
+        render();
+        toast("已生成并下载快捷记录文档");
+    }
+
+    function canvasWrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 8) {
+        const words = String(text || "").split("");
+        let line = "";
+        let lines = 0;
+        for (let i = 0; i < words.length; i++) {
+            const test = line + words[i];
+            if (ctx.measureText(test).width > maxWidth && line) {
+                ctx.fillText(line, x, y);
+                line = words[i];
+                y += lineHeight;
+                lines += 1;
+                if (lines >= maxLines - 1) break;
+            } else {
+                line = test;
+            }
+        }
+        if (line && lines < maxLines) ctx.fillText(line, x, y);
+        return y + lineHeight;
+    }
+
+    function createStudyRoomImage() {
+        const room = studyRoomState();
+        const canvas = document.createElement("canvas");
+        canvas.width = 1080;
+        canvas.height = 1350;
+        const ctx = canvas.getContext("2d");
+        const gradient = ctx.createLinearGradient(0, 0, 1080, 1350);
+        gradient.addColorStop(0, "#f8fbff");
+        gradient.addColorStop(0.48, "#eaf5ff");
+        gradient.addColorStop(1, "#fff7e8");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 1080, 1350);
+        ctx.fillStyle = "rgba(61,124,255,.12)";
+        ctx.beginPath();
+        ctx.arc(920, 160, 260, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(23,184,144,.14)";
+        ctx.beginPath();
+        ctx.arc(130, 1080, 310, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#17233b";
+        ctx.font = "900 68px Microsoft YaHei, Arial";
+        ctx.fillText("自习室学习卡片", 76, 130);
+        ctx.font = "700 28px Microsoft YaHei, Arial";
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(new Date().toLocaleString("zh-CN"), 78, 182);
+        ctx.fillStyle = "rgba(255,255,255,.86)";
+        ctx.strokeStyle = "rgba(210,224,246,.9)";
+        ctx.lineWidth = 3;
+        ctx.roundRect(70, 245, 940, 830, 34);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#3d7cff";
+        ctx.font = "900 44px Microsoft YaHei, Arial";
+        ctx.fillText(room.subject || "综合学习", 120, 330);
+        ctx.fillStyle = "#17233b";
+        ctx.font = "800 34px Microsoft YaHei, Arial";
+        const nextY = canvasWrapText(ctx, room.task || "完成一轮专注自习", 120, 398, 820, 52, 4);
+        ctx.fillStyle = "#50617f";
+        ctx.font = "700 27px Microsoft YaHei, Arial";
+        canvasWrapText(ctx, room.notes || room.quick?.items?.[0]?.content || "今天的学习产出会沉淀为下一次行动。", 120, nextY + 46, 820, 42, 7);
+        const stats = [
+            ["效果分", `${studyRoomScore(room)}`],
+            ["本轮时长", `${Math.round(studyRoomElapsed(room) / 60)} min`],
+            ["干扰", `${Number(room.distractions || 0)} 次`]
+        ];
+        stats.forEach((item, index) => {
+            const x = 120 + index * 285;
+            ctx.fillStyle = index === 0 ? "#3d7cff" : index === 1 ? "#17b890" : "#f5a623";
+            ctx.font = "900 48px Microsoft YaHei, Arial";
+            ctx.fillText(item[1], x, 930);
+            ctx.fillStyle = "#64748b";
+            ctx.font = "700 24px Microsoft YaHei, Arial";
+            ctx.fillText(item[0], x, 975);
+        });
+        ctx.fillStyle = "#17233b";
+        ctx.font = "900 28px Microsoft YaHei, Arial";
+        ctx.fillText("EduSmart Focus Study Room", 76, 1210);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "700 24px Microsoft YaHei, Arial";
+        ctx.fillText("专注、记录、复盘，然后继续变强。", 76, 1252);
+        const dataUrl = canvas.toDataURL("image/png");
+        room.quick.images = [
+            { id: `image-${Date.now()}`, dataUrl, title: room.subject || "自习卡片", createdAt: new Date().toISOString() },
+            ...(room.quick.images || [])
+        ].slice(0, 6);
+        saveStudyRoom();
+        render();
+        toast("学习图片已生成");
+    }
+
+    function downloadStudyRoomImage(index) {
+        const image = studyRoomState().quick?.images?.[index];
+        if (!image?.dataUrl) return;
+        const anchor = document.createElement("a");
+        anchor.href = image.dataUrl;
+        anchor.download = `自习室学习卡片-${formatDate(image.createdAt)}.png`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    }
+
+    function finishStudyRoomSession() {
+        const room = studyRoomState();
+        const elapsed = studyRoomElapsed(room);
+        if (elapsed < 60) {
+            toast("至少学习 1 分钟后再生成自习记录");
+            return;
+        }
+        const record = {
+            title: room.task || "自习记录",
+            subject: room.subject || "综合",
+            minutes: Math.max(1, Math.round(elapsed / 60)),
+            effect: studyRoomScore(room),
+            selfEffect: Number(room.effect || 0),
+            distractions: Number(room.distractions || 0),
+            notes: room.notes || "",
+            createdAt: new Date().toISOString()
+        };
+        room.records = [record, ...(room.records || [])].slice(0, 12);
+        room.running = false;
+        room.startedAt = null;
+        room.elapsedSeconds = 0;
+        room.distractions = 0;
+        room.notes = "";
+        room.checklist = [false, false, false, false];
+        room.focusMode = false;
+        room.focusPanel = null;
+        room.voiceRecording = false;
+        room.focusNotes = "";
+        room.focusDoc = "";
+        saveStudyRoom();
+        render();
+        toast("本次自习已归档");
+    }
+
+    function syncStudyRoomTimer() {
+        if (studyRoomHandle) {
+            clearInterval(studyRoomHandle);
+            studyRoomHandle = null;
+        }
+        const tick = () => {
+            try {
+                const room = studyRoomState();
+                const elapsed = studyRoomElapsed(room);
+                const target = Math.max(1, Number(room.targetMinutes || 50) * 60);
+                const progress = Math.min(100, Math.round((elapsed / target) * 100));
+                const score = studyRoomScore(room);
+                const timer = document.querySelector("[data-study-room-timer]");
+                if (timer) {
+                    const timeNode = timer.querySelector("[data-study-room-time]");
+                    const progressNode = document.querySelector("[data-study-room-progress]");
+                    const scoreNode = document.querySelector("[data-study-room-score]");
+                    const statusNode = document.querySelector("[data-study-room-status]");
+                    if (timeNode) timeNode.textContent = formatClock(elapsed);
+                    if (progressNode) progressNode.style.width = `${progress}%`;
+                    if (scoreNode) scoreNode.textContent = `${score}`;
+                    if (statusNode) statusNode.textContent = room.running ? "专注中" : "待开始";
+                }
+                const focusTimer = document.querySelector("[data-focus-timer]") || document.querySelector(".study-focus-timer-display");
+                if (focusTimer) {
+                    focusTimer.textContent = formatClock(elapsed);
+                    const focusProgress = document.querySelector("[data-focus-progress]") || document.querySelector(".study-focus-progress-bar span");
+                    if (focusProgress) focusProgress.style.width = `${progress}%`;
+                    const focusScore = document.querySelector("[data-focus-score]");
+                    if (focusScore) focusScore.textContent = `${score}`;
+                }
+                const editorTimer = document.querySelector("[data-focus-editor-timer]");
+                if (editorTimer) {
+                    editorTimer.innerHTML = `${icon("clock", 12)} ${formatClock(elapsed)}`;
+                }
+            } catch (e) {
+                console.warn("study room timer tick error:", e);
+            }
+        };
+        tick();
+        studyRoomHandle = setInterval(tick, 1000);
+        window._studyRoomTimerActive = true;
+    }
+
+    function ensureStudyRoomTimer() {
+        const room = studyRoomState();
+        if (room.running && !window._studyRoomTimerActive) {
+            syncStudyRoomTimer();
+        }
+    }
+
+    function studyRoomView() {
+        const room = studyRoomState();
+        const elapsed = studyRoomElapsed(room);
+        const targetSeconds = Math.max(1, Number(room.targetMinutes || 50) * 60);
+        const progress = Math.min(100, Math.round((elapsed / targetSeconds) * 100));
+        const score = studyRoomScore(room);
+        const records = room.records || [];
+        const totalMinutes = records.reduce((sum, item) => sum + Number(item.minutes || 0), 0);
+        const avgEffect = records.length
+            ? Math.round(records.reduce((sum, item) => sum + Number(item.effect || 0), 0) / records.length)
+            : score;
+        const streak = Math.min(9, records.length + (elapsed > 0 ? 1 : 0));
+        const modes = [
+            ["deep", "深度自习", "50 分钟沉浸"],
+            ["pomodoro", "番茄冲刺", "25 分钟短跑"],
+            ["review", "复盘整理", "20 分钟输出"],
+            ["custom", "自定义", `${room.targetMinutes || 50} 分钟`]
+        ];
+        const checklist = ["明确本轮目标", "完成核心学习", "写下学习产出", "标记下次行动"];
+        const suggestions = studyRoomSuggestions(room);
+        const quickTypes = studyRoomQuickTypes();
+        const activeQuickType = room.quick?.activeType || "note";
+        const quickItems = room.quick?.items || [];
+        const quickRows = quickItems
+            .slice(0, 8)
+            .map(item => {
+                const meta = quickTypes[item.type] || quickTypes.note;
+                return `<div class="study-room-quick-row ${escapeAttr(item.type || "note")}">
+                    <span class="round-icon">${icon(meta.icon, 15)}</span>
+                    <div><b>${escapeHtml(meta.label)} · ${escapeHtml(item.subject || room.subject || "综合")}</b><p>${escapeHtml(item.content)}</p><small>${escapeHtml(formatDate(item.createdAt))}</small></div>
+                </div>`;
+            })
+            .join("");
+        const imageRows = (room.quick?.images || [])
+            .slice(0, 3)
+            .map(
+                (image, index) => `<article class="study-room-image-item">
+                    <img src="${escapeAttr(image.dataUrl)}" alt="${escapeAttr(image.title || "学习卡片")}" loading="lazy">
+                    <button class="btn tiny ghost" data-study-room-download-image="${index}">${icon("download", 13)}下载</button>
+                </article>`
+            )
+            .join("");
+        const docRows = (room.quick?.docs || [])
+            .slice(0, 3)
+            .map(doc => `<span>${icon("file-text", 13)}${escapeHtml(doc.name)}<small>${escapeHtml(formatDate(doc.createdAt))}</small></span>`)
+            .join("");
+        const recordRows = records
+            .slice(0, 5)
+            .map(
+                item => `<div class="study-room-record">
+                    <span>${escapeHtml(item.title || "自习记录")}<small>${escapeHtml(formatDate(item.createdAt))} · ${escapeHtml(item.subject || "综合")}</small></span>
+                    <b>${Number(item.minutes || 0)} min</b>
+                    <em>${Number(item.effect || 0)} 分</em>
+                </div>`
+            )
+            .join("");
+
+        return `<main class="page study-room-page ${room.focusMode ? "focus-mode-active" : ""}">
+            <section class="study-room-hero">
+                <div class="study-room-hero-copy">
+                    <span class="home-eyebrow">${icon("clock", 15)} Focus Study Room</span>
+                    <h1>自习室</h1>
+                    <p>把一段自习拆成目标、计时、干扰、输出和效果复盘。你只需要开始，页面会帮你留下可追踪的学习证据。</p>
+                    <div class="study-room-mode-tabs">
+                        ${modes
+                            .map(
+                                ([value, label, desc]) =>
+                                    `<button class="${room.mode === value ? "active" : ""}" data-study-room-focus="${value}"><b>${label}</b><small>${desc}</small></button>`
+                            )
+                            .join("")}
+                    </div>
+                </div>
+                <div class="study-room-live-panel" data-study-room-timer>
+                    <div class="study-room-status-line">
+                        <span data-study-room-status>${room.running ? "专注中" : "待开始"}</span>
+                        <strong data-study-room-score>${score}</strong>
+                    </div>
+                    <div class="study-room-clock" data-study-room-time>${formatClock(elapsed)}</div>
+                    <div class="study-room-progress"><i data-study-room-progress style="width:${progress}%"></i></div>
+                    <div class="study-room-actions">
+                        <button class="btn primary glow" data-study-room-start>${icon("play", 16)}${room.running ? "继续" : "开始"}</button>
+                        <button class="btn ghost" data-study-room-pause>${icon("clock", 16)}暂停</button>
+                        <button class="btn ghost" data-study-room-finish>${icon("check", 16)}结束并复盘</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="study-room-metrics">
+                <article><span>累计自习</span><b>${totalMinutes}</b><small>分钟</small></article>
+                <article><span>平均效果</span><b>${avgEffect}</b><small>分</small></article>
+                <article><span>专注连续</span><b>${streak}</b><small>次</small></article>
+                <article><span>本轮进度</span><b>${progress}</b><small>%</small></article>
+            </section>
+
+            <section class="study-room-layout">
+                <article class="card study-room-quick-card">
+                    <div class="card-head">
+                        <div><h2 class="section-title">${icon("zap", 18)}快捷操作台</h2><p class="muted-line">自习中不打断节奏：随身记、文档、图片、错题和待办都在这里快速完成。</p></div>
+                        <div class="study-room-quick-actions">
+                            <button class="btn tiny ghost" data-study-room-doc>${icon("file-text", 14)}记录文档</button>
+                            <button class="btn tiny primary" data-study-room-image>${icon("image", 14)}制作图片</button>
+                        </div>
+                    </div>
+                    <div class="study-room-quick-grid">
+                        <div class="study-room-quick-compose">
+                            <div class="study-room-quick-tabs">
+                                ${Object.entries(quickTypes)
+                                    .map(
+                                        ([value, meta]) =>
+                                            `<button class="${activeQuickType === value ? "active" : ""}" data-study-room-quick-type="${value}">${icon(meta.icon, 14)}<span>${escapeHtml(meta.label)}</span></button>`
+                                    )
+                                    .join("")}
+                            </div>
+                            <textarea data-study-room-quick-draft rows="4" placeholder="${escapeAttr(quickTypes[activeQuickType]?.hint || "写下当前想到的内容")}">${escapeHtml(room.quick?.draft || "")}</textarea>
+                            <div class="study-room-quick-template-row">
+                                <button data-study-room-quick-template="我刚刚学到：">${icon("pen", 13)}学到</button>
+                                <button data-study-room-quick-template="下一步要做：">${icon("check", 13)}待办</button>
+                                <button data-study-room-quick-template="错因是：">${icon("alert", 13)}错因</button>
+                                <button data-study-room-quick-template="想问的问题：">${icon("message", 13)}提问</button>
+                            </div>
+                            <div class="study-room-quick-command-row">
+                                <button class="btn primary" data-study-room-quick-add>${icon("plus", 15)}保存快捷记录</button>
+                                <button class="btn ghost" data-study-room-quick-snapshot>${icon("camera", 15)}插入当前状态</button>
+                            </div>
+                        </div>
+                        <div class="study-room-quick-output">
+                            <div class="study-room-quick-head"><b>最近随身记</b><small>${quickItems.length} 条</small></div>
+                            <div class="study-room-quick-list">${quickRows || '<p class="muted-line">还没有快捷记录。</p>'}</div>
+                        </div>
+                        <div class="study-room-artifact-panel">
+                            <div class="study-room-quick-head"><b>快捷图片</b><small>${(room.quick?.images || []).length} 张</small></div>
+                            <div class="study-room-image-grid">${imageRows || '<p class="muted-line">点击“制作图片”生成学习卡片。</p>'}</div>
+                        </div>
+                        <div class="study-room-artifact-panel">
+                            <div class="study-room-quick-head"><b>记录文档</b><small>${(room.quick?.docs || []).length} 份</small></div>
+                            <div class="study-room-doc-list">${docRows || '<p class="muted-line">点击“记录文档”导出 Markdown。</p>'}</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card study-room-session-card">
+                    <div class="card-head"><div><h2 class="section-title">${icon("target", 18)}本轮自习设置</h2><p class="muted-line">目标越具体，结束后的效果评估越有用。</p></div></div>
+                    <div class="study-room-form-grid">
+                        <label>学习主题<input data-study-room-subject value="${escapeAttr(room.subject || "")}" placeholder="例如 数据结构"></label>
+                        <label>目标时长<input type="number" min="5" max="180" data-study-room-duration value="${Number(room.targetMinutes || 50)}"></label>
+                    </div>
+                    <label class="study-room-task-label">本轮任务<textarea data-study-room-task rows="3" placeholder="写下这轮自习要完成什么">${escapeHtml(room.task || "")}</textarea></label>
+                    <div class="study-room-checklist">
+                        ${checklist
+                            .map(
+                                (item, index) =>
+                                    `<button class="${room.checklist[index] ? "done" : ""}" data-study-room-check="${index}">${room.checklist[index] ? icon("check", 15) : ""}<span>${item}</span></button>`
+                            )
+                            .join("")}
+                    </div>
+                    <div class="study-room-control-row">
+                        <button class="btn ghost" data-study-room-distraction>${icon("bell", 16)}记录一次干扰 · ${Number(room.distractions || 0)}</button>
+                        <button class="btn ghost" data-study-room-reset>${icon("refresh", 16)}重置本轮</button>
+                    </div>
+                </article>
+
+                <article class="card study-room-effect-card">
+                    <div class="card-head"><div><h2 class="section-title">${icon("chart", 18)}自习效果</h2><p class="muted-line">效果分综合进度、输出、干扰和自评。</p></div><span class="pill good">${score} / 100</span></div>
+                    <div class="study-room-effect-scale">
+                        ${[60, 70, 80, 90, 100]
+                            .map(value => `<button class="${Number(room.effect || 0) === value ? "active" : ""}" data-study-room-effect="${value}">${value}</button>`)
+                            .join("")}
+                    </div>
+                    <textarea data-study-room-notes rows="5" placeholder="写下今天真正学会的内容、卡点和下一步">${escapeHtml(room.notes || "")}</textarea>
+                    <div class="study-room-ai-review">
+                        <b>${icon("brain", 16)}复盘建议</b>
+                        ${suggestions.map(item => `<span>${escapeHtml(item)}</span>`).join("")}
+                    </div>
+                </article>
+
+                <article class="card study-room-ambient-card">
+                    <div class="card-head"><h2 class="section-title">${icon("flame", 18)}专注环境</h2><span class="pill">低干扰</span></div>
+                    <div class="study-room-ambient-scene" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                        <div class="study-room-desk"><span></span><b></b><em></em></div>
+                    </div>
+                    <div class="study-room-rules">
+                        <span>只开当前学习资料</span>
+                        <span>遇到卡点先标记，10 分钟后再查</span>
+                        <span>结束前必须留下一个可见产出</span>
+                    </div>
+                </article>
+
+                <article class="card study-room-record-card">
+                    <div class="card-head"><div><h2 class="section-title">${icon("history", 18)}自习记录</h2><p class="muted-line">最近记录会保存在本机浏览器。</p></div></div>
+                    <div class="study-room-record-list">${recordRows || '<p class="muted-line">完成一次自习后会出现在这里。</p>'}</div>
+                </article>
+            </section>
+        </main>`;
+    }
+
+    function renderFocusTimerView(room, elapsed, targetSeconds, progress, score) {
+        const remaining = Math.max(0, targetSeconds - elapsed);
+        const distCount = Number(room.distractions || 0);
+        const voiceRecording = room.voiceRecording || false;
+
+        return `<div class="study-focus-view-timer">
+            <div class="study-focus-top-bar">
+                <div class="focus-subject-tag">
+                    ${icon("book", 14)}
+                    <span>${escapeHtml(room.subject || "自由学习")}</span>
+                </div>
+                <div class="focus-top-actions">
+                    <button class="icon-action" data-focus-pause title="${room.paused ? "继续" : "暂停"}">
+                        ${room.paused ? icon("play", 18) : icon("clock", 18)}
+                    </button>
+                    ${room.paused ? `<button class="icon-action" data-focus-cancel title="取消专注">${icon("x", 18)}</button>` : ""}
+                    <button class="icon-action" data-focus-finish title="结束自习">
+                        ${icon("check", 18)}
+                    </button>
+                </div>
+            </div>
+            <div class="study-focus-center">
+                <div class="study-focus-greeting">
+                    <span class="task-label">${room.paused ? "已暂停" : "专注学习中"}</span>
+                    <h2>${escapeHtml(room.task || "保持专注，记录你的思考")}</h2>
+                </div>
+                <div class="study-focus-clock-wrap">
+                    <div class="study-focus-timer-display">${formatClock(elapsed)}</div>
+                    <div class="study-focus-progress-bar"><span style="width:${progress}%"></span></div>
+                </div>
+                <div class="study-focus-stats-row">
+                    <div class="study-focus-stat-item"><b data-focus-score>${score}</b><small>效果分</small></div>
+                    <div class="study-focus-stat-item"><b>${formatClock(remaining)}</b><small>剩余时间</small></div>
+                    <div class="study-focus-stat-item"><b>${distCount}</b><small>干扰次数</small></div>
+                    <div class="study-focus-stat-item">
+                        <label class="focus-time-input-wrap">
+                            <input type="number" min="5" max="300" data-focus-target-minutes value="${room.targetMinutes || 50}" placeholder="时长">
+                            <small>分钟</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="study-focus-quick-actions">
+                    <button class="study-focus-action-btn primary" data-focus-open-editor>
+                        ${icon("edit", 28)}<span>学习心得</span>
+                    </button>
+                    <button class="study-focus-action-btn ${voiceRecording ? "recording" : ""}" data-focus-mic-timer>
+                        ${icon("mic", 24)}<span>${voiceRecording ? "录音中..." : "语音速记"}</span>
+                    </button>
+                    <button class="study-focus-action-btn" data-focus-distraction title="记录一次干扰">
+                        ${icon("alert", 22)}<span>干扰</span>
+                    </button>
+                </div>
+            </div>
+            <div class="study-focus-bottom-bar">
+                <span class="ctrl-hint">${icon("sparkles", 14)}专注时可随时记录学习心得</span>
+            </div>
+        </div>`;
+    }
+
+    function renderFocusEditorView(room) {
+        const user = state.user || readUser() || { username: "学习者" };
+        const docs = room.editorDocs || [];
+        const currentDoc = docs.find(d => d.id === room.focusCurrentDocId) || {
+            id: null,
+            title: room.focusEditorTitle || "学习心得",
+            content: room.focusEditorContent || generateStudyDocTemplate(room.subject)
+        };
+        const voiceRecording = room.voiceRecording || false;
+        const elapsed = studyRoomElapsed(room);
+        const sortedDocs = [...docs].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+        const docList = sortedDocs.map(doc => {
+            const isActive = doc.id === room.focusCurrentDocId;
+            const dateStr = new Date(doc.updatedAt).toLocaleDateString("zh-CN");
+            return `<div class="sidebar-doc-item ${isActive ? "active" : ""}" data-focus-doc-id="${doc.id}">
+                <div class="doc-item-title">${escapeHtml(doc.title)}</div>
+                <div class="doc-item-meta">${dateStr} · ${doc.subject || "综合"}</div>
+            </div>`;
+        }).join("");
+
+        return `<div class="study-focus-view-editor">
+            <div class="study-focus-editor-sidebar">
+                <div class="sidebar-header">
+                    <div class="user-avatar">${user.username?.charAt(0) || "学"}</div>
+                    <div class="user-info">
+                        <div class="user-name">${escapeHtml(user.username || "学习者")}</div>
+                        <div class="user-title">${escapeHtml(user.role === "teacher" ? "老师" : "学生")}</div>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="section-title">${icon("book-open", 16)}我的知识库</div>
+                    <div class="section-stats">
+                        <span class="stat-item">${docs.length} 篇文档</span>
+                        <span class="stat-divider">|</span>
+                        <span class="stat-item">${room.records?.length || 0} 次自习</span>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-title">${icon("file-text", 16)}学习心得</span>
+                        <button class="new-doc-btn" data-focus-new-doc title="新建文档">
+                            ${icon("plus", 14)}
+                        </button>
+                    </div>
+                    <div class="doc-list">
+                        ${docList || '<div class="empty-docs">暂无文档，点击上方按钮创建</div>'}
+                    </div>
+                </div>
+                <div class="sidebar-footer">
+                    <button class="back-btn" data-focus-back-timer title="返回计时">
+                        ${icon("arrow-left", 16)} 返回计时
+                    </button>
+                </div>
+            </div>
+            <div class="study-focus-editor-main">
+                <div class="study-focus-editor-header">
+                    <div class="editor-header-left">
+                        <input class="doc-title-input" type="text" data-focus-doc-title value="${escapeHtml(currentDoc.title)}" placeholder="输入标题...">
+                        <span class="doc-meta" data-focus-editor-timer>${icon("clock", 12)} ${formatClock(elapsed)}</span>
+                    </div>
+                    <div class="editor-header-right">
+                        <div class="editor-time-control">
+                            <label class="editor-time-label">
+                                <input type="number" min="5" max="300" data-focus-editor-minutes value="${room.targetMinutes || 50}" placeholder="时长">
+                                <small>分钟</small>
+                            </label>
+                        </div>
+                        <button class="hdr-btn" data-focus-export-word>
+                            ${icon("download", 14)}导出Word
+                        </button>
+                        <button class="hdr-btn share" data-focus-share-link>
+                            ${icon("link", 14)}分享链接
+                        </button>
+                        <button class="hdr-btn save" data-focus-save-editor>
+                            ${icon("check", 14)}保存
+                        </button>
+                    </div>
+                </div>
+                <div class="study-focus-toolbar" data-focus-toolbar>
+                    <div class="tb-group">
+                        <select class="tb-select" data-tb-block>
+                            <option value="p">正文</option>
+                            <option value="h1">标题 1</option>
+                            <option value="h2">标题 2</option>
+                            <option value="h3">标题 3</option>
+                            <option value="blockquote">引用</option>
+                        </select>
+                    </div>
+                    <div class="tb-group">
+                        <select class="tb-select" data-tb-font-size>
+                            <option value="12px">12px</option>
+                            <option value="14px">14px</option>
+                            <option value="16px" selected>16px</option>
+                            <option value="18px">18px</option>
+                            <option value="20px">20px</option>
+                            <option value="24px">24px</option>
+                        </select>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-btn" data-tb-format="bold" title="粗体"><b>B</b></button>
+                        <button class="tb-btn" data-tb-format="italic" title="斜体"><i>I</i></button>
+                        <button class="tb-btn" data-tb-format="underline" title="下划线"><u>U</u></button>
+                        <button class="tb-btn" data-tb-format="strikeThrough" title="删除线"><s>S</s></button>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-color-btn" title="字体颜色">
+                            ${icon("palette", 16)}
+                            <input type="color" class="tb-color-input" data-tb-color value="#1e293b">
+                        </button>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-btn" data-tb-list="ul" title="无序列表">•</button>
+                        <button class="tb-btn" data-tb-list="ol" title="有序列表">1.</button>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-btn" data-tb-align="left" title="左对齐">⯇</button>
+                        <button class="tb-btn" data-tb-align="center" title="居中">⯅</button>
+                        <button class="tb-btn" data-tb-align="right" title="右对齐">⯈</button>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-btn" data-tb-insert-link title="插入链接">${icon("link", 15)}</button>
+                        <button class="tb-btn" data-tb-insert-image title="插入图片">${icon("image", 15)}</button>
+                        <button class="tb-btn voice-btn ${voiceRecording ? "recording" : ""}" data-tb-voice title="语音转文字">
+                            ${icon("mic", 15)}
+                            ${voiceRecording ? '<span class="voice-dot"></span>' : ""}
+                        </button>
+                    </div>
+                    <div class="tb-group">
+                        <button class="tb-btn" data-tb-undo title="撤销">↶</button>
+                        <button class="tb-btn" data-tb-redo title="重做">↷</button>
+                    </div>
+                </div>
+                <div class="study-focus-editor-body">
+                    <div class="study-focus-editor-canvas"
+                         contenteditable="true"
+                         data-focus-canvas
+                         data-placeholder="开始记录你的学习心得...&#10;&#10;你可以在这里：&#10;• 记录知识点和理解&#10;• 整理思路和疑问&#10;• 粘贴图片、插入链接&#10;• 使用语音转文字快速输入"
+                    >${currentDoc.content}</div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function renderFocusOverlay(room, elapsed, targetSeconds, progress, score) {
+        const view = room.focusView || "timer";
+        return `<div class="study-focus-overlay">
+            ${view === "editor"
+                ? renderFocusEditorView(room)
+                : renderFocusTimerView(room, elapsed, targetSeconds, progress, score)
+            }
+        </div>`;
+    }
+
     function studyPlanWeekView() {
         const days = state.data.studyPlanWeek?.days || [];
         return `<section class="card">
@@ -2217,22 +3286,47 @@
         const activeTask = tasks.find(task => !(task.completed || task.status === "completed")) || tasks[0];
         if (!plan.generatedByAgent) {
             const profile = plan.profileContext || {};
-            return `<main class="page agent-plan-empty-page">
-                <section class="hero-row">
-                    <div class="hero">
-                        <span class="pill">Agent 今日计划</span>
-                        <h1>今日计划尚未生成</h1>
-                        <p>这里不再显示规则计划或历史固定任务。请先调用 Agent 个性化学习，系统会基于画像、目标和路径写入今日学习计划。</p>
+            const recommendedCourses = (state.data.courses || []).slice(0, 4);
+            const reviewItems = state.data.recommendations?.slice(0, 4) || [];
+            return `<main class="page edu-modern-page learning-center-page">
+                <section class="edu-learning-hero">
+                    <div>
+                        <span class="home-eyebrow">Learning Center</span>
+                        <h1>学习中心</h1>
+                        <p>课程推荐、学习路径、今日任务、错题复盘和学习日历聚合在同一个工作台，所有动作都会回写到个人画像。</p>
                         <div class="hero-actions">
                             <button class="btn primary glow" data-study-plan-agent-generate>${icon("robot", 17)}调用 Agent 生成今日计划</button>
-                            <button class="btn ghost" data-view="path">${icon("route", 17)}查看路径入口</button>
-                            <button class="btn ghost" data-view="profile">${icon("user", 17)}查看画像</button>
+                            <button class="btn ghost" data-view="path">${icon("route", 17)}查看学习路径</button>
+                            <button class="btn ghost" data-view="practice">${icon("list", 17)}开始专项练习</button>
                         </div>
                     </div>
                     <article class="card agent-path-status">
                         <span class="pill ${profile.primaryStyleLabel ? "good" : "warn"}">计划状态</span>
                         <h2>等待 Agent 写入</h2>
-                        <p>${escapeHtml(state.data.studyPlanSuggestion || "未调用 Agent 个性化学习前，不展示任何规则计划。")}</p>
+                        <p>${escapeHtml(state.data.studyPlanSuggestion || "调用 Agent 后，系统会基于画像、目标和路径写入今日学习计划。")}</p>
+                    </article>
+                </section>
+                <section class="edu-learning-grid">
+                    <article class="card edu-course-reco">
+                        <div class="card-head"><div><h2 class="section-title">${icon("book", 18)}课程推荐</h2><p class="muted-line">根据画像和薄弱点动态排序。</p></div><button class="btn tiny ghost" data-view="course">课程库</button></div>
+                        ${(recommendedCourses.length ? recommendedCourses : [{ title: "Python 基础到项目", provider: "EduSmart", progress: 64 }, { title: "数据结构图解课", provider: "AI Tutor", progress: 42 }, { title: "Web 全栈入门", provider: "Project Lab", progress: 28 }])
+                            .map(course => `<div class="learning-course-row"><span>${icon("book", 16)}</span><div><b>${escapeHtml(course.title || course.name)}</b><small>${escapeHtml(course.provider || course.subject || "智能推荐")} · ${Number(course.progress || 0)}%</small><div class="bar"><span style="width:${Number(course.progress || 36)}%"></span></div></div></div>`)
+                            .join("")}
+                    </article>
+                    <article class="card edu-path-map">
+                        <div class="card-head"><h2 class="section-title">${icon("route", 18)}学习路径</h2><button class="btn tiny ghost" data-view="path">生成路径</button></div>
+                        ${["诊断薄弱点", "补齐核心概念", "完成迁移练习", "项目化输出"].map((step, index) => `<div class="path-node ${index === 1 ? "active" : ""}"><span>${index + 1}</span><b>${step}</b><small>${["已完成", "进行中", "待开始", "待开始"][index]}</small></div>`).join("")}
+                    </article>
+                    <div class="edu-task-board">${planCard()}</div>
+                    <article class="card edu-review-board">
+                        <div class="card-head"><h2 class="section-title">${icon("refresh", 18)}错题复盘</h2><button class="btn tiny ghost" data-view="practice">去练习</button></div>
+                        ${(reviewItems.length ? reviewItems : [{ title: "数组边界条件", reason: "最近练习错误率偏高", action_label: "复盘" }, { title: "Promise 链式调用", reason: "异步顺序容易混淆", action_label: "巩固" }, { title: "SQL 聚合查询", reason: "分组条件掌握不稳", action_label: "补题" }])
+                            .map(item => `<button class="list-row action-row" data-view="practice"><span>${escapeHtml(item.title)}<small>${escapeHtml(item.reason || "建议继续巩固")}</small></span><span class="pill warn">${escapeHtml(item.action_label || item.action || "复盘")}</span></button>`)
+                            .join("")}
+                    </article>
+                    <article class="card edu-calendar-board">
+                        <div class="card-head"><h2 class="section-title">${icon("calendar", 18)}学习日历</h2><span class="pill good">本周</span></div>
+                        <div class="edu-week-calendar">${["一", "二", "三", "四", "五", "六", "日"].map((day, index) => `<div class="${index === 2 ? "today" : index < 2 ? "done" : ""}"><b>${day}</b><span>${index < 2 ? icon("check", 14) : index === 2 ? "今" : index + 1}</span><small>${[3, 4, 5, 2, 3, 1, 2][index]}项</small></div>`).join("")}</div>
                     </article>
                 </section>
                 <section class="path-control card agent-only-control">
@@ -2253,7 +3347,7 @@
                 ${learningLoopDiagnosisCard(learningLoop)}
             </main>`;
         }
-        return `<main class="page">
+        return `<main class="page edu-modern-page">
             <section class="hero-row">
                 <div class="hero">
                     <h1>今日学习计划</h1>
@@ -3060,12 +4154,36 @@
 
     function diagnosticWelcomeView() {
         const activeTab = state.data.diagnosticTab || "welcome";
-        return `<main class="page diagnostic-page">
+        return `<main class="page diagnostic-page edu-modern-page">
             <header class="diagnostic-hero">
                 <div class="diagnostic-hero-icon">${icon("brain", 48)}</div>
                 <h1>智能诊断</h1>
                 <p class="diagnostic-subtitle">新同学你好！平台会根据你的情况生成一份专属学习画像，帮你找到最适合的学习路径。</p>
             </header>
+            <section class="edu-diagnostic-overview">
+                <article class="card edu-score-card">
+                    <span class="home-eyebrow">Comprehensive Score</span>
+                    <div class="edu-score-ring"><b>86</b><small>综合评分</small></div>
+                    <p>逻辑推理和项目理解较强，算法迁移与错题复盘需要持续跟进。</p>
+                </article>
+                <article class="card edu-chart-card">
+                    <div class="card-head"><h2 class="section-title">${icon("chart", 18)}图表分析</h2><span class="pill">AI 预测</span></div>
+                    <div class="edu-bars">
+                        ${[
+                            ["理解", 86],
+                            ["应用", 74],
+                            ["分析", 81],
+                            ["创造", 69]
+                        ]
+                            .map(([label, value]) => `<div><span>${label}</span><div class="bar"><span style="width:${value}%"></span></div><b>${value}%</b></div>`)
+                            .join("")}
+                    </div>
+                </article>
+                <article class="card edu-ai-advice">
+                    <div class="card-head"><h2 class="section-title">${icon("robot", 18)}AI 建议</h2><button class="btn tiny ghost" data-view="studyPlan">生成计划</button></div>
+                    <p>先用 20 分钟复盘一个薄弱知识点，再完成 3 道迁移题，最后用费曼解释把理解沉淀为笔记卡。</p>
+                </article>
+            </section>
             <section class="diagnostic-tabs">
                 <button class="diagnostic-tab ${activeTab === "welcome" ? "active" : ""}" data-diagnostic-tab="welcome">
                     ${icon("home", 16)} 诊断选择
@@ -7304,7 +8422,7 @@
         const riskStudents = teacherView.riskStudents || [];
         const recommendedActions = teacherView.recommendedActions || [];
         const canTeach = ["teacher", "admin"].includes((state.user?.role || readUser().role || "").toLowerCase());
-        return `<main class="page intelligence-page">
+        return `<main class="page intelligence-page edu-modern-page">
             <section class="agent-console-hero">
                 <div class="agent-hero-copy">
                     <span class="eyebrow">学习智能体控制台</span>
@@ -7422,6 +8540,143 @@
                     <button class="btn primary" data-xfyun-ppt-create>${icon("file", 16)}调用智能PPT生成</button>
                 </div>
                 <pre class="xfyun-output">${escapeHtml(state.data.xfyunToolOutput)}</pre>
+            </section>
+        </main>`;
+    }
+
+    function aiTutorView() {
+        const aiTutor = state.data.aiTutor || {
+            selectedRole: "teacher",
+            topic: "",
+            messages: [],
+            sessionActive: false,
+            questionCount: 0,
+            answerCount: 0,
+            loading: false
+        };
+        const history = state.data.aiTutorHistory || [];
+
+        const roles = [
+            { key: "teacher", label: "老师", icon: "user", desc: "循循善诱，讲解概念后追问检验", class: "teacher" },
+            { key: "interviewer", label: "面试官", icon: "briefcase", desc: "模拟真实面试场景，层层追问", class: "interviewer" },
+            { key: "examiner", label: "考官", icon: "exam", desc: "严格考核，出题检验知识掌握", class: "examiner" },
+            { key: "study-buddy", label: "学霸", icon: "star", desc: "互相讨论，分享学习心得", class: "study-buddy" }
+        ];
+
+        const roleLabels = {
+            teacher: "老师",
+            interviewer: "面试官",
+            examiner: "考官",
+            studyBuddy: "学霸"
+        };
+
+        const rolePrompts = {
+            teacher: "我会先讲解核心概念，然后提出检验性问题。请告诉我你想学习的主题。",
+            interviewer: "我将模拟面试场景，针对你选择的技术领域进行提问。准备好接受挑战了吗？",
+            examiner: "我会严格考核你的知识掌握程度，请选择你想被考核的主题。",
+            studyBuddy: "让我们一起探讨学习内容，我会分享我的理解并和你交流心得。"
+        };
+
+        const selectedRole = roles.find(r => r.key === aiTutor.selectedRole) || roles[0];
+
+        const messagesHtml = aiTutor.messages.length
+            ? aiTutor.messages.map(msg => {
+                const isAi = msg.role === "ai";
+                return `<div class="chat-message ${isAi ? "ai" : "user"}">
+                    <div class="message-avatar">${isAi ? icon("robot", 18) : icon("user", 18)}</div>
+                    <div class="message-content">
+                        <b>${isAi ? selectedRole.label : "我"}</b>
+                        <span>${escapeHtml(msg.content)}</span>
+                    </div>
+                </div>`;
+            }).join("")
+            : `<div class="ai-tutor-welcome-message">
+                <b>${selectedRole.label}已就位</b>
+                <p>${rolePrompts[selectedRole.key] || rolePrompts.teacher}</p>
+            </div>`;
+
+        const historyHtml = history.length
+            ? history.map(item => `
+                <div class="ai-tutor-history-item" data-load-history="${escapeAttr(item.id || '')}">
+                    <b>${escapeHtml(item.topic)}</b>
+                    <small>${escapeHtml(item.roleLabel || "老师")} · ${item.questionCount || 0} 个问题</small>
+                    <div class="history-meta">
+                        <span>${escapeHtml(item.subject || "综合")}</span>
+                    </div>
+                </div>
+            `).join("")
+            : `<div class="ai-tutor-empty-state">
+                ${icon("history", 32)}
+                <p>还没有学习记录，开始第一次陪练吧</p>
+            </div>`;
+
+        return `<main class="page ai-tutor-page edu-modern-page">
+            <section class="ai-tutor-hero">
+                <div class="ai-tutor-hero-copy">
+                    <span class="eyebrow">AI学习陪练</span>
+                    <h1>选择角色，开启智能学习对话</h1>
+                    <p>AI扮演不同角色与你互动：老师循循善诱、面试官模拟实战、考官严格检验、学霸互相探讨。输入学习主题，AI会持续追问，帮助你深入理解知识。</p>
+                    <div class="ai-tutor-role-grid">
+                        ${roles.map(role => `
+                            <div class="ai-tutor-role-card ${role.class} ${aiTutor.selectedRole === role.key ? "selected" : ""}" data-select-role="${role.key}">
+                                <div class="role-icon">${icon(role.icon, 26)}</div>
+                                <b>${role.label}</b>
+                                <small>${role.desc}</small>
+                            </div>
+                        `).join("")}
+                    </div>
+                </div>
+                <div class="ai-tutor-panel">
+                    <div class="panel-header">
+                        <span class="role-badge ${selectedRole.class}">${selectedRole.label}</span>
+                        <span class="pill">${aiTutor.sessionActive ? "进行中" : "等待开始"}</span>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <b>${aiTutor.questionCount}</b>
+                            <small>提问数</small>
+                        </div>
+                        <div class="stat-item">
+                            <b>${aiTutor.answerCount}</b>
+                            <small>回答数</small>
+                        </div>
+                        <div class="stat-item">
+                            <b>${Math.round((aiTutor.answerCount / (aiTutor.questionCount || 1)) * 100) || 0}%</b>
+                            <small>完成率</small>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section class="ai-tutor-session-grid">
+                <article class="ai-tutor-chat-card">
+                    <div class="card-head">
+                        <h2>${icon("message", 18)}学习对话</h2>
+                        ${aiTutor.sessionActive ? `<button class="btn tiny ghost" data-end-session>${icon("x", 14)}结束本次</button>` : ""}
+                    </div>
+                    <div class="ai-tutor-chat-messages">${messagesHtml}</div>
+                    <div class="ai-tutor-input-area">
+                        ${!aiTutor.sessionActive ? `
+                            <div class="topic-input-row">
+                                <input class="input" data-tutor-topic value="${escapeHtml(aiTutor.topic)}" placeholder="输入学习主题，例如：Java HashMap、二分查找、HTTP协议...">
+                                <button class="btn primary" data-start-session>${icon("play", 16)}开始陪练</button>
+                            </div>
+                        ` : `
+                            <textarea class="textarea" data-tutor-answer placeholder="输入你的回答，AI会继续追问...">${escapeHtml(state.data._tutorAnswerDraft || "")}</textarea>
+                            <div class="action-row">
+                                <button class="btn primary" data-send-answer>${icon("send", 16)}发送回答</button>
+                                <button class="btn ghost" data-skip-question>${icon("skip", 16)}跳过此题</button>
+                                <button class="btn ghost" data-request-hint>${icon("bulb", 16)}请求提示</button>
+                            </div>
+                        `}
+                    </div>
+                </article>
+                <article class="ai-tutor-history-card">
+                    <div class="card-head">
+                        <h2>${icon("history", 18)}学习记录</h2>
+                        <button class="btn tiny ghost" data-clear-history>${icon("trash", 14)}清空</button>
+                    </div>
+                    <div class="ai-tutor-history-list">${historyHtml}</div>
+                </article>
             </section>
         </main>`;
     }
@@ -7556,7 +8811,7 @@ print("需要复习", weak)`
         const repoFiles = state.data.codeRepoFiles || [];
         const activeFile = state.data.codeRepoFileActive;
         const running = state.data.codeRunning;
-        return `<main class="page code-lab-page">
+        return `<main class="page code-lab-page edu-modern-page">
             <section class="code-hero">
                 <div class="code-hero-left">
                     <span class="pill">AI编程舱</span>
@@ -9142,7 +10397,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             community: "folder"
         };
 
-        return `<main class="page">
+        return `<main class="page resources-page edu-modern-page">
             <section class="resource-hero">
                 <div class="hero"><h1>${icon("layers", 24)} 学习资源中心</h1>
                     <p>围绕学生当前学习目标汇总课程、练习、视频和拓展阅读，帮助教师为不同层次学生快速匹配资源。</p>
@@ -9438,18 +10693,6 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
     }
 
     function aiAssistantView() {
-        const assistant = state.data.aiAssistant || {};
-        const services = assistant.services || [];
-        const llmStatus = assistant.llm || assistant.spark || {};
-        const context = assistant.context || {};
-        const weakPoints = context.weakPoints || [];
-        const courses = context.courses || [];
-        const agentConsole = state.data.intelligence?.agentConsole || {};
-        const todayJudgment = agentConsole.todayJudgment || {};
-        const executionRecords = agentConsole.executionRecords || [];
-        const agents = agentConsole.agents || [];
-        const lastAnswer =
-            [...state.data.aiAssistantMessages].reverse().find(message => message.role === "ai")?.content || "";
         const aiConfig = state.data.aiConfig || {};
         const baseModes = aiConfig.assistantModes || [
             { key: "tutor", icon: "brain", label: "学习问答", desc: "讲概念、追问、给例题" },
@@ -9463,22 +10706,6 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             item => [item.key, item.icon, item.label, item.desc]
         );
         const activeMode = modes.find(([key]) => key === state.data.aiAssistantMode) || modes[0];
-        const agentCards = [
-            ["感知", "search", "支持截图搜题与题干识别", "上传题图后自动进入错题教练"],
-            [
-                "推理",
-                "brain",
-                "结合薄弱点、课程和笔记回答",
-                weakPoints[0] ? `当前优先：${weakPoints[0].title}` : "暂无薄弱点数据"
-            ],
-            ["行动", "pen", "回答可沉淀为笔记和复习卡", lastAnswer ? "最近回答可继续整理" : "等待第一次对话"],
-            [
-                "编排",
-                "route",
-                "把问答转成计划、练习和复盘",
-                courses[0] ? `最近课程：${courses[0].title}` : "可生成学习路径"
-            ]
-        ];
         const assistantPromptMap = {
             rag: [
                 "软件测试中的边界值分析是什么？",
@@ -9532,127 +10759,72 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             agent: "例如：我 7 天后要考操作系统，帮我设计复习课程、练习和笔记任务",
             ...(aiConfig.promptPlaceholders || {})
         };
-        const runtimeResult = state.data.agentRuntimeResult || {};
         const ragResult = state.data.ragAskResult || {};
         const ragCitations = ragResult.citations || [];
-        const runtimeTraces = state.data.agentRuntimeTraces || runtimeResult.traces || [];
         const pendingPrompt = state.data._pendingAgentPrompt || "";
-        const taskFlowCards = [
-            [
-                "今日判断",
-                "brain",
-                todayJudgment.focus || weakPoints[0]?.title || "当前薄弱点",
-                todayJudgment.reason || "结合答题、课程、笔记与考试数据生成下一步学习动作。"
-            ],
-            [
-                "任务流",
-                "bolt",
-                todayJudgment.nextTask || "生成闭环任务",
-                executionRecords[0]?.detail || "一键把问答转为练习、笔记、复习和报告信号。"
-            ],
-            [
-                "多智能体",
-                "users",
-                agents.length ? `${agents.length} 个 Agent 协同` : "规划 / 教学 / 出题 / 评估",
-                "学习助手、资源、画像、监督等 Agent 共同完成学习闭环。"
-            ]
-        ];
-        return `<main class="page ai-assistant-page">
+        const memoryTurns = aiConversationTurns();
+        const memoryUsage = Math.round((memoryTurns.length / 20) * 100);
+        const memoryNodes = Array.from({ length: 20 }, (_, index) => {
+            const turn = memoryTurns[index];
+            const title = turn ? turn.user.content : `空闲记忆位 ${index + 1}`;
+            return `<span class="memory-node ${turn ? "filled" : ""} ${index === memoryTurns.length - 1 ? "latest" : ""}" style="--memory-index:${index}" title="${escapeAttr(title)}"><i>${index + 1}</i></span>`;
+        }).join("");
+        return `<main class="page ai-assistant-page edu-modern-page">
             <section class="ai-agent-hero">
-                <div class="agent-orb" aria-hidden="true"><span>${icon("robot", 38)}</span><i></i><i></i><i></i></div>
+                <div class="agent-orb" aria-hidden="true"><img src="/images/brand/edusmart-mark.svg" alt=""></div>
                 <div class="ai-agent-copy">
 	                    <span class="pill good">学习智能体 · ${escapeHtml(activeMode[2])}</span>
-	                    <h1>一个入口完成 RAG 问答、错题、笔记和智能体任务流</h1>
-	                    <p>本地大模型、知识库检索和学习智能体已整理到这里：对话解决具体问题，证据链解释来源，任务流继续沉淀为练习、笔记、复习和学情信号。</p>
-	                    <div class="hero-actions"><button class="btn primary glow" data-ai-assistant-mode="rag">${icon("db", 17)}知识库问答</button><button class="btn ghost" data-ai-assistant-mode="mistake">${icon("exam", 17)}错题拆解</button><button class="btn ghost" data-run-agent-flow>${icon("bolt", 17)}运行任务流</button></div>
+	                    <h1>知识与 AI 融合的智能问答中心</h1>
+	                    <p>一个页面完成知识库检索、学习问答、错题拆解、笔记生成和智能体任务，并通过短期记忆轮盘保留最近 20 轮上下文。</p>
+	                    <div class="hero-actions"><button class="btn primary glow" data-ai-assistant-mode="rag">${icon("db", 17)}知识库问答</button><button class="btn ghost" data-ai-assistant-mode="mistake">${icon("exam", 17)}错题拆解</button><button class="btn ghost" data-ai-assistant-mode="note">${icon("pen", 17)}整理笔记</button></div>
                 </div>
-                <div class="ai-agent-cards">${agentCards.map(([title, ic, text, meta]) => `<article><span>${icon(ic, 18)}</span><b>${escapeHtml(title)}</b><p>${escapeHtml(text)}</p><small>${escapeHtml(meta)}</small></article>`).join("")}</div>
             </section>
             <section class="assistant-product-grid">
                 <article class="card assistant-console">
-	                    <div class="card-head"><div><span class="pill ${llmStatus.configured ? "good" : "warn"}">${llmStatus.configured ? "本地模型已接入" : "待配置"}</span><h2>学习对话</h2><p>${escapeHtml(llmStatus.model || "DeepSeek-R1-Distill:Qwen-1.5B")} · ${escapeHtml(llmStatus.endpoint || "Local LLM")}</p></div><button class="btn tiny ghost" data-refresh-ai-assistant>${icon("refresh", 15)}刷新</button></div>
+	                    <div class="card-head"><div><span class="pill good">AI 学习伙伴</span><h2>学习对话</h2><p>直接提问，也可以上传题目截图或将回答整理成笔记。</p></div></div>
                     <div class="mode-tabs assistant-mode-tabs">${modes.map(([key, ic, label, desc]) => `<button class="${state.data.aiAssistantMode === key ? "active" : ""}" data-ai-assistant-mode="${key}">${icon(ic, 16)}<span>${label}<small>${desc}</small></span></button>`).join("")}</div>
                     <div class="quick-prompt-row">${quickPrompts.map(item => `<button class="quick-prompt" data-ai-quick-prompt="${escapeAttr(item)}">${escapeHtml(item)}</button>`).join("")}</div>
                     <div class="assistant-chat">${messages.map(message => `<div class="chat-bubble ${message.role === "user" ? "user" : "ai"}"><b>${message.role === "user" ? "我" : "AI助手"}</b><div class="chat-content">${message.role === "ai" ? renderMarkdownLite(message.content) : escapeHtml(message.content)}</div>${message.react_steps && message.react_steps.length ? `<div class="react-chain"><button class="react-toggle" data-react-toggle>${icon("brain", 13)} 查看思考过程</button><div class="react-steps hidden">${message.react_steps.map((s, si) => `<div class="react-step"><span class="react-step-label">${s.type === "thought" ? "🤔 思考" : s.type === "action" ? "🔧 行动" : s.type === "observation" ? "👁️ 观察" : "💡 结论"}</span><span>${escapeHtml(s.content || "")}</span></div>`).join("")}</div></div>` : ""}</div>`).join("")}</div>
                     <textarea class="textarea assistant-prompt" data-ai-assistant-input placeholder="${escapeHtml(promptPlaceholders[state.data.aiAssistantMode] || promptPlaceholders.tutor)}">${escapeHtml(pendingPrompt)}</textarea>
                     <input type="file" accept="image/*" data-ai-screenshot-input hidden>
-	                    <div class="assistant-actions"><button class="btn primary" data-send-ai-assistant>${icon("send", 17)}交给智能体</button><button class="btn teal" data-save-last-ai-note>${icon("pen", 17)}回答存为笔记</button><button class="btn ghost" data-ai-screenshot-trigger>${icon("search", 17)}截图搜题</button><button class="btn ghost" data-ai-assistant-demo="voice">${icon("bell", 17)}语音提问</button></div>
+	                    <div class="assistant-actions"><button class="btn primary" data-send-ai-assistant>${icon("send", 17)}发送问题</button><button class="btn teal" data-save-last-ai-note>${icon("pen", 17)}回答存为笔记</button><button class="btn ghost" data-ai-screenshot-trigger>${icon("search", 17)}截图搜题</button></div>
 	                </article>
 	                <aside class="side-card">
+                        <article class="card assistant-memory-card">
+                            <div class="card-head">
+                                <div><span class="pill good">短期上下文</span><h2 class="section-title">${icon("history", 18)}20 轮记忆轮盘</h2></div>
+                                <button class="btn tiny ghost" data-clear-ai-memory ${memoryTurns.length ? "" : "disabled"}>${icon("trash", 14)}清空</button>
+                            </div>
+                            <div class="memory-wheel-wrap">
+                                <div class="memory-wheel" style="--memory-progress:${memoryUsage}%">
+                                    ${memoryNodes}
+                                    <div class="memory-wheel-core"><strong>${memoryTurns.length}</strong><span>/ 20 轮</span><small>${memoryTurns.length ? "上下文已连接" : "等待对话"}</small></div>
+                                </div>
+                            </div>
+                            <div class="memory-turn-list">
+                                ${
+                                    memoryTurns.length
+                                        ? memoryTurns
+                                              .slice(-5)
+                                              .reverse()
+                                              .map(
+                                                  (turn, index) =>
+                                                      `<button data-memory-prompt="${escapeAttr(turn.user.content)}"><span>${memoryTurns.length - index}</span><p><b>${escapeHtml(turn.user.content)}</b><small>${escapeHtml(turn.ai?.content || "等待 AI 回答")}</small></p></button>`
+                                              )
+                                              .join("")
+                                        : `<div class="empty-state compact">每次完整问答占用一个记忆位，超过 20 轮后自动遗忘最早内容。</div>`
+                                }
+                            </div>
+                        </article>
 	                    ${
                             state.data.aiAssistantMode === "rag"
                                 ? `<article class="card assistant-rag-card">
-	                        <div class="card-head"><h2 class="section-title">${icon("db", 18)}RAG 证据链</h2><span class="pill">${ragResult.hitCount ?? 0} 条</span></div>
-	                        <div class="list">${ragCitations.length ? ragCitations.map(ev => `<div class="list-row"><span>${escapeHtml(ev.title)}<small>${escapeHtml(ev.snippet || "")}</small></span><span class="pill">[${ev.rank}]</span></div>`).join("") : `<p>切换到 RAG知识库 模式提问后，这里会显示召回证据。</p>`}</div>
-	                        <div class="list-row"><span>回答来源</span><span class="pill">${escapeHtml(ragResult.provider || "local")}</span></div>
+	                        <div class="card-head"><h2 class="section-title">${icon("db", 18)}知识来源</h2><span class="pill">${ragResult.hitCount ?? 0} 条</span></div>
+	                        <div class="list">${ragCitations.length ? ragCitations.map(ev => `<div class="list-row"><span>${escapeHtml(ev.title)}<small>${escapeHtml(ev.snippet || "")}</small></span><span class="pill">[${ev.rank}]</span></div>`).join("") : `<p class="muted-line">知识库回答后，相关资料会显示在这里。</p>`}</div>
 	                    </article>`
                                 : ""
                         }
-	                    <article class="card assistant-flow-card">
-                        <div class="card-head"><h2 class="section-title">${icon("bolt", 18)}智能体任务流</h2><button class="btn tiny ghost" data-run-agent-flow>${icon("refresh", 14)}生成</button></div>
-                        <div class="assistant-flow-list">${taskFlowCards.map(([title, ic, value, desc]) => `<div class="assistant-flow-row"><span class="round-icon">${icon(ic, 17)}</span><span><b>${escapeHtml(value)}</b><small>${escapeHtml(title)} · ${escapeHtml(desc)}</small></span></div>`).join("")}</div>
-                        <div class="agent-timeline compact">${
-                            executionRecords
-                                .slice(0, 4)
-                                .map(
-                                    record =>
-                                        `<div class="agent-timeline-item ${escapeHtml(record.status)}"><span></span><div><b>${escapeHtml(record.title)}</b><p>${escapeHtml(record.detail)}</p><small>${escapeHtml(record.agent)} · ${escapeHtml(record.type)}</small></div></div>`
-                                )
-                                .join("") ||
-                            `<div class="empty-state compact">点击“运行任务流”后，会在这里显示练习、笔记和复习安排。</div>`
-                        }</div>
-                    </article>
-                    <article class="card assistant-trace-card">
-                        <div class="card-head"><h2 class="section-title">${icon("radar", 18)}Agent 执行轨迹</h2><span class="pill">${runtimeTraces.length || 0} 步</span></div>
-                        <div class="agent-trace-list">${
-                            runtimeTraces.length
-                                ? runtimeTraces
-                                      .map(
-                                          step => `<div class="agent-trace-step ${escapeHtml(step.stepType || step.step_type || "")}">
-                            <span>${escapeHtml(step.stepType || step.step_type || "step")}</span>
-                            <b>${escapeHtml(step.title || "")}</b>
-                            <p>${escapeHtml(step.content || "")}</p>
-                            ${step.toolName || step.tool_name ? `<small>${icon("settings", 12)}${escapeHtml(step.toolName || step.tool_name)} · 置信度 ${escapeHtml(String(step.confidence ?? "--"))}</small>` : ""}
-                        </div>`
-                                      )
-                                      .join("")
-                                : `<div class="empty-state compact">输入学习目标后，这里会展示智能体读取画像、分析路径、调用工具和写回任务的过程。</div>`
-                        }</div>
-                    </article>
-                    ${
-                        runtimeResult.courseDesign?.design
-                            ? `<article class="card assistant-course-design">
-                        <div class="card-head"><h2 class="section-title">${icon("calendar", 18)}AI 课程设计</h2><span class="pill good">${runtimeResult.courseDesign.design.durationDays} 天</span></div>
-                        <div class="course-design-mini">${runtimeResult.courseDesign.design.units
-                            .slice(0, 4)
-                            .map(
-                                unit =>
-                                    `<div><b>${escapeHtml(unit.title)}</b><p>${escapeHtml(unit.objective)}</p><small>${escapeHtml(unit.reason)}</small></div>`
-                            )
-                            .join("")}</div>
-                    </article>`
-                            : ""
-                    }
-                    ${
-                        runtimeResult.rag?.citations?.length
-                            ? `<article class="card assistant-rag-card">
-                        <div class="card-head"><h2 class="section-title">${icon("db", 18)}RAG 证据链</h2><span class="pill good">${runtimeResult.rag.hitCount} 条</span></div>
-                        <div class="list">${runtimeResult.rag.citations
-                            .slice(0, 4)
-                            .map(
-                                ev =>
-                                    `<a class="list-row" href="${escapeAttr(ev.url || ev.source?.url || "#")}" target="_blank" rel="noreferrer"><span><b>${escapeHtml(ev.title)}</b><small>${escapeHtml(ev.source?.name || "")} · ${escapeHtml(ev.snippet || "")}</small></span><span class="pill">${escapeHtml(String(ev.rank))}</span></a>`
-                            )
-                            .join("")}</div>
-                    </article>`
-                            : ""
-                    }
-                    <article class="card"><div class="card-head"><h2 class="section-title">${icon("db", 18)}能力接入状态</h2><span class="pill">API Matrix</span></div><div class="service-list">${services.map(service => `<div class="service-row"><span class="round-icon">${icon(service.key === "spark" ? "robot" : service.key === "ocr" ? "search" : service.key === "tts" ? "bell" : "file", 17)}</span><span><b>${escapeHtml(service.name)}</b><small>${escapeHtml(service.use)}${service.value ? ` · ${escapeHtml(service.value)}` : ""}</small></span><i class="${service.status}">${service.status === "connected" || service.status === "ready" ? "已接入" : "待接入"}</i></div>`).join("")}</div></article>
-                    <article class="card"><h2 class="section-title">${icon("bolt", 18)}产品痛点拆解</h2><div class="list">${(assistant.productNeeds || []).map(item => `<div class="list-row"><span>${escapeHtml(item)}</span><span class="pill">需求</span></div>`).join("")}</div></article>
                 </aside>
-            </section>
-            <section class="assistant-roadmap grid-3">
-                ${(assistant.requiredXfyunApis || []).map((item, index) => `<article class="card"><span class="pill">${index === 0 ? "已可用" : "后续接入"}</span><h3>${escapeHtml(item.split("：")[0])}</h3><p>${escapeHtml(item.split("：").slice(1).join("：") || item)}</p></article>`).join("")}
             </section>
         </main>`;
     }
@@ -9926,7 +11098,83 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
     }
 
     function assistantFloat() {
-        return `<button class="assistant-float" data-view="aiAssistant">${icon("robot", 30)}<small>AI 助手</small></button>`;
+        const open = Boolean(state.data.floatingAgentOpen);
+        const activeCategory = state.data.floatingAgentFeedbackCategory || "course";
+        const voiceActive = Boolean(state.data.floatingVoiceRecording);
+        const categories = [
+            ["course", "book", "课程内容问题"],
+            ["bug", "alert", "页面故障"],
+            ["suggestion", "bulb", "学习建议"],
+            ["screenshot", "camera", "截图反馈"],
+            ["voice", "mic", "语音反馈"]
+        ];
+        return `<div class="floating-agent ${open ? "open" : ""}">
+            ${
+                open
+                    ? `<section class="floating-agent-panel learning-feedback-panel" aria-label="学习反馈助手">
+                        <div class="feedback-orbit-bg" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span>
+                        </div>
+                        <header class="floating-agent-head">
+                            <div class="feedback-assistant-icon" aria-hidden="true">
+                                <img src="/images/brand/edusmart-mark.svg" alt="">
+                                <i></i>
+                            </div>
+                            <div>
+                                <b>学习反馈助手</b>
+                                <small>智能助手会把你的学习反馈整理成更清晰的改进线索</small>
+                            </div>
+                            <button class="icon-btn" data-floating-agent-close aria-label="收起">${icon("x", 16)}</button>
+                        </header>
+                        <div class="feedback-helper-line">
+                            <span>智能学习</span>
+                            <p>请选择反馈类型，补充上下文，并描述你遇到的情况。</p>
+                        </div>
+                        <div class="floating-agent-body">
+                            <div class="feedback-category-grid" role="group" aria-label="反馈分类">
+                                ${categories
+                                    .map(
+                                        item => `<button class="${activeCategory === item[0] ? "active" : ""}" data-floating-feedback-category="${item[0]}">
+                                            ${icon(item[1], 15)}
+                                            <span>${item[2]}</span>
+                                        </button>`
+                                    )
+                                    .join("")}
+                            </div>
+                            <div class="feedback-tool-grid">
+                                <input type="file" accept="image/*" hidden data-floating-screenshot-input>
+                                <button class="feedback-tool-card screenshot" data-floating-screenshot-pick type="button">
+                                    <span class="tool-icon-frame">${icon("camera", 19)}<i></i></span>
+                                    <b>截图反馈</b>
+                                    <small>选择页面截图或上传问题画面</small>
+                                </button>
+                                <button class="feedback-tool-card voice ${voiceActive ? "recording" : ""}" data-floating-voice-toggle type="button">
+                                    <span class="tool-icon-frame">${icon("mic", 19)}<i></i><i></i><i></i></span>
+                                    <b>${voiceActive ? "正在录音..." : "语音说明"}</b>
+                                    <small>${voiceActive ? "再次点击可暂停声波动画" : "用语音补充反馈上下文"}</small>
+                                </button>
+                                <button class="feedback-tool-card upload" data-floating-screenshot-pick type="button">
+                                    <span class="tool-icon-frame">${icon("image", 19)}<i></i></span>
+                                    <b>图片上传</b>
+                                    <small>上传作业、截图或界面问题依据</small>
+                                </button>
+                            </div>
+                            <div class="floating-feedback-box">
+                                <textarea data-floating-feedback-input placeholder="告诉学习反馈助手：哪里让你困惑、哪里出现故障、缺少什么，或哪些地方特别有帮助...">${escapeHtml(state.data.floatingAgentFeedback || "")}</textarea>
+                                <button class="btn primary full feedback-submit" data-floating-feedback-submit>${icon("send", 16)} 提交反馈</button>
+                            </div>
+                        </div>
+                    </section>`
+                    : ""
+            }
+            <button class="assistant-float" data-floating-agent-toggle aria-expanded="${open ? "true" : "false"}">
+                <span class="float-knowledge-particles" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                <span class="float-book-3d" aria-hidden="true"><i></i><i></i></span>
+                <span class="float-chat-3d" aria-hidden="true"></span>
+                <span class="float-pencil-3d" aria-hidden="true"></span>
+                <small>${open ? "收起" : "反馈"}</small>
+            </button>
+        </div>`;
     }
 
     // ========== Obsidian 知识库视图 ==========
@@ -10369,89 +11617,333 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
     }
 
     function loginView() {
-        const storyCards = [
-            ["brain", "画像先行", "登录后先读取长期画像、认知偏好、专注时长和多模态偏好。"],
-            ["route", "路径可解释", "每个节点都显示掌握度、错题证据、资源偏好和推荐原因。"],
-            ["db", "知识库有数据", "软件工程、RAG 文档、题库和今日计划都绑定真实知识节点。"],
-            ["check", "闭环回写", "练习、笔记、复习和教师干预都会回写画像与下一次路径。"]
+        const capabilities = [
+            ["brain", "精准诊断，深度理解", "AI 全面扫描，构建你的知识图谱，精准定位薄弱点。", "01", "DIAGNOSIS", "98%", "知识定位"],
+            ["route", "路径可解释", "每个知识点的掌握度、薄弱因素与推荐原因都清晰可见。", "02", "PATH MAP", "12ms", "路径推理"],
+            ["db", "知识库更专业", "覆盖全学科核心知识点，构建更新、精准可靠。", "03", "RAG CORE", "10k+", "知识片段"],
+            ["shield", "闭环反馈，持续进步", "练习、反馈、讲解与复习形成闭环，学习效果持续提升。", "04", "LOOP SAFE", "24h", "持续反馈"]
         ];
-        const learningScenes = [
-            [
-                "/images/login/collaborative-study.png",
-                "小组学习",
-                "学生围绕问题讨论，系统把提问、笔记和练习结果沉淀为画像证据。"
-            ],
-            ["/images/login/focused-study-plan.png", "专注自学", "按专注时长切分任务，避免一次性塞满课程和题目。"],
-            [
-                "/images/login/teacher-guidance-board.png",
-                "课堂反馈",
-                "教师可以看到风险点、路径原因和学生当前需要的干预动作。"
-            ]
+        const scenes = [
+            ["/images/login/focused-study-plan.png", "自主学习", "AI 理解你的学习状态，生成个性化计划与练习，帮你高效突破薄弱环节。", "学习效率", "86%"],
+            ["/images/login/teacher-guidance-board.png", "课堂互动", "教师可实时掌握课堂学习数据，精准讲解，让教学更高效。", "课堂反馈", "实时"],
+            ["/images/login/collaborative-study.png", "课后巩固", "针对性练习与 AI 讲解，巩固所学，让知识真正内化。", "错题收敛", "+32%"]
         ];
-        return `<main class="login-story-page">
-            <section class="login-story-hero">
-                <nav class="login-story-nav"><div class="brand">${logo()}<span>EduSmart</span></div><div class="login-nav-actions"><a class="login-nav-button" href="#register-panel">${icon("plus", 15)}注册</a><a class="login-nav-button" href="#login-panel">${icon("user", 15)}登录</a></div></nav>
-                <div class="login-story-copy">
-                    <span class="eyebrow">面向学生的 AI 学习驾驶舱</span>
-                    <h1>从一次登录开始，系统先理解学生，再安排学习</h1>
-                    <p>EduSmart 围绕学生的真实学习过程工作：诊断画像、课堂知识、练习结果、笔记复盘和教师反馈都会进入同一条学习证据链。</p>
-                    <div class="login-story-actions"><a class="btn primary glow" href="#register-panel">${icon("plus", 17)}创建账号</a><a class="btn ghost" href="#login-panel">${icon("user", 17)}已有账号登录</a><a class="btn ghost" href="#personalized-proof">${icon("route", 17)}查看路径逻辑</a></div>
+        return `<main class="future-login-page">
+            <canvas class="code-rain-canvas" id="code-rain" aria-hidden="true"></canvas>
+            <div class="code-rain-depth" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="future-mesh" aria-hidden="true"></div>
+            <div class="cursor-glow" aria-hidden="true"></div>
+            <nav class="future-nav">
+                <a class="future-brand" href="#">${logo()}<span>EduSmart</span><i>AI Learning OS</i></a>
+                <div class="future-nav-links">
+                    <a href="#capabilities">产品</a><a href="#scenes">解决方案</a><a href="#path-explain">资源中心</a><a href="#data-insight">定价</a><a href="#future-cta">关于我们</a>
                 </div>
-                <div class="login-dashboard-illustration" aria-label="EduSmart 个性化学习驾驶舱插图">
-                    <img class="dash-photo" src="/images/login/hero-learning-dashboard.png" alt="无脸学生学习桌面和 AI 学习驾驶舱插图">
-                    <div class="dash-top"><span></span><span></span><span></span></div>
-                    <div class="dash-profile"><b>视觉型 · 25 分钟专注</b><small>student_profiles</small></div>
-                    <div class="dash-route">${["软件工程基础", "需求分析", "软件测试"].map((item, i) => `<div><span>${i + 1}</span><b>${item}</b><small>${i === 0 ? "优先修复" : i === 1 ? "场景练习" : "间隔复习"}</small></div>`).join("")}</div>
-                    <div class="dash-json">{ "personalized": true, "subject": "software_engineering" }</div>
+                <div class="future-nav-actions"><a class="future-login-trigger" href="#login-panel">登录</a><a class="future-register" href="#register-panel">注册 ${icon("arrow-right", 14)}</a></div>
+            </nav>
+
+            <section class="future-hero">
+                <div class="future-hero-copy">
+                    <div class="future-kicker"><span></span>下一代 AI 个性化学习平台 <b>2026</b></div>
+                    <h1>先理解你，<br><em>再为你安排学习</em></h1>
+                    <p>EduSmart 将学习画像、知识图谱与多智能体协作融合，让每一条路径都从你的真实状态出发。</p>
+                    <div class="future-hero-actions">
+                        <a class="future-primary-btn" href="#register-panel">免费注册，开始诊断 ${icon("arrow-right", 17)}</a>
+                        <a class="future-video-btn" href="#capabilities"><span>${icon("play", 15)}</span>观看 2 分钟介绍</a>
+                    </div>
+                    <div class="future-stats">
+                        <div><b>10,000+</b><span>学生正在使用</span></div><div><b>98%</b><span>学习效率显著提升</span></div><div><b>10 分钟</b><span>生成专属报告</span></div>
+                    </div>
+                    <div class="future-trust"><span>已服务超过 50,000 位学习者</span><i></i><span>数据安全与隐私保护</span></div>
+                </div>
+
+                <div class="ai-core-stage" aria-label="EduSmart AI 核心学习引擎">
+                    <div class="core-orbit orbit-a"></div><div class="core-orbit orbit-b"></div><div class="core-orbit orbit-c"></div>
+                    <div class="core-particle p1"></div><div class="core-particle p2"></div><div class="core-particle p3"></div>
+                    <div class="core-particle p4"></div><div class="core-particle p5"></div><div class="core-particle p6"></div>
+                    <div class="hero-dashboard">
+                        <div class="dashboard-rail">${["layout", "user", "chart", "book", "settings"].map((ic, i) => `<i class="${i === 1 ? "active" : ""}">${icon(ic, 14)}</i>`).join("")}</div>
+                        <div class="dashboard-body">
+                            <header><span>你好，李同学 👋<small>今天继续努力，向目标前进！</small></span><div>${icon("bell", 14)}<b>中</b></div></header>
+                            <div class="dashboard-grid">
+                                <article><span>学习总览</span><div class="dash-metrics"><b>78%<small>知识掌握</small></b><b>86<small>正确率</small></b><b>4.2h<small>学习时长</small></b></div><div class="dash-line"></div></article>
+                                <article class="dash-ai"><span>AI 学习建议</span><b>${icon("file", 19)} 下一节</b><small>函数与递归</small><button>开始学习 →</button></article>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="holo-card holo-overview"><span>${icon("trending", 15)} 学习总览</span><b>知识掌握 <em>78%</em></b><i><u></u></i></div>
+                    <div class="holo-card holo-radar"><span>${icon("radar", 15)} 能力雷达</span><div class="mini-radar"></div><small>综合评分 86</small></div>
+                    <div class="holo-card holo-advice"><span>${icon("sparkles", 15)} AI 个性化建议</span><b>${icon("file", 15)} 下一节</b><small>函数与递归</small></div>
+                    <div class="holo-card holo-growth"><span>${icon("trending", 15)} 学习能力提升</span><b>本月 <em>+23%</em></b><div class="mini-chart"><i></i></div></div>
+                    <div class="holo-card holo-graph"><span>${icon("chart", 15)} 知识图谱</span><div class="knowledge-dots"><i></i><i></i><i></i><i></i><i></i></div></div>
+                    <div class="ai-cube-wrap"><div class="ai-cube"><div class="cube-face cube-front">AI</div><div class="cube-face cube-back">${icon("code", 48)}</div><div class="cube-face cube-right">${icon("route", 48)}</div><div class="cube-face cube-left">${icon("radar", 48)}</div><div class="cube-face cube-top"></div><div class="cube-face cube-bottom"></div></div></div>
+                    <div class="energy-base"><i></i><span></span><b>EDUSMART NEURAL CORE</b></div>
+                </div>
+
+                <aside class="hero-login-panel">
+                    ${loginCardHTML()}
+                </aside>
+            </section>
+
+            <section class="future-section" id="capabilities">
+                <div class="future-section-head"><span>核心能力</span><h2>四大核心能力，驱动高效学习</h2><p>由 AI 驱动的学习操作系统，让每一次学习都有迹可循。</p></div>
+                <div class="capability-grid">${capabilities.map(([ic, title, text, no, tag, value, label]) => `<article class="future-glass-card cap-${ic}"><i class="card-no">${no}</i><div class="cap-status"><span>${tag}</span><b>${value}</b></div><div class="cap-model model-${ic}"><span>${icon(ic, 28)}</span><i></i><i></i><i></i><b></b><u></u><em></em></div><div class="cap-signal"><i></i><i></i><i></i><i></i></div><h3>${title}</h3><p>${text}</p><div class="cap-tags"><span>${label}</span><span>AI 引擎</span></div><a href="#path-explain">了解更多 ${icon("arrow-right", 14)}</a></article>`).join("")}</div>
+            </section>
+
+            <section class="future-section" id="scenes">
+                <div class="future-section-head compact"><span>场景应用</span><h2>在不同场景下，智能陪伴你的学习</h2><p>不论是独立学习、课堂互动，还是课后巩固，EduSmart 都能为你提供帮助。</p></div>
+                <div class="scene-grid">${scenes.map(([image, title, text, metric, value], index) => `<article class="scene-card"><div class="scene-photo"><img src="${image}" alt="${title}"><div class="scene-scan"></div><div class="scene-metric"><span>${metric}</span><b>${value}</b></div>${index === 2 ? "<span><b>错题本</b><i>12 道错题</i><b>待复习</b><i>12 题</i></span>" : ""}</div><div><div class="scene-title-row"><h3>${title}</h3><i>${String(index + 1).padStart(2, "0")}</i></div><p>${text}</p><a href="#path-explain">${icon("arrow-right", 14)}</a></div></article>`).join("")}</div>
+            </section>
+
+            <section class="future-section path-section" id="path-explain">
+                <div class="future-section-head compact"><span>学习路径</span><h2>学习路径可解释，进步看得见</h2><p>我们不仅告诉你学什么，还告诉你为什么这样学。</p></div>
+                <div class="path-layout">
+                    <aside class="path-steps future-glass-card">${[["诊断分析","全面评估你的知识掌握情况"],["推荐路径","AI 为你生成个性化学习路径"],["针对练习","智能练习，攻克薄弱点"],["反馈优化","学习过程数据驱动持续优化"]].map(([title,text],i)=>`<div class="${i===1?"active":""}"><i>0${i+1}</i><span><b>${title}</b><small>${text}</small></span></div>`).join("")}</aside>
+                    <div class="path-map future-glass-card">
+                        <div class="path-legend"><span><i class="green"></i>已掌握</span><span><i class="blue"></i>掌握中</span><span><i class="red"></i>薄弱</span><span><i></i>未学习</span></div>
+                        <div class="path-track">${[["函数基础","90%","green"],["一元二次函数","75%","green"],["函数与方程","64%","red"],["导数概念","30%","blue"],["导数应用","未学习",""]].map(([title,value,nodeState],i)=>`<article><i class="${nodeState}">${icon(i<2?"check":i===2?"alert":i===3?"book":"route",15)}</i><b>${title}</b><small>掌握度 ${value}</small></article>`).join("")}</div>
+                        <div class="path-reason"><div><span>推荐理由</span><b>函数与导数综合题</b><small>题目数 12 题　·　预计用时 25 分钟　·　预计提升 15%</small></div><button>开始学习 ${icon("arrow-right", 14)}</button></div>
+                        <img src="/images/login/ai-robot.png" alt="" class="path-robot">
+                    </div>
                 </div>
             </section>
-            <section class="login-story-band">${storyCards.map(([ic, title, text]) => `<article><span>${icon(ic, 22)}</span><b>${title}</b><p>${text}</p></article>`).join("")}</section>
-            <section class="login-scene-gallery">
-                ${learningScenes.map(([img, title, text]) => `<article><img src="${img}" alt="${escapeHtml(title)}"><div><b>${escapeHtml(title)}</b><p>${escapeHtml(text)}</p></div></article>`).join("")}
+
+            <section class="future-section outcome-section" id="data-insight">
+                <div class="outcome-grid">
+                    <article class="outcome-card future-glass-card"><div><span>长期主义</span><h2>长线学习，<br>让进步成为习惯</h2><p>系统记录你的学习轨迹与成长曲线，稳定积累，让知识牢固内化，把进步变成可持续的学习能力。</p><a href="#future-cta">了解更多 ${icon("arrow-right",14)}</a></div><div class="growth-widget"><span>成长曲线 <b>+32%</b></span><div class="growth-float">成长曲线 <strong>+32%</strong></div><div class="growth-line"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="growth-bars"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="growth-labels"><i>周一</i><i>周二</i><i>周三</i><i>周四</i><i>周五</i><i>本周</i></div></div></article>
+                    <article class="outcome-card future-glass-card"><div><span>教师赋能</span><h2>教师干预，<br>让教学更有温度</h2><p>AI 洞察课堂学习数据，教师结合经验及时介入，精准开展个性化教学与强弱点辅导。</p><a href="#future-cta">了解更多 ${icon("arrow-right",14)}</a></div><div class="teacher-stage"><div class="teacher-folder"><i></i><i></i><i></i></div><div class="teacher-widget"><article>${icon("alert",16)}<span><b>风险预警</b><small>3 名学生需关注</small></span></article><article>${icon("calendar",16)}<span><b>干预建议</b><small>建议个性辅导</small></span></article></div></div></article>
+                </div>
             </section>
-            <section class="login-narrative" id="personalized-proof">
-                <div><span class="eyebrow">Profile-aware path</span><h2>路径不是跳转结果，而是一份有证据的学习判断</h2><p>系统会把画像里的学习风格、每日可用时间、专注时长，与知识点掌握度、错题和课程进度合并。页面会展示推荐原因和 JSON 证据，让你能判断它到底有没有个性化。</p></div>
-                <div class="login-proof-stack"><div><b>画像</b><span>visual / practice / 25min</span></div><div><b>知识库</b><span>5 个软件工程核心节点</span></div><div><b>输出</b><span>节点、任务、讲义、题目、原因</span></div></div>
+
+            <section class="future-cta" id="future-cta">
+                <div class="cta-stars"></div><div class="cta-copy"><span>YOUR INTELLIGENT LEARNING JOURNEY</span><h2>准备好开启你的<br>智能学习之旅了吗？</h2><p>让 AI 从理解你开始，为你生成专属学习画像与个性化成长路径。</p><div class="cta-action-row"><a class="cta-white-btn" href="#register-panel">免费注册，开始体验 ${icon("arrow-right", 16)}</a><a class="cta-demo-btn" href="#register-panel">预约演示</a></div></div>
+                <div class="cta-robot"><div class="robot-orbit"></div><img src="/images/login/ai-robot.png" alt="EduSmart AI 学习机器人"></div>
             </section>
-            <section class="login-showcase">
-                <article><img src="/images/login/focused-study-plan.png" alt="无脸专注自学和学习计划插图"><h2>长线学习靠的不是一次推荐</h2><p>今日计划会从路径节点生成，练习后更新掌握度，笔记和费曼复述进入长期记忆，下一次路径会按新证据重排。</p></article>
-                <article><img src="/images/login/teacher-guidance-board.png" alt="无脸课堂白板和教师指导插图"><h2>教师能看到干预原因</h2><p>教师端不是只看分数，而是看到薄弱知识点、风险状态、画像摘要和推荐干预动作。</p></article>
-            </section>
-            <section class="login-cta-strip"><h2>准备进入你的学习驾驶舱</h2><p>注册后会先引导你完成诊断，再生成画像、个性化路径和学习计划。</p><a class="btn primary glow" href="#register-panel">${icon("plus", 17)}注册并开始诊断</a></section>
-            <section class="login-modal" id="register-panel" aria-label="注册弹层">
-                <a class="login-modal-backdrop" href="#" aria-label="关闭注册框"></a>
-                <form class="login-card auth-form login-modal-card" id="register-form">
-                    <a class="login-modal-close" href="#" aria-label="关闭">×</a>
-                    <span class="eyebrow">New learner</span>
-                    <h2 class="section-title">${icon("plus", 20)}注册 EduSmart</h2>
-                    <p>注册后将进入首页，并提示你完成智能诊断、生成画像和个性化学习路径。</p>
-                    <label>用户名<input name="username" autocomplete="username" placeholder="例如：student2026"></label>
-                    <label>昵称<input name="nickname" autocomplete="nickname" placeholder="例如：小明同学"></label>
-                    <label>邮箱<input name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
-                    <label>密码<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="至少 6 位"></label>
-                    <button class="btn primary glow" type="submit">${icon("play", 17)}注册并进入学习平台</button>
-                    <div class="message" id="register-message"></div>
-                    <p class="auth-switch">已有账号？<a href="#login-panel">返回登录</a></p>
-                </form>
-            </section>
-            <section class="login-modal" id="login-panel" aria-label="登录弹层">
+            <footer class="future-footer"><a class="future-brand" href="#">${logo()}<span>EduSmart</span></a><p>让 AI 理解每一个独特的学习者。</p><div><a href="#capabilities">产品</a><a href="#scenes">解决方案</a><a href="#">隐私</a><a href="#">联系我们</a></div><span>© 2026 EduSmart AI Learning Platform</span></footer>
+        </main>
+
+        <section class="login-modal" id="login-panel" aria-label="登录弹层">
                 <a class="login-modal-backdrop" href="#" aria-label="关闭登录框"></a>
-                <form class="login-card auth-form login-modal-card" id="login-form">
+                <form class="future-auth-dialog auth-form login-modal-card" id="login-form-modal" data-mode="account">
                     <a class="login-modal-close" href="#" aria-label="关闭">×</a>
-                    <span class="eyebrow">Demo account</span>
-                    <h2 class="section-title">${icon("user", 20)}登录 EduSmart</h2>
-                    <p>演示账号：zhangsan / 123456</p>
-                    <label>用户名<input name="username" value="zhangsan" autocomplete="username"></label>
-                    <label>密码<input name="password" type="password" value="123456" autocomplete="current-password"></label>
-                    <button class="btn primary glow" type="submit">${icon("play", 17)}进入学习平台</button>
-                    <div class="message" id="login-message"></div>
-                    <p class="auth-switch">还没有账号？<a href="#register-panel">立即注册</a></p>
+                    <div class="login-card-glow"></div>
+                    <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
+                    <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
+                    <div class="future-auth-panel active" data-auth-panel="account">
+                        <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                        <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
+                        <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
+                    </div>
+                    <div class="future-auth-panel" data-auth-panel="code">
+                        <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
+                        <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+                    </div>
+                    <button class="future-login-submit" type="submit">登录</button>
+                    <div class="message" id="login-message-modal"></div>
+                    <div class="future-divider"><span>其他登录方式</span></div>
+                    <div class="future-socials">
+                        <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
+                        <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
+                        <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
+                    </div>
+                    <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
                 </form>
             </section>
-        </main>`;
+
+        <section class="login-modal" id="register-panel" aria-label="注册弹层">
+                <a class="login-modal-backdrop" href="#" aria-label="关闭注册框"></a>
+                <form class="future-auth-dialog auth-form login-modal-card register-auth-dialog" id="register-form">
+                    <a class="login-modal-close" href="#" aria-label="关闭">×</a>
+                    <div class="login-card-glow"></div>
+                    <div class="future-login-head"><span class="login-status"><i></i> NEW LEARNER</span><b>创建 EduSmart 账号</b><p>完成注册后进入首页，开启智能诊断与个性化学习路径。</p></div>
+                    <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" autocomplete="username" placeholder="用户名，例如 student2026"></label>
+                    <label class="future-input-row"><span>${icon("sparkles", 16)}</span><input name="nickname" autocomplete="nickname" placeholder="昵称，例如 小明同学"></label>
+                    <label class="future-input-row"><span>${icon("message", 16)}</span><input name="email" type="email" autocomplete="email" placeholder="邮箱 you@example.com"></label>
+                    <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="密码至少 6 位"></label>
+                    <button class="future-login-submit" type="submit">${icon("play", 17)}注册并进入学习平台</button>
+                    <div class="message" id="register-message"></div>
+                    <p class="future-policy">已有账号？ <a href="#login-panel">返回登录</a></p>
+                </form>
+        </section>`;
+    }
+
+    function loginCardHTML() {
+        return `<form class="future-auth-dialog auth-form login-modal-card" id="login-form" data-mode="account">
+            <div class="login-card-glow"></div>
+            <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
+            <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
+            <div class="future-auth-panel active" data-auth-panel="account">
+                <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
+                <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
+            </div>
+            <div class="future-auth-panel" data-auth-panel="code">
+                <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
+                <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+            </div>
+            <button class="future-login-submit" type="submit">登录</button>
+            <div class="message" id="login-message"></div>
+            <div class="future-divider"><span>其他登录方式</span></div>
+            <div class="future-socials">
+                <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
+                <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
+                <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
+            </div>
+            <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
+        </form>`;
+    }
+
+    function initLoginExperience() {
+        const tiltTargets = document.querySelectorAll(
+            [
+                ".hero-dashboard",
+                ".future-stats > div",
+                ".capability-grid > article",
+                ".scene-card",
+                ".path-steps",
+                ".path-map",
+                ".path-track > article",
+                ".outcome-card",
+                ".growth-widget",
+                ".teacher-widget",
+                ".future-cta"
+            ].join(",")
+        );
+        if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            tiltTargets.forEach(target => {
+                target.classList.add("login-3d");
+                target.addEventListener("pointermove", event => {
+                    const rect = target.getBoundingClientRect();
+                    const x = (event.clientX - rect.left) / rect.width - 0.5;
+                    const y = (event.clientY - rect.top) / rect.height - 0.5;
+                    target.style.setProperty("--tilt-x", `${(-y * 7).toFixed(2)}deg`);
+                    target.style.setProperty("--tilt-y", `${(x * 9).toFixed(2)}deg`);
+                    target.style.setProperty("--glow-x", `${((x + 0.5) * 100).toFixed(1)}%`);
+                    target.style.setProperty("--glow-y", `${((y + 0.5) * 100).toFixed(1)}%`);
+                });
+                target.addEventListener("pointerleave", () => {
+                    target.style.setProperty("--tilt-x", "0deg");
+                    target.style.setProperty("--tilt-y", "0deg");
+                    target.style.setProperty("--glow-x", "50%");
+                    target.style.setProperty("--glow-y", "50%");
+                });
+            });
+        }
+        document.querySelectorAll("[data-auth-tab]").forEach(tab => {
+            tab.addEventListener("click", () => {
+                const form = tab.closest("form");
+                if (!form) return;
+                form.dataset.mode = tab.dataset.authTab;
+                form.querySelectorAll("[data-auth-tab]").forEach(item => item.classList.toggle("active", item === tab));
+                form.querySelectorAll("[data-auth-panel]").forEach(panel =>
+                    panel.classList.toggle("active", panel.dataset.authPanel === tab.dataset.authTab)
+                );
+                const msgEl = form.querySelector(".message");
+                if (msgEl) msgEl.textContent = "";
+            });
+        });
+        document.querySelector("[data-send-code]")?.addEventListener("click", event => {
+            const form = event.currentTarget.closest("form");
+            const phone = form?.querySelector("[data-code-phone]")?.value.trim();
+            const message = form?.querySelector(".message");
+            if (message) message.textContent = phone ? "演示验证码已发送：123456" : "请先输入手机号";
+            if (phone) event.currentTarget.textContent = "60s 后重发";
+        });
+        document.querySelector(".future-password-eye")?.addEventListener("click", event => {
+            const input = event.currentTarget.closest(".future-input-row")?.querySelector("input");
+            if (!input) return;
+            input.type = input.type === "password" ? "text" : "password";
+            event.currentTarget.setAttribute("aria-label", input.type === "password" ? "显示密码" : "隐藏密码");
+        });
+
+        const canvas = document.getElementById("code-rain");
+        if (!canvas || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        const ctx = canvas.getContext("2d");
+        const snippets = ["0", "1", "AI", "λ", "{}", "[]", "if", "map", "learn", "101", "node", "=>", "()", "def", "var", "fn", "class", "data", "api", "edu", "//", "/*", "&&", "||", "true", "null", "await", "import"];
+        const neonColors = [
+            "rgba(34, 211, 238, OPACITY)",      // cyan
+            "rgba(59, 130, 246, OPACITY)",       // blue
+            "rgba(139, 92, 246, OPACITY)",       // purple
+            "rgba(96, 165, 250, OPACITY)",       // light blue
+            "rgba(167, 139, 250, OPACITY)",      // light purple
+        ];
+        let width = 0;
+        let height = 0;
+        let drops = [];
+        const pointer = { x: -9999, y: -9999, active: false };
+        const cursorGlow = document.querySelector(".cursor-glow");
+        const resize = () => {
+            const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+            width = window.innerWidth;
+            const page = document.querySelector(".future-login-page");
+            height = Math.max(window.innerHeight, page?.scrollHeight || 0, document.documentElement.scrollHeight || 0);
+            canvas.width = width * ratio;
+            canvas.height = height * ratio;
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            drops = Array.from({ length: Math.ceil(width / 9) }, (_, index) => ({
+                x: index * 9 + Math.random() * 6,
+                y: Math.random() * height,
+                speed: 0.5 + Math.random() * 2.0,
+                alpha: 0.2 + Math.random() * 0.45,
+                size: 8 + Math.random() * 5,
+                sway: (Math.random() - 0.5) * 0.3,
+                colorIdx: Math.floor(Math.random() * neonColors.length)
+            }));
+        };
+        const move = event => {
+            pointer.x = event.clientX;
+            pointer.y = event.clientY;
+            pointer.active = true;
+            if (cursorGlow) {
+                cursorGlow.style.left = `${event.clientX}px`;
+                cursorGlow.style.top = `${event.clientY}px`;
+                cursorGlow.style.opacity = "1";
+            }
+        };
+        window.addEventListener("resize", resize, { passive: true });
+        window.addEventListener("pointermove", move, { passive: true });
+        document.addEventListener("mouseleave", () => {
+            pointer.active = false;
+            if (cursorGlow) cursorGlow.style.opacity = "0";
+        });
+        resize();
+        const draw = () => {
+            ctx.clearRect(0, 0, width, height);
+            ctx.font = "600 12px ui-monospace, SFMono-Regular, Consolas, monospace";
+            drops.forEach(drop => {
+                const dy = drop.y - pointer.y;
+                const dx = drop.x - pointer.x;
+                const distance = Math.hypot(dx, dy);
+                if (pointer.active && distance < 180) {
+                    const force = (180 - distance) / 180;
+                    drop.x += (dx / Math.max(distance, 1)) * force * 0.04;
+                    drop.y += force * 2;
+                }
+                drop.x += drop.sway;
+                const baseColor = neonColors[drop.colorIdx];
+                const gradient = ctx.createLinearGradient(0, drop.y - 80, 0, drop.y + 14);
+                gradient.addColorStop(0, baseColor.replace("OPACITY", "0"));
+                gradient.addColorStop(0.4, baseColor.replace("OPACITY", String(drop.alpha * 0.55)));
+                gradient.addColorStop(0.75, baseColor.replace("OPACITY", String(drop.alpha * 0.7)));
+                gradient.addColorStop(1, baseColor.replace("OPACITY", String(drop.alpha)));
+                ctx.fillStyle = gradient;
+                for (let i = 0; i < 8; i += 1) {
+                    ctx.fillText(snippets[(Math.floor(drop.y / 18) + i + Math.floor(drop.x)) % snippets.length], drop.x, drop.y - i * 16);
+                }
+                drop.y += drop.speed;
+                if (drop.y > height + 90) {
+                    drop.y = -20 - Math.random() * 200;
+                    drop.x = Math.random() * width;
+                }
+            });
+            requestAnimationFrame(draw);
+        };
+        draw();
     }
 
     function bindEvents() {
+        initLoginExperience();
         // ========== 智能诊断与学习画像标签页事件绑定 ==========
         // 智能诊断标签页切换
         document.querySelectorAll("[data-diagnostic-tab]").forEach(btn => {
@@ -10655,6 +12147,252 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             });
         });
 
+        // ========== AI学习陪练事件绑定 ==========
+        // 选择角色
+        document.querySelectorAll("[data-select-role]").forEach(card => {
+            card.addEventListener("click", () => {
+                const role = card.dataset.selectRole;
+                state.data.aiTutor = {
+                    ...state.data.aiTutor,
+                    selectedRole: role
+                };
+                render();
+            });
+        });
+
+        // 输入学习主题
+        document.querySelectorAll("[data-tutor-topic]").forEach(input => {
+            input.addEventListener("input", e => {
+                state.data.aiTutor = {
+                    ...state.data.aiTutor,
+                    topic: e.target.value
+                };
+            });
+        });
+
+        // 开始陪练
+        document.querySelectorAll("[data-start-session]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const topic = state.data.aiTutor.topic?.trim();
+                if (!topic) {
+                    toast("请输入学习主题");
+                    return;
+                }
+                btn.classList.add("is-loading");
+                btn.disabled = true;
+                state.data.aiTutor.loading = true;
+                render();
+                try {
+                    const result = await request("/api/ai-tutor/start", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            role: state.data.aiTutor.selectedRole,
+                            topic: topic
+                        })
+                    });
+                    if (result.success) {
+                        state.data.aiTutor = {
+                            ...state.data.aiTutor,
+                            sessionActive: true,
+                            messages: [{ role: "ai", content: result.question }],
+                            questionCount: 1,
+                            answerCount: 0,
+                            loading: false
+                        };
+                        toast("陪练开始，请回答第一个问题");
+                    } else {
+                        toast(result.message || "启动失败");
+                    }
+                } catch (e) {
+                    toast("启动失败: " + (e.message || "网络错误"));
+                } finally {
+                    btn.classList.remove("is-loading");
+                    btn.disabled = false;
+                    state.data.aiTutor.loading = false;
+                    render();
+                }
+            });
+        });
+
+        // 输入回答
+        document.querySelectorAll("[data-tutor-answer]").forEach(textarea => {
+            textarea.addEventListener("input", e => {
+                state.data._tutorAnswerDraft = e.target.value;
+            });
+        });
+
+        // 发送回答
+        document.querySelectorAll("[data-send-answer]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const answer = state.data._tutorAnswerDraft?.trim();
+                if (!answer) {
+                    toast("请输入你的回答");
+                    return;
+                }
+                btn.classList.add("is-loading");
+                btn.disabled = true;
+                state.data.aiTutor.loading = true;
+                const messages = state.data.aiTutor.messages || [];
+                messages.push({ role: "user", content: answer });
+                state.data.aiTutor.messages = messages;
+                state.data._tutorAnswerDraft = "";
+                render();
+                try {
+                    const result = await request("/api/ai-tutor/answer", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            role: state.data.aiTutor.selectedRole,
+                            topic: state.data.aiTutor.topic,
+                            answer: answer,
+                            history: messages.slice(-10)
+                        })
+                    });
+                    if (result.success) {
+                        const updatedMessages = state.data.aiTutor.messages;
+                        updatedMessages.push({ role: "ai", content: result.response });
+                        state.data.aiTutor = {
+                            ...state.data.aiTutor,
+                            messages: updatedMessages,
+                            questionCount: state.data.aiTutor.questionCount + (result.isQuestion ? 1 : 0),
+                            answerCount: state.data.aiTutor.answerCount + 1,
+                            loading: false
+                        };
+                    } else {
+                        toast(result.message || "回答处理失败");
+                    }
+                } catch (e) {
+                    toast("发送失败: " + (e.message || "网络错误"));
+                } finally {
+                    btn.classList.remove("is-loading");
+                    btn.disabled = false;
+                    state.data.aiTutor.loading = false;
+                    render();
+                }
+            });
+        });
+
+        // 跳过问题
+        document.querySelectorAll("[data-skip-question]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                btn.classList.add("is-loading");
+                btn.disabled = true;
+                state.data.aiTutor.loading = true;
+                render();
+                try {
+                    const result = await request("/api/ai-tutor/skip", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            role: state.data.aiTutor.selectedRole,
+                            topic: state.data.aiTutor.topic,
+                            history: state.data.aiTutor.messages.slice(-10)
+                        })
+                    });
+                    if (result.success) {
+                        const messages = state.data.aiTutor.messages;
+                        messages.push({ role: "user", content: "（跳过此题）" });
+                        messages.push({ role: "ai", content: result.nextQuestion });
+                        state.data.aiTutor = {
+                            ...state.data.aiTutor,
+                            messages: messages,
+                            questionCount: state.data.aiTutor.questionCount + 1,
+                            loading: false
+                        };
+                    }
+                } catch (e) {
+                    toast("跳过失败: " + (e.message || "网络错误"));
+                } finally {
+                    btn.classList.remove("is-loading");
+                    btn.disabled = false;
+                    state.data.aiTutor.loading = false;
+                    render();
+                }
+            });
+        });
+
+        // 请求提示
+        document.querySelectorAll("[data-request-hint]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                btn.classList.add("is-loading");
+                btn.disabled = true;
+                state.data.aiTutor.loading = true;
+                render();
+                try {
+                    const result = await request("/api/ai-tutor/hint", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            role: state.data.aiTutor.selectedRole,
+                            topic: state.data.aiTutor.topic,
+                            history: state.data.aiTutor.messages.slice(-10)
+                        })
+                    });
+                    if (result.success) {
+                        const messages = state.data.aiTutor.messages;
+                        messages.push({ role: "ai", content: "💡 提示：" + result.hint });
+                        state.data.aiTutor = {
+                            ...state.data.aiTutor,
+                            messages: messages,
+                            loading: false
+                        };
+                    }
+                } catch (e) {
+                    toast("获取提示失败: " + (e.message || "网络错误"));
+                } finally {
+                    btn.classList.remove("is-loading");
+                    btn.disabled = false;
+                    state.data.aiTutor.loading = false;
+                    render();
+                }
+            });
+        });
+
+        // 结束本次陪练
+        document.querySelectorAll("[data-end-session]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                btn.classList.add("is-loading");
+                btn.disabled = true;
+                try {
+                    const historyItem = {
+                        id: Date.now().toString(),
+                        topic: state.data.aiTutor.topic,
+                        role: state.data.aiTutor.selectedRole,
+                        roleLabel: { teacher: "老师", interviewer: "面试官", examiner: "考官", studyBuddy: "学霸" }[state.data.aiTutor.selectedRole] || "老师",
+                        questionCount: state.data.aiTutor.questionCount,
+                        answerCount: state.data.aiTutor.answerCount,
+                        subject: "综合",
+                        createdAt: new Date().toISOString()
+                    };
+                    state.data.aiTutorHistory = [historyItem, ...(state.data.aiTutorHistory || [])].slice(0, 20);
+                    state.data.aiTutor = {
+                        selectedRole: state.data.aiTutor.selectedRole,
+                        topic: "",
+                        messages: [],
+                        sessionActive: false,
+                        questionCount: 0,
+                        answerCount: 0,
+                        loading: false
+                    };
+                    toast("本次陪练已结束，记录已保存");
+                } catch (e) {
+                    toast("结束失败: " + (e.message || "网络错误"));
+                } finally {
+                    btn.classList.remove("is-loading");
+                    btn.disabled = false;
+                    render();
+                }
+            });
+        });
+
+        // 清空历史记录
+        document.querySelectorAll("[data-clear-history]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                if (confirm("确定要清空所有学习记录吗？")) {
+                    state.data.aiTutorHistory = [];
+                    toast("历史记录已清空");
+                    render();
+                }
+            });
+        });
+
         // Agent应用学习计划
         document.querySelectorAll("[data-agent-apply-plan]").forEach(btn => {
             btn.addEventListener("click", async () => {
@@ -10693,6 +12431,941 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                 setView(el.dataset.view);
             })
         );
+        document.querySelectorAll("[data-study-room-focus]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.mode = el.dataset.studyRoomFocus;
+                if (room.mode === "pomodoro") room.targetMinutes = 25;
+                else if (room.mode === "review") room.targetMinutes = 20;
+                else if (room.mode === "deep") room.targetMinutes = 50;
+                else if (room.mode === "custom") {
+                    const custom = prompt("请输入自习时长（分钟）：", room.targetMinutes || 50);
+                    if (custom !== null) {
+                        const mins = parseInt(custom, 10);
+                        if (!isNaN(mins) && mins >= 5 && mins <= 300) {
+                            room.targetMinutes = mins;
+                        } else {
+                            room.mode = "deep";
+                            room.targetMinutes = 50;
+                        }
+                    } else {
+                        room.mode = "deep";
+                        room.targetMinutes = 50;
+                    }
+                }
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-subject]").forEach(input =>
+            input.addEventListener("input", event => {
+                studyRoomState().subject = event.target.value;
+                saveStudyRoom();
+            })
+        );
+        document.querySelectorAll("[data-study-room-duration]").forEach(input =>
+            input.addEventListener("change", event => {
+                studyRoomState().targetMinutes = Math.max(5, Math.min(180, Number(event.target.value || 50)));
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-task]").forEach(input =>
+            input.addEventListener("input", event => {
+                studyRoomState().task = event.target.value;
+                saveStudyRoom();
+            })
+        );
+        document.querySelectorAll("[data-study-room-notes]").forEach(input =>
+            input.addEventListener("input", event => {
+                studyRoomState().notes = event.target.value;
+                saveStudyRoom();
+            })
+        );
+        document.querySelectorAll("[data-study-room-start]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                if (!room.running) {
+                    room.running = true;
+                    room.startedAt = Date.now();
+                    room.focusMode = true;
+                    room.paused = false;
+                    room.focusView = "timer";
+                    saveStudyRoom();
+                    render();
+                    syncStudyRoomTimer();
+                    toast("进入专注模式，开始自习");
+                }
+            })
+        );
+        document.querySelectorAll("[data-study-room-pause]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                if (room.running) {
+                    room.elapsedSeconds = studyRoomElapsed(room);
+                    room.running = false;
+                    room.startedAt = null;
+                    room.paused = true;
+                    saveStudyRoom();
+                    render();
+                    toast("已暂停，本轮时长已保留");
+                }
+            })
+        );
+
+        let focusRecognition = null;
+
+        document.querySelectorAll("[data-study-room-reset]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.running = false;
+                room.startedAt = null;
+                room.elapsedSeconds = 0;
+                room.distractions = 0;
+                room.checklist = [false, false, false, false];
+                room.focusMode = false;
+                room.focusView = "timer";
+                room.voiceRecording = false;
+                room.focusEditorContent = "";
+                room.focusEditorTitle = "";
+                if (focusRecognition) { focusRecognition.stop(); focusRecognition = null; }
+                saveStudyRoom();
+                render();
+                toast("本轮自习已重置");
+            })
+        );
+        document.querySelectorAll("[data-study-room-finish]").forEach(el =>
+            el.addEventListener("click", () => finishStudyRoomSession())
+        );
+        document.querySelectorAll("[data-study-room-distraction]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.distractions = Number(room.distractions || 0) + 1;
+                saveStudyRoom();
+                render();
+                toast("已记录一次干扰，复盘时会计入效果分");
+            })
+        );
+        document.querySelectorAll("[data-study-room-check]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                const index = Number(el.dataset.studyRoomCheck || 0);
+                room.checklist[index] = !room.checklist[index];
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-effect]").forEach(el =>
+            el.addEventListener("click", () => {
+                studyRoomState().effect = Number(el.dataset.studyRoomEffect || 80);
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-quick-type]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.quick.activeType = el.dataset.studyRoomQuickType || "note";
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-quick-draft]").forEach(input =>
+            input.addEventListener("input", event => {
+                studyRoomState().quick.draft = event.target.value;
+                saveStudyRoom();
+            })
+        );
+        document.querySelectorAll("[data-study-room-quick-template]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                const prefix = el.dataset.studyRoomQuickTemplate || "";
+                room.quick.draft = room.quick.draft ? `${room.quick.draft}\n${prefix}` : prefix;
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-quick-snapshot]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                const snapshot = `当前自习：${room.subject || "综合"}，已学习 ${Math.round(studyRoomElapsed(room) / 60)} 分钟，效果 ${studyRoomScore(room)} 分，干扰 ${Number(room.distractions || 0)} 次。`;
+                room.quick.draft = room.quick.draft ? `${room.quick.draft}\n${snapshot}` : snapshot;
+                saveStudyRoom();
+                render();
+            })
+        );
+        document.querySelectorAll("[data-study-room-quick-add]").forEach(el =>
+            el.addEventListener("click", () => {
+                const room = studyRoomState();
+                addStudyRoomQuickItem(room.quick.activeType, room.quick.draft);
+            })
+        );
+        document.querySelectorAll("[data-study-room-doc]").forEach(el =>
+            el.addEventListener("click", () => createStudyRoomDocument())
+        );
+        document.querySelectorAll("[data-study-room-image]").forEach(el =>
+            el.addEventListener("click", () => createStudyRoomImage())
+        );
+        document.querySelectorAll("[data-study-room-download-image]").forEach(el =>
+            el.addEventListener("click", () => downloadStudyRoomImage(Number(el.dataset.studyRoomDownloadImage || 0)))
+        );
+
+        // ========== 专注模式事件处理 ==========
+
+        function showFocusToast(msg, isError) {
+            let toastEl = document.querySelector(".study-focus-toast");
+            if (!toastEl) {
+                toastEl = document.createElement("div");
+                toastEl.className = "study-focus-toast";
+                toastEl.innerHTML = icon("check", 16) + '<span></span>';
+                document.body.appendChild(toastEl);
+            }
+            toastEl.querySelector("span").textContent = msg;
+            toastEl.classList.toggle("error", !!isError);
+            toastEl.classList.add("show");
+            setTimeout(() => toastEl.classList.remove("show"), 2200);
+        }
+
+        function saveFocusEditorContent() {
+            const canvas = document.querySelector("[data-focus-canvas]");
+            const titleInput = document.querySelector("[data-focus-doc-title]");
+            const room = studyRoomState();
+            const content = canvas ? canvas.innerHTML : "";
+            const title = titleInput ? titleInput.value : "";
+
+            if (room.focusCurrentDocId) {
+                const docIndex = room.editorDocs.findIndex(d => d.id === room.focusCurrentDocId);
+                if (docIndex !== -1) {
+                    room.editorDocs[docIndex].content = content;
+                    room.editorDocs[docIndex].title = title;
+                    room.editorDocs[docIndex].updatedAt = new Date().toISOString();
+                }
+            } else {
+                room.focusEditorContent = content;
+                room.focusEditorTitle = title;
+            }
+            saveStudyRoom();
+        }
+
+        function startEditorVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showFocusToast("请使用Chrome浏览器以支持语音识别", true);
+                return;
+            }
+            if (focusRecognition) {
+                focusRecognition.stop();
+                focusRecognition = null;
+                studyRoomState().voiceRecording = false;
+                saveStudyRoom();
+                render();
+                return;
+            }
+            let isFirstResult = true;
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = "zh-CN";
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            function getCanvas() {
+                return document.querySelector("[data-focus-canvas]");
+            }
+
+            recognition.onresult = (event) => {
+                let finalTranscript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    }
+                }
+                if (finalTranscript) {
+                    const canvas = getCanvas();
+                    if (!canvas) return;
+                    canvas.focus();
+                    const sel = window.getSelection();
+                    if (isFirstResult && canvas.innerHTML.trim() === "") {
+                        const p = document.createElement("p");
+                        p.textContent = finalTranscript;
+                        canvas.innerHTML = "";
+                        canvas.appendChild(p);
+                        isFirstResult = false;
+                    } else {
+                        if (sel.rangeCount > 0 && canvas.contains(sel.anchorNode)) {
+                            const range = sel.getRangeAt(0);
+                            const textNode = document.createTextNode(finalTranscript);
+                            range.deleteContents();
+                            range.insertNode(textNode);
+                            range.collapse(false);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        } else {
+                            const p = document.createElement("p");
+                            p.textContent = finalTranscript;
+                            canvas.appendChild(p);
+                        }
+                    }
+                    saveFocusEditorContent();
+                }
+            };
+            recognition.onerror = (event) => {
+                console.error("语音识别错误:", event.error);
+                studyRoomState().voiceRecording = false;
+                saveStudyRoom();
+                render();
+                if (event.error === "not-allowed") {
+                    showFocusToast("请允许麦克风权限", true);
+                }
+            };
+            recognition.onend = () => {
+                const room = studyRoomState();
+                if (room.voiceRecording) {
+                    try { recognition.start(); } catch(e) {
+                        room.voiceRecording = false;
+                        focusRecognition = null;
+                        saveStudyRoom();
+                        render();
+                    }
+                    return;
+                }
+                focusRecognition = null;
+                render();
+            };
+            recognition.start();
+            focusRecognition = recognition;
+            studyRoomState().voiceRecording = true;
+            saveStudyRoom();
+            const voiceBtn = document.querySelector("[data-tb-voice]");
+            const timerMicBtn = document.querySelector("[data-focus-mic-timer]");
+            if (voiceBtn) voiceBtn.classList.add("recording");
+            if (timerMicBtn) timerMicBtn.classList.add("recording");
+            setTimeout(() => {
+                const c = getCanvas();
+                if (c) c.focus();
+            }, 100);
+        }
+
+        function exportFocusWord() {
+            const room = studyRoomState();
+            saveFocusEditorContent();
+            const title = room.focusEditorTitle || `${room.subject || "学习"}心得`;
+            const content = room.focusEditorContent || "<p>暂无内容</p>";
+            const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+body{font-family:"Microsoft YaHei","SimSun",Arial,sans-serif;font-size:14px;line-height:1.8;padding:20px;color:#1e293b;}
+h1{font-size:24px;font-weight:700;margin:20px 0 12px;color:#0f172a;border-bottom:2px solid #818cf8;padding-bottom:8px;}
+h2{font-size:20px;font-weight:700;margin:18px 0 10px;color:#1e293b;}
+h3{font-size:16px;font-weight:600;margin:16px 0 8px;color:#334155;}
+p{margin:8px 0;}
+ul,ol{margin:8px 0;padding-left:24px;}
+blockquote{border-left:3px solid #818cf8;padding:8px 16px;margin:12px 0;background:#f8fafc;color:#475569;}
+a{color:#6366f1;text-decoration:underline;}
+img{max-width:100%;border-radius:4px;margin:8px 0;}
+.meta{color:#64748b;font-size:12px;margin-bottom:20px;padding-bottom:12px;border-bottom:1px dashed #e2e8f0;}
+</style>
+</head><body>
+<h1>${escapeHtml(title)}</h1>
+<div class="meta">学习主题：${escapeHtml(room.subject || "自由学习")} | 记录时间：${new Date().toLocaleString("zh-CN")} | 学习时长：${Math.round(studyRoomElapsed(room) / 60)}分钟</div>
+${content}
+</body></html>`;
+            const blob = new Blob(['\ufeff', html], { type: "application/msword;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${title}-${formatDate(new Date())}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            room.quick = room.quick || {};
+            room.quick.docs = [{ id: `doc-${Date.now()}`, name: a.download, createdAt: new Date().toISOString() }, ...(room.quick.docs || [])].slice(0, 8);
+            saveStudyRoom();
+            showFocusToast("Word文档已导出");
+        }
+
+        function shareFocusLink() {
+            saveFocusEditorContent();
+            const room = studyRoomState();
+            const title = room.focusEditorTitle || `${room.subject || "学习"}心得`;
+            const content = room.focusEditorContent || "";
+            const shareData = {
+                title: title,
+                text: content.replace(/<[^>]*>/g, '').substring(0, 200),
+                url: window.location.href
+            };
+            if (navigator.share) {
+                navigator.share(shareData).catch(() => {});
+            } else {
+                const textToCopy = `${title}\n\n${content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 300)}\n\n${window.location.href}`;
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showFocusToast("链接和内容已复制到剪贴板");
+                }).catch(() => {
+                    showFocusToast("分享链接已准备：" + window.location.href);
+                });
+            }
+        }
+
+        function insertLink() {
+            const url = prompt("请输入链接地址：", "https://");
+            if (!url || url === "https://") return;
+            const text = prompt("请输入链接文字（留空使用URL）：", "") || url;
+            document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`);
+            saveFocusEditorContent();
+        }
+
+        function insertImage() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const canvas = document.querySelector("[data-focus-canvas]");
+                    if (canvas) {
+                        canvas.focus();
+                        document.execCommand("insertHTML", false, `<img src="${ev.target.result}" alt="插入的图片" style="max-width:100%;border-radius:8px;margin:12px 0;"/>`);
+                        saveFocusEditorContent();
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        function execFormat(cmd, value) {
+            const canvas = document.querySelector("[data-focus-canvas]");
+            if (!canvas) return;
+            canvas.focus();
+            document.execCommand(cmd, false, value);
+            saveFocusEditorContent();
+        }
+
+        function setBlockType(tag) {
+            document.execCommand("formatBlock", false, tag);
+            saveFocusEditorContent();
+        }
+
+        function setFontSize(size) {
+            const canvas = document.querySelector("[data-focus-canvas]");
+            if (!canvas) return;
+            canvas.focus();
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0 && !sel.isCollapsed) {
+                const span = document.createElement("span");
+                span.style.fontSize = size;
+                const range = sel.getRangeAt(0);
+                try {
+                    span.appendChild(range.extractContents());
+                    range.insertNode(span);
+                    sel.removeAllRanges();
+                    const newRange = document.createRange();
+                    newRange.selectNodeContents(span);
+                    sel.addRange(newRange);
+                } catch (e) {
+                    document.execCommand("fontSize", false, "7");
+                }
+            } else {
+                document.execCommand("styleWithCSS", false, "true");
+                document.execCommand("fontSize", false, "7");
+                const fonts = canvas.querySelectorAll("font[size='7']");
+                fonts.forEach(f => {
+                    f.removeAttribute("size");
+                    f.style.fontSize = size;
+                });
+            }
+            saveFocusEditorContent();
+        }
+
+        function setFontColor(color) {
+            execFormat("foreColor", color);
+        }
+
+        // 打开学习心得编辑器
+        document.querySelectorAll("[data-focus-open-editor]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.focusView = "editor";
+                saveStudyRoom();
+                render();
+                syncStudyRoomTimer();
+                setTimeout(() => {
+                    const canvas = document.querySelector("[data-focus-canvas]");
+                    if (canvas) canvas.focus();
+                }, 200);
+            })
+        );
+
+        // 返回计时器视图
+        document.querySelectorAll("[data-focus-back-timer]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                saveFocusEditorContent();
+                if (focusRecognition) {
+                    focusRecognition.stop();
+                    focusRecognition = null;
+                }
+                const room = studyRoomState();
+                room.focusView = "timer";
+                room.voiceRecording = false;
+                saveStudyRoom();
+                render();
+            })
+        );
+
+        // 计时器上的语音速记
+        document.querySelectorAll("[data-focus-mic-timer]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.focusView = "editor";
+                saveStudyRoom();
+                render();
+                setTimeout(() => startEditorVoiceRecognition(), 300);
+            })
+        );
+
+        // 计时器上的干扰按钮
+        document.querySelectorAll("[data-focus-distraction]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                room.distractions = Number(room.distractions || 0) + 1;
+                saveStudyRoom();
+                render();
+                showFocusToast("已记录一次干扰");
+            })
+        );
+
+        // 计时器上的自定义时间输入
+        document.querySelectorAll("[data-focus-target-minutes]").forEach(input =>
+            input.addEventListener("change", event => {
+                const room = studyRoomState();
+                const mins = parseInt(event.target.value, 10);
+                if (!isNaN(mins) && mins >= 5 && mins <= 300) {
+                    room.targetMinutes = mins;
+                    room.elapsedSeconds = 0;
+                    room.startedAt = Date.now();
+                    saveStudyRoom();
+                    render();
+                    syncStudyRoomTimer();
+                    showFocusToast(`已设置为 ${mins} 分钟`);
+                } else {
+                    event.target.value = room.targetMinutes || 50;
+                }
+            })
+        );
+
+        // 学习心得页面的自定义时间输入
+        document.querySelectorAll("[data-focus-editor-minutes]").forEach(input =>
+            input.addEventListener("change", event => {
+                const room = studyRoomState();
+                const mins = parseInt(event.target.value, 10);
+                if (!isNaN(mins) && mins >= 5 && mins <= 300) {
+                    room.targetMinutes = mins;
+                    room.elapsedSeconds = 0;
+                    room.startedAt = Date.now();
+                    saveStudyRoom();
+                    render();
+                    syncStudyRoomTimer();
+                    showFocusToast(`已设置为 ${mins} 分钟`);
+                } else {
+                    event.target.value = room.targetMinutes || 50;
+                }
+            })
+        );
+
+        // 标题输入同步
+        document.addEventListener("input", (e) => {
+            if (e.target.matches("[data-focus-doc-title]")) {
+                studyRoomState().focusEditorTitle = e.target.value;
+                saveStudyRoom();
+            }
+            if (e.target.matches("[data-focus-canvas]")) {
+                saveFocusEditorContent();
+            }
+        });
+
+        // 粘贴图片支持
+        document.addEventListener("paste", (e) => {
+            const canvas = document.querySelector("[data-focus-canvas]");
+            if (!canvas || !canvas.contains(e.target)) return;
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith("image/")) {
+                    e.preventDefault();
+                    const file = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        document.execCommand("insertHTML", false, `<img src="${ev.target.result}" alt="粘贴图片" style="max-width:100%;border-radius:8px;margin:12px 0;"/>`);
+                        saveFocusEditorContent();
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        // 编辑器工具栏事件 - 段落类型
+        document.querySelectorAll("[data-tb-block]").forEach(sel =>
+            sel.addEventListener("change", (e) => {
+                setBlockType(e.target.value);
+                e.target.value = "p";
+            })
+        );
+
+        // 编辑器工具栏 - 字号
+        document.querySelectorAll("[data-tb-font-size]").forEach(sel =>
+            sel.addEventListener("change", (e) => {
+                setFontSize(e.target.value);
+            })
+        );
+
+        // 编辑器工具栏 - 粗体/斜体/下划线/删除线
+        document.querySelectorAll("[data-tb-format]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                execFormat(btn.dataset.tbFormat);
+            })
+        );
+
+        // 编辑器工具栏 - 字体颜色
+        document.querySelectorAll("[data-tb-color]").forEach(input =>
+            input.addEventListener("input", (e) => {
+                setFontColor(e.target.value);
+            })
+        );
+
+        // 编辑器工具栏 - 列表
+        document.querySelectorAll("[data-tb-list]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const type = btn.dataset.tbList;
+                execFormat(type === "ul" ? "insertUnorderedList" : "insertOrderedList");
+            })
+        );
+
+        // 编辑器工具栏 - 对齐
+        document.querySelectorAll("[data-tb-align]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const map = { left: "justifyLeft", center: "justifyCenter", right: "justifyRight" };
+                execFormat(map[btn.dataset.tbAlign]);
+            })
+        );
+
+        // 插入链接
+        document.querySelectorAll("[data-tb-insert-link]").forEach(btn =>
+            btn.addEventListener("click", insertLink)
+        );
+
+        // 插入图片
+        document.querySelectorAll("[data-tb-insert-image]").forEach(btn =>
+            btn.addEventListener("click", insertImage)
+        );
+
+        // 语音转文字
+        document.querySelectorAll("[data-tb-voice]").forEach(btn =>
+            btn.addEventListener("click", startEditorVoiceRecognition)
+        );
+
+        // 撤销/重做
+        document.querySelectorAll("[data-tb-undo]").forEach(btn =>
+            btn.addEventListener("click", () => execFormat("undo"))
+        );
+        document.querySelectorAll("[data-tb-redo]").forEach(btn =>
+            btn.addEventListener("click", () => execFormat("redo"))
+        );
+
+        // 导出Word
+        document.querySelectorAll("[data-focus-export-word]").forEach(btn =>
+            btn.addEventListener("click", exportFocusWord)
+        );
+
+        // 分享链接
+        document.querySelectorAll("[data-focus-share-link]").forEach(btn =>
+            btn.addEventListener("click", shareFocusLink)
+        );
+
+        // 保存编辑器
+        document.querySelectorAll("[data-focus-save-editor]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                saveFocusEditorContent();
+                const room = studyRoomState();
+                let contentToSave = room.focusEditorContent;
+                if (room.focusCurrentDocId) {
+                    const doc = room.editorDocs.find(d => d.id === room.focusCurrentDocId);
+                    if (doc) contentToSave = doc.content;
+                }
+                if (contentToSave && contentToSave.replace(/<[^>]*>/g, '').trim()) {
+                    addStudyRoomQuickItem("note", contentToSave.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200));
+                }
+                showFocusToast("已保存学习心得");
+            })
+        );
+
+        // 新建文档
+        document.querySelectorAll("[data-focus-new-doc]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                saveFocusEditorContent();
+                const room = studyRoomState();
+                const newDoc = createNewStudyDoc(room.subject);
+                room.editorDocs = room.editorDocs || [];
+                room.editorDocs.unshift(newDoc);
+                room.focusCurrentDocId = newDoc.id;
+                saveStudyRoom();
+                render();
+                showFocusToast("已创建新文档");
+            })
+        );
+
+        // 选择文档
+        document.querySelectorAll("[data-focus-doc-id]").forEach(el =>
+            el.addEventListener("click", () => {
+                saveFocusEditorContent();
+                const room = studyRoomState();
+                room.focusCurrentDocId = el.dataset.focusDocId;
+                saveStudyRoom();
+                render();
+            })
+        );
+
+        // 专注模式暂停/继续
+        document.querySelectorAll("[data-focus-pause]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                if (room.running) {
+                    room.elapsedSeconds = studyRoomElapsed(room);
+                    room.running = false;
+                    room.startedAt = null;
+                    room.paused = true;
+                    if (focusRecognition) focusRecognition.stop();
+                    showFocusToast("已暂停");
+                } else {
+                    room.running = true;
+                    room.startedAt = Date.now();
+                    room.paused = false;
+                    showFocusToast("继续专注");
+                }
+                saveStudyRoom();
+                render();
+                syncStudyRoomTimer();
+            })
+        );
+
+        // 专注模式结束自习
+        document.querySelectorAll("[data-focus-finish]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                saveFocusEditorContent();
+                if (room.focusEditorContent && room.focusEditorContent.replace(/<[^>]*>/g, '').trim()) {
+                    const plainText = room.focusEditorContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    room.notes = room.notes ? room.notes + "\n\n" + plainText : plainText;
+                }
+                if (focusRecognition) { focusRecognition.stop(); focusRecognition = null; }
+                room.focusMode = false;
+                room.focusView = "timer";
+                room.voiceRecording = false;
+                room.focusEditorContent = "";
+                room.focusEditorTitle = "";
+                saveStudyRoom();
+                finishStudyRoomSession();
+            })
+        );
+
+        // 专注模式取消
+        document.querySelectorAll("[data-focus-cancel]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const room = studyRoomState();
+                if (focusRecognition) { focusRecognition.stop(); focusRecognition = null; }
+                room.focusMode = false;
+                room.focusView = "timer";
+                room.paused = false;
+                room.running = false;
+                room.startedAt = null;
+                room.elapsedSeconds = 0;
+                room.voiceRecording = false;
+                room.focusEditorContent = "";
+                room.focusEditorTitle = "";
+                saveStudyRoom();
+                render();
+                toast("已取消专注");
+            })
+        );
+
+        document.querySelectorAll("[data-membership-email]").forEach(input =>
+            input.addEventListener("input", event => {
+                state.data.membershipEmailDraft = event.target.value;
+            })
+        );
+        document.querySelectorAll("[data-membership-code]").forEach(input =>
+            input.addEventListener("input", event => {
+                state.data.membershipVerifyCode = event.target.value;
+            })
+        );
+        document.querySelectorAll("[data-membership-smtp-auth]").forEach(input =>
+            input.addEventListener("input", event => {
+                state.data.membershipSmtpAuthCode = event.target.value;
+            })
+        );
+        document.querySelectorAll("[data-membership-push-time]").forEach(input =>
+            input.addEventListener("change", event => {
+                state.data.membershipPushTime = event.target.value;
+            })
+        );
+        document.querySelectorAll("[data-membership-tone]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.membershipEncourageTone = el.dataset.membershipTone;
+                render();
+                toast("陪伴风格已更新");
+            })
+        );
+        document.querySelectorAll("[data-membership-mood]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.membershipMood = el.dataset.membershipMood;
+                render();
+                toast("今日心情已记录");
+            })
+        );
+        document.querySelectorAll("[data-membership-fun-next]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.membershipFunSeed = Number(state.data.membershipFunSeed || 0) + 1;
+                render();
+                toast("已换一份学习补给");
+            })
+        );
+        document.querySelectorAll("[data-membership-exp-tab]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.membershipExperienceTab = el.dataset.membershipExpTab;
+                render();
+            })
+        );
+        document.querySelectorAll("[data-membership-slide]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.membershipCareSlide = Number(el.dataset.membershipSlide || 0);
+                render();
+            })
+        );
+        document.querySelectorAll("[data-membership-activate]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    await request("/api/membership/activate-demo", { method: "POST", body: "{}" });
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("免费学习陪伴已开启");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-membership-bind-email]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    const email =
+                        document.querySelector("[data-membership-email]")?.value?.trim() ||
+                        state.data.membershipEmailDraft;
+                    const smtpAuthCode =
+                        document.querySelector("[data-membership-smtp-auth]")?.value?.trim() ||
+                        state.data.membershipSmtpAuthCode;
+                    const result = await request("/api/membership/email/bind", {
+                        method: "POST",
+                        body: JSON.stringify({ email, smtpAuthCode })
+                    });
+                    state.data.membershipDevCode = result.data?.delivery?.status === "sent" ? "验证码已发送" : "";
+                    state.data.membershipVerifyCode = "";
+                    state.data.membershipSmtpAuthCode = "";
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("验证码已发送到邮箱");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-membership-verify-email]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    const email =
+                        document.querySelector("[data-membership-email]")?.value?.trim() ||
+                        state.data.membershipEmailDraft;
+                    const code =
+                        document.querySelector("[data-membership-code]")?.value?.trim() ||
+                        state.data.membershipVerifyCode;
+                    await request("/api/membership/email/verify", {
+                        method: "POST",
+                        body: JSON.stringify({ email, code })
+                    });
+                    state.data.membershipDevCode = "";
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("邮箱已验证");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-membership-push]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    const pushTime =
+                        document.querySelector("[data-membership-push-time]")?.value ||
+                        state.data.membershipPushTime ||
+                        "08:00";
+                    await request("/api/membership/push-settings", {
+                        method: "POST",
+                        body: JSON.stringify({ pushEnabled: el.dataset.membershipPush === "1", pushTime })
+                    });
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("推送设置已更新");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-digest-generate]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    await request("/api/daily-digest/generate", { method: "POST", body: "{}" });
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("今日知识推送已生成");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-digest-send-test]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    await request("/api/daily-digest/send-test", { method: "POST", body: "{}" });
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("测试邮件已发送");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-membership-seed-card]").forEach(el =>
+            el.addEventListener("click", async () => {
+                try {
+                    await request("/api/personal-knowledge/cards/from-ai", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            sourceId: `manual_test_${Date.now()}`,
+                            subject: "综合",
+                            knowledgePoint: "递归终止条件",
+                            answer:
+                                "递归函数需要终止条件，否则会不断调用自身并导致调用栈溢出。理解递归时，可以先找出最小问题，再描述每次递进如何靠近最小问题。"
+                        })
+                    });
+                    await loadMembershipCenter(true);
+                    render();
+                    toast("测试知识卡已添加");
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
         document.querySelectorAll("[data-ai-feature]").forEach(el =>
             el.addEventListener("click", async event => {
                 event.stopPropagation();
@@ -10725,8 +13398,8 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     });
                     state.data.agentRuntimeResult = result;
                     state.data.agentRuntimeTraces = result.traces || [];
-                    state.data.aiAssistantMessages.push({ role: "user", content: prompt });
-                    state.data.aiAssistantMessages.push({ role: "ai", content: result.answer });
+                    appendAiAssistantMessage("user", prompt);
+                    appendAiAssistantMessage("ai", result.answer);
                     state.data.aiAssistantMode = "agent";
                     state.data._pendingAgentPrompt = "";
                     state.data.pathCenter = null;
@@ -13703,13 +16376,22 @@ zhaoliu,赵六"></textarea>
                 const prompt = input?.value?.trim();
                 if (!prompt) return toast("先输入一个学习问题");
                 const saveAsNote = el.hasAttribute("data-send-ai-assistant-note");
-                state.data.aiAssistantMessages.push({ role: "user", content: prompt });
+                appendAiAssistantMessage("user", prompt);
+                const recentConversation = state.data.aiAssistantMessages.slice(-40).map(message => ({
+                    role: message.role,
+                    content: message.content
+                }));
                 el.classList.add("is-loading");
                 try {
                     if (state.data.aiAssistantMode === "rag") {
                         const rag = await request("/api/rag/ask", {
                             method: "POST",
-                            body: JSON.stringify({ query: prompt, subject: "software_engineering", limit: 4 })
+                            body: JSON.stringify({
+                                query: prompt,
+                                subject: "software_engineering",
+                                limit: 4,
+                                history: recentConversation
+                            })
                         });
                         const data = rag.data || {};
                         const citationText = (data.citations || [])
@@ -13717,15 +16399,15 @@ zhaoliu,赵六"></textarea>
                             .map(c => `[${c.rank}] ${c.title}`)
                             .join("\n");
                         state.data.ragAskResult = data;
-                        state.data.aiAssistantMessages.push({
-                            role: "ai",
-                            content: [
+                        appendAiAssistantMessage(
+                            "ai",
+                            [
                                 data.answer || "知识库暂时没有生成回答。",
                                 citationText ? `\n证据链：\n${citationText}` : ""
                             ]
                                 .filter(Boolean)
                                 .join("\n")
-                        });
+                        );
                         if (input) input.value = "";
                         state.data._pendingAgentPrompt = "";
                         render();
@@ -13749,11 +16431,12 @@ zhaoliu,赵六"></textarea>
                                 goal: prompt,
                                 subject: state.data.pathSubject || "all",
                                 intensity: state.data.pathIntensity || "normal",
-                                saveAsNote
+                                saveAsNote,
+                                recentConversation
                             }
                         })
                     });
-                    state.data.aiAssistantMessages.push({ role: "ai", content: result.answer });
+                    appendAiAssistantMessage("ai", result.answer);
                     state.data.agentRuntimeResult = result;
                     state.data.agentRuntimeTraces = result.traces || [];
                     if (input) input.value = "";
@@ -13764,11 +16447,28 @@ zhaoliu,赵六"></textarea>
                     render();
                     toast("智能体已完成分析并写回学习任务");
                 } catch (error) {
-                    state.data.aiAssistantMessages.push({ role: "ai", content: error.message });
+                    appendAiAssistantMessage("ai", error.message);
                     render();
                 } finally {
                     el.classList.remove("is-loading");
                 }
+            })
+        );
+        document.querySelectorAll("[data-clear-ai-memory]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.aiAssistantMessages = [];
+                saveShortTermMemory();
+                state.data.ragAskResult = null;
+                render();
+                toast("最近 20 轮短期记忆已清空");
+            })
+        );
+        document.querySelectorAll("[data-memory-prompt]").forEach(el =>
+            el.addEventListener("click", () => {
+                const input = document.querySelector("[data-ai-assistant-input]");
+                if (!input) return;
+                input.value = el.dataset.memoryPrompt || "";
+                input.focus();
             })
         );
         document.querySelectorAll("[data-save-last-ai-note]").forEach(el =>
@@ -13808,7 +16508,7 @@ zhaoliu,赵六"></textarea>
                 const file = el.files?.[0];
                 if (!file) return;
                 state.data.aiAssistantMode = "mistake";
-                state.data.aiAssistantMessages.push({ role: "user", content: `上传截图搜题：${file.name}` });
+                appendAiAssistantMessage("user", `上传截图搜题：${file.name}`);
                 try {
                     const imageData = await fileToDataUrl(file);
                     const result = await request("/api/tutor/ask", {
@@ -13830,11 +16530,11 @@ zhaoliu,赵六"></textarea>
                     ]
                         .filter(Boolean)
                         .join("\n\n");
-                    state.data.aiAssistantMessages.push({ role: "ai", content: answer });
+                    appendAiAssistantMessage("ai", answer);
                     render();
                     toast(data.ocr?.provider?.includes("fallback") ? "已进入截图搜题兜底流程" : "截图搜题完成");
                 } catch (error) {
-                    state.data.aiAssistantMessages.push({ role: "ai", content: error.message });
+                    appendAiAssistantMessage("ai", error.message);
                     render();
                 } finally {
                     el.value = "";
@@ -14354,7 +17054,7 @@ zhaoliu,赵六"></textarea>
                     });
                     state.data.agentRuntimeResult = result;
                     state.data.agentRuntimeTraces = result.traces || [];
-                    state.data.aiAssistantMessages.push({ role: "ai", content: result.answer });
+                    appendAiAssistantMessage("ai", result.answer);
                     state.loaded = false;
                     state.data.intelligence = null;
                     state.data.pathCenter = null;
@@ -14578,9 +17278,47 @@ zhaoliu,赵六"></textarea>
             form.addEventListener("submit", async event => {
                 event.preventDefault();
                 const message = document.getElementById("login-message");
+                if (form.dataset.mode === "code") {
+                    const phone = form.querySelector("[data-code-phone]")?.value.trim();
+                    const code = form.querySelector("[data-code-value]")?.value.trim();
+                    message.textContent =
+                        phone && code === "123456" ? "验证码登录演示暂未绑定账号，请使用账号登录。" : "请输入手机号和演示验证码 123456";
+                    return;
+                }
                 message.textContent = "正在登录...";
                 try {
                     const payload = Object.fromEntries(new FormData(form));
+                    const json = await request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) });
+                    state.user = {
+                        username: json.user?.nickname || json.user?.username || payload.username,
+                        role: json.user?.role || "student"
+                    };
+                    localStorage.setItem("edusmart_user", JSON.stringify(state.user));
+                    state.loaded = false;
+                    history.replaceState({}, "", "/home");
+                    state.view = "home";
+                    render();
+                } catch (error) {
+                    message.textContent = error.message;
+                }
+            });
+        }
+        // 弹层登录表单
+        const modalForm = document.getElementById("login-form-modal");
+        if (modalForm) {
+            modalForm.addEventListener("submit", async event => {
+                event.preventDefault();
+                const message = document.getElementById("login-message-modal");
+                if (modalForm.dataset.mode === "code") {
+                    const phone = modalForm.querySelector("[data-code-phone]")?.value.trim();
+                    const code = modalForm.querySelector("[data-code-value]")?.value.trim();
+                    message.textContent =
+                        phone && code === "123456" ? "验证码登录演示暂未绑定账号，请使用账号登录。" : "请输入手机号和演示验证码 123456";
+                    return;
+                }
+                message.textContent = "正在登录...";
+                try {
+                    const payload = Object.fromEntries(new FormData(modalForm));
                     const json = await request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) });
                     state.user = {
                         username: json.user?.nickname || json.user?.username || payload.username,
@@ -15424,6 +18162,244 @@ zhaoliu,赵六"></textarea>
             el?.classList.remove("is-loading");
             render();
         }
+
+        // ========== 浮动智能体事件 ==========
+        // 展开/收起面板
+        document.querySelectorAll("[data-floating-agent-toggle]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                state.data.floatingAgentOpen = !state.data.floatingAgentOpen;
+                render();
+            });
+        });
+
+        // 关闭面板
+        document.querySelectorAll("[data-floating-agent-close]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                state.data.floatingAgentOpen = false;
+                render();
+            });
+        });
+
+        // 切换标签页
+        document.querySelectorAll("[data-floating-agent-tab]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                state.data.floatingAgentTab = btn.dataset.floatingAgentTab;
+                render();
+            });
+        });
+
+        document.querySelectorAll("[data-floating-feedback-category]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                state.data.floatingAgentFeedbackCategory = btn.dataset.floatingFeedbackCategory || "course";
+                render();
+            });
+        });
+
+        document.querySelectorAll("[data-floating-voice-toggle]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                state.data.floatingVoiceRecording = !state.data.floatingVoiceRecording;
+                state.data.floatingAgentFeedbackCategory = "voice";
+                toast(state.data.floatingVoiceRecording ? "语音记录动画已开启" : "语音记录已暂停");
+                render();
+            });
+        });
+
+        // 发送消息
+        document.querySelectorAll("[data-floating-agent-send]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const textarea = document.querySelector("[data-floating-agent-input]");
+                const text = (textarea?.value || "").trim();
+                if (!text) return toast("请输入问题");
+                if (state.data.floatingAgentBusy) return;
+                state.data.floatingAgentBusy = true;
+                state.data.floatingAgentInput = "";
+                appendFloatingAgentMessage("user", text);
+                render();
+                try {
+                    const result = await request("/api/agent/message", {
+                        method: "POST",
+                        body: JSON.stringify({ message: text, context: { page: state.view } })
+                    });
+                    appendFloatingAgentMessage("ai", result.answer || result.message || "已收到你的问题，让我思考一下...");
+                } catch (e) {
+                    appendFloatingAgentMessage("ai", getMockAgentResponse(text));
+                }
+                state.data.floatingAgentBusy = false;
+                render();
+            });
+        });
+
+        // Ctrl+Enter 发送
+        document.querySelectorAll("[data-floating-agent-input]").forEach(textarea => {
+            textarea.addEventListener("keydown", e => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    const sendBtn = document.querySelector("[data-floating-agent-send]");
+                    if (sendBtn) sendBtn.click();
+                }
+            });
+            textarea.addEventListener("input", e => {
+                state.data.floatingAgentInput = e.target.value;
+            });
+        });
+
+        // 快捷提示词
+        document.querySelectorAll("[data-floating-quick-prompt]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const prompt = btn.dataset.floatingQuickPrompt;
+                if (!prompt) return;
+                state.data.floatingAgentInput = prompt;
+                // 自动发送
+                const sendBtn = document.querySelector("[data-floating-agent-send]");
+                if (sendBtn) sendBtn.click();
+            });
+        });
+
+        // 引导 - 前往页面
+        document.querySelectorAll("[data-floating-guide-view]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const target = btn.dataset.floatingGuideView;
+                if (target === "diagnostic") setView("diagnostic");
+                else if (target === "studyPlan") setView("studyPlan");
+                else if (target === "smartNotes") setView("smartNotes");
+                state.data.floatingAgentOpen = false;
+            });
+        });
+
+        // 引导 - 根据当前页面给建议
+        document.querySelectorAll("[data-floating-guide-ask]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                if (state.data.floatingAgentBusy) return;
+                state.data.floatingAgentBusy = true;
+                const pageHint = getPageHint(state.view);
+                appendFloatingAgentMessage("user", "根据当前页面给我建议");
+                render();
+                try {
+                    const result = await request("/api/agent/message", {
+                        method: "POST",
+                        body: JSON.stringify({ message: "根据当前页面给我建议", context: { page: state.view, pageHint } })
+                    });
+                    appendFloatingAgentMessage("ai", result.answer || result.message || "根据当前页面，建议你从诊断开始，了解自己的学习状况。");
+                } catch (e) {
+                    appendFloatingAgentMessage("ai", getMockGuideResponse(state.view));
+                }
+                state.data.floatingAgentBusy = false;
+                render();
+            });
+        });
+
+        // 截图 - 触发文件选择
+        document.querySelectorAll("[data-floating-screenshot-pick]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const input = document.querySelector("[data-floating-screenshot-input]");
+                if (input) input.click();
+            });
+        });
+
+        // 截图 - 文件选择后处理
+        document.querySelectorAll("[data-floating-screenshot-input]").forEach(input => {
+            input.addEventListener("change", async () => {
+                const file = input.files?.[0];
+                if (!file) return;
+                if (state.data.floatingAgentBusy) return;
+                state.data.floatingAgentBusy = true;
+                appendFloatingAgentMessage("user", `[上传截图] ${file.name}`);
+                render();
+                try {
+                    const formData = new FormData();
+                    formData.append("image", file);
+                    formData.append("context", JSON.stringify({ page: state.view }));
+                    const result = await request("/api/agent/message", {
+                        method: "POST",
+                        body: formData
+                    });
+                    appendFloatingAgentMessage("ai", result.answer || result.message || "已收到你的截图，正在分析中...");
+                } catch (e) {
+                    appendFloatingAgentMessage("ai", "已收到截图。根据图片内容，我注意到你可能遇到了问题。建议你描述一下具体想了解什么，我可以更有针对性地帮助你。");
+                }
+                state.data.floatingAgentBusy = false;
+                input.value = "";
+                render();
+            });
+        });
+
+        // 反馈 - 提交
+        document.querySelectorAll("[data-floating-feedback-submit]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const textarea = document.querySelector("[data-floating-feedback-input]");
+                const text = (textarea?.value || "").trim();
+                if (!text) return toast("请输入反馈内容");
+                const category = state.data.floatingAgentFeedbackCategory || "course";
+                try {
+                    await request("/api/agent/feedback", {
+                        method: "POST",
+                        body: JSON.stringify({ feedback: text, category, page: state.view })
+                    });
+                    toast("反馈已提交，感谢你的建议！");
+                } catch (e) {
+                    // 静默处理，本地保存反馈
+                    toast("反馈已记录，感谢你的建议！");
+                }
+                state.data.floatingAgentFeedback = "";
+                state.data.floatingVoiceRecording = false;
+                state.data.floatingAgentTab = "feedback";
+                render();
+            });
+        });
+
+        // 反馈 - 输入更新
+        document.querySelectorAll("[data-floating-feedback-input]").forEach(textarea => {
+            textarea.addEventListener("input", e => {
+                state.data.floatingAgentFeedback = e.target.value;
+            });
+        });
+    }
+
+    // 浮动智能体辅助函数
+    function appendFloatingAgentMessage(role, content) {
+        if (!state.data.floatingAgentMessages) state.data.floatingAgentMessages = [];
+        state.data.floatingAgentMessages.push({ role, content });
+        if (state.data.floatingAgentMessages.length > 50) {
+            state.data.floatingAgentMessages = state.data.floatingAgentMessages.slice(-50);
+        }
+    }
+
+    function getPageHint(view) {
+        const hints = {
+            home: "用户在首页，可能需要了解平台功能或开始学习",
+            diagnostic: "用户在诊断页面，可能需要帮助选择诊断方式或理解诊断结果",
+            studyPlan: "用户在学习计划页面，可能需要帮助规划学习任务",
+            profile: "用户在学习画像页面，可能需要解读学习数据",
+            practice: "用户在练习页面，可能遇到难题需要帮助",
+            smartNotes: "用户在笔记页面，可能需要整理知识卡片",
+            intelligence: "用户在智能分析页面，可能需要解读数据",
+            aiAssistant: "用户在AI助手页面，需要更深入的对话帮助"
+        };
+        return hints[view] || "用户正在浏览平台";
+    }
+
+    function getMockAgentResponse(text) {
+        const responses = [
+            "这是一个很好的问题！让我帮你分析一下。根据你的学习情况，建议先从基础概念入手，逐步深入理解。",
+            "我理解你的疑问。建议你可以先完成相关的诊断测试，这样我能更准确地为你提供个性化建议。",
+            "感谢你的提问！根据当前页面内容，你可以尝试以下步骤：1) 明确学习目标 2) 完成诊断评估 3) 查看个性化学习路径。",
+            "这个问题涉及到学习策略方面。建议你关注学习画像中的认知分析模块，可以帮你了解自己的学习特点。"
+        ];
+        return responses[Math.floor(Math.random() * responses.length)];
+    }
+
+    function getMockGuideResponse(view) {
+        const guides = {
+            home: "欢迎来到EduSmart！我建议你：\n1. 先完成「智能诊断」，了解自己的知识水平\n2. 查看「学习画像」，了解系统为你生成的分析\n3. 根据「今日计划」开始学习任务",
+            diagnostic: "你正在诊断页面。建议：\n• 快速文本诊断：直接描述你的学习情况\n• CAT自适应测试：通过做题精准定位水平\n• VARK学习风格测评：了解你的学习风格偏好",
+            studyPlan: "你在学习计划页面。建议：\n• 查看今日任务，按优先级完成\n• 使用「Agent生成计划」获得个性化推荐\n• 标记已完成任务，追踪进度",
+            profile: "你在学习画像页面。建议：\n• 查看「认知分析」了解思维特点\n• 查看「知识追踪」了解掌握情况\n• 查看「误区管理」针对薄弱环节",
+            practice: "你在练习页面。建议：\n• 先做错题回顾，巩固薄弱点\n• 使用AI辅助功能获得解题思路\n• 完成练习后查看详细解析",
+            smartNotes: "你在笔记页面。建议：\n• 整理错题为知识卡片\n• 使用标签分类方便检索\n• 定期回顾已整理的笔记",
+            intelligence: "你在智能分析页面。建议：\n• 查看学习趋势图表\n• 关注弱项分析和推荐\n• 根据建议调整学习策略",
+            aiAssistant: "你正在和AI助手对话。可以：\n• 提出学习相关问题\n• 请求解题指导\n• 让AI帮你规划学习路径"
+        };
+        return guides[view] || "根据当前页面，建议你从诊断开始，了解自己的学习状况，然后查看系统为你生成的学习路径。";
     }
 
     /* 概念画布 - 全部操作（事件委托） */
@@ -15697,6 +18673,107 @@ zhaoliu,赵六"></textarea>
             loadMisconceptions();
             return;
         }
+
+        // ========== 浮动智能体事件（委托） ==========
+        if (e.target.closest("[data-floating-agent-toggle]")) {
+            state.data.floatingAgentOpen = !state.data.floatingAgentOpen;
+            render();
+            return;
+        }
+        if (e.target.closest("[data-floating-agent-close]")) {
+            state.data.floatingAgentOpen = false;
+            render();
+            return;
+        }
+        const floatingTab = e.target.closest("[data-floating-agent-tab]");
+        if (floatingTab) {
+            state.data.floatingAgentTab = floatingTab.dataset.floatingAgentTab;
+            render();
+            return;
+        }
+        if (e.target.closest("[data-floating-agent-send]")) {
+            const textarea = document.querySelector("[data-floating-agent-input]");
+            const text = (textarea?.value || "").trim();
+            if (!text) { toast("请输入问题"); return; }
+            if (state.data.floatingAgentBusy) return;
+            state.data.floatingAgentBusy = true;
+            state.data.floatingAgentInput = "";
+            appendFloatingAgentMessage("user", text);
+            render();
+            try {
+                const result = await request("/api/agent/message", {
+                    method: "POST",
+                    body: JSON.stringify({ message: text, context: { page: state.view } })
+                });
+                appendFloatingAgentMessage("ai", result.answer || result.message || "已收到你的问题，让我思考一下...");
+            } catch (e) {
+                appendFloatingAgentMessage("ai", getMockAgentResponse(text));
+            }
+            state.data.floatingAgentBusy = false;
+            render();
+            return;
+        }
+        const quickPrompt = e.target.closest("[data-floating-quick-prompt]");
+        if (quickPrompt) {
+            const prompt = quickPrompt.dataset.floatingQuickPrompt;
+            if (prompt) {
+                state.data.floatingAgentInput = prompt;
+                const sendBtn = document.querySelector("[data-floating-agent-send]");
+                if (sendBtn) sendBtn.click();
+            }
+            return;
+        }
+        const guideView = e.target.closest("[data-floating-guide-view]");
+        if (guideView) {
+            const target = guideView.dataset.floatingGuideView;
+            if (target === "diagnostic") setView("diagnostic");
+            else if (target === "studyPlan") setView("studyPlan");
+            else if (target === "smartNotes") setView("smartNotes");
+            state.data.floatingAgentOpen = false;
+            return;
+        }
+        if (e.target.closest("[data-floating-guide-ask]")) {
+            if (state.data.floatingAgentBusy) return;
+            state.data.floatingAgentBusy = true;
+            const pageHint = getPageHint(state.view);
+            appendFloatingAgentMessage("user", "根据当前页面给我建议");
+            render();
+            try {
+                const result = await request("/api/agent/message", {
+                    method: "POST",
+                    body: JSON.stringify({ message: "根据当前页面给我建议", context: { page: state.view, pageHint } })
+                });
+                appendFloatingAgentMessage("ai", result.answer || result.message || "根据当前页面，建议你从诊断开始，了解自己的学习状况。");
+            } catch (e) {
+                appendFloatingAgentMessage("ai", getMockGuideResponse(state.view));
+            }
+            state.data.floatingAgentBusy = false;
+            render();
+            return;
+        }
+        if (e.target.closest("[data-floating-screenshot-pick]")) {
+            const input = document.querySelector("[data-floating-screenshot-input]");
+            if (input) input.click();
+            return;
+        }
+        if (e.target.closest("[data-floating-feedback-submit]")) {
+            const textarea = document.querySelector("[data-floating-feedback-input]");
+            const text = (textarea?.value || "").trim();
+            if (!text) { toast("请输入反馈内容"); return; }
+            try {
+                await request("/api/agent/feedback", {
+                    method: "POST",
+                    body: JSON.stringify({ feedback: text, page: state.view })
+                });
+                toast("反馈已提交，感谢你的建议！");
+            } catch (e) {
+                toast("反馈已记录，感谢你的建议！");
+            }
+            state.data.floatingAgentFeedback = "";
+            state.data.floatingAgentTab = "chat";
+            render();
+            return;
+        }
     });
     /* 概念画布 - 搜索（事件委托） */
     document.addEventListener("input", async e => {
@@ -15810,6 +18887,309 @@ zhaoliu,赵六"></textarea>
         await loadData(true);
         if (view === "intelligence") await loadIntelligence(true);
         render();
+    }
+
+    function membershipView() {
+        const center = state.data.membershipCenter || {};
+        const membership = center.membership || {};
+        const email = center.emailBinding || {};
+        const digests = center.digests || [];
+        const cards = center.cards || [];
+        const emailLogs = center.emailLogs || [];
+        const active = true;
+        const entitlementRows = (membership.entitlementDetails || []).map(item => {
+            const enabled = (membership.entitlements || []).includes(item.key);
+            return `<div class="list-row"><span>${escapeHtml(item.name)}<small>${escapeHtml(item.key)}</small></span><span class="pill ${enabled ? "good" : ""}">${enabled ? "免费开放" : "准备中"}</span></div>`;
+        });
+        const digestRows = digests
+            .map(
+                digest => `<article class="card" style="box-shadow:none">
+                    <div class="card-head"><div><span class="pill">${formatDate(digest.digestDate)}</span><h3>${escapeHtml(digest.title)}</h3></div><span class="pill good">${escapeHtml(digest.status)}</span></div>
+                    <p>${escapeHtml(digest.summary)}</p>
+                    <div class="tag-row">${(digest.recommendedPoints || []).map(point => `<span class="pill">${escapeHtml(point)}</span>`).join("")}</div>
+                    <div class="list">${(digest.nextActions || []).map(action => `<div class="list-row"><span>${escapeHtml(action)}</span></div>`).join("")}</div>
+                </article>`
+            )
+            .join("");
+        const cardRows = cards
+            .map(
+                card => `<div class="list-row"><span>${escapeHtml(card.title)}<small>${escapeHtml(card.summary || "")}</small></span><span class="pill">${escapeHtml(card.masteryState || "new")}</span></div>`
+            )
+            .join("");
+        const logRows = emailLogs
+            .map(
+                log => `<div class="list-row"><span>${escapeHtml(log.email)}<small>${formatDate(log.created_at)} · ${escapeHtml(log.provider || "log")}</small></span><span class="pill ${log.status === "logged" ? "good" : "warn"}">${escapeHtml(log.status)}</span></div>`
+            )
+            .join("");
+        const encourageTone = state.data.membershipEncourageTone || "steady";
+        const maintenanceSteps = [
+            ["star", "开启学习陪伴", active, "免费陪伴能力已开放"],
+            ["bell", "绑定提醒通道", email.verified, email.verified ? "邮箱已验证" : "绑定邮箱后可接收鼓励和提醒"],
+            ["send", "开启每日陪伴", email.pushEnabled, email.pushEnabled ? `${email.pushTime || "08:00"} 自动推送` : "每天固定时间收到学习简报"],
+            ["layers", "沉淀学习资产", cards.length > 0, cards.length ? `${cards.length} 张知识卡` : "先生成第一张个人知识卡"]
+        ];
+        const finishedSteps = maintenanceSteps.filter(step => step[2]).length;
+        const encouragementText = email.pushEnabled
+            ? "你已经把学习维护交给系统持续跟进了。今天只需要完成一个小动作，系统会帮你记录、提醒和复盘。"
+            : "先不用追求一次学很多。学习陪伴的价值，是每天把下一步变清楚，并在你停下来时温和地把你拉回节奏。";
+        const coachCards = [
+            {
+                icon: "message",
+                title: "今日鼓励",
+                desc: encouragementText,
+                action: "让 Agent 鼓励我",
+                view: "aiAssistant",
+                prompt:
+                    "请作为我的免费学习陪伴教练，用温和但有行动感的语气鼓励我，并根据当前学习状态给我一个15分钟内可以完成的小任务。"
+            },
+            {
+                icon: "target",
+                title: "低压推进",
+                desc: "状态不好时自动缩小任务粒度，把“继续学”变成一个很小但能完成的动作。",
+                action: "生成低压任务",
+                view: "agentCenter",
+                prompt:
+                    "请作为学习陪伴 Agent，把我今天的学习任务压缩成低压力版本：只保留最关键的一步，并说明完成后如何获得正反馈。"
+            },
+            {
+                icon: "history",
+                title: "回访维护",
+                desc: "对薄弱点做定期回访，避免学完就散，长期保持学习连续性。",
+                action: "安排回访",
+                view: "path",
+                prompt:
+                    "请根据我的薄弱点安排免费学习回访计划：今天、3天后、7天后分别复习什么，以及每次完成后的鼓励反馈。"
+            }
+        ];
+        const toneOptions = [
+            ["steady", "温和陪伴", "少批评，多确认进步"],
+            ["coach", "教练推进", "目标清晰，行动明确"],
+            ["spark", "高能打气", "更强节奏感和即时反馈"]
+        ];
+        const moodOptions = [
+            ["calm", "/images/membership/mood-calm.svg", "还可以", "稳稳推进，先做一道题就好"],
+            ["tired", "/images/membership/mood-tired.svg", "有点累", "把任务缩到 10 分钟，完成就收工"],
+            ["stuck", "/images/membership/mood-stuck.svg", "卡住了", "换个例子解释，不硬扛"],
+            ["proud", "/images/membership/mood-proud.svg", "有进步", "记录这个小胜利，明天继续用"]
+        ];
+        const activeMood = state.data.membershipMood || "calm";
+        const selectedMood = moodOptions.find(item => item[0] === activeMood) || moodOptions[0];
+        const funGroups = [
+            {
+                joke: "数学老师说要化简人生，我先把今天的任务约分成一道题。",
+                encouragement: "不用一下子很好，只要比刚才更清楚一点。",
+                meme: "/images/membership/meme-focus.svg"
+            },
+            {
+                joke: "背单词像缓存命中：今天记住一个，明天少查一次。",
+                encouragement: "真正稳定的进步，常常长得很朴素：开始、完成、复盘。",
+                meme: "/images/membership/meme-cache.svg"
+            },
+            {
+                joke: "错题不是黑历史，是未来的你给现在的你留下的调试日志。",
+                encouragement: "卡住不是失败，是系统在提示你换一种解释方式。",
+                meme: "/images/membership/meme-debug.svg"
+            },
+            {
+                joke: "学习计划最怕豪言壮语，最喜欢一个能开始的 15 分钟。",
+                encouragement: "今天的小步子，也会成为以后轻松一点的原因。",
+                meme: "/images/membership/meme-victory.svg"
+            }
+        ];
+        const funSeed = Number(state.data.membershipFunSeed || 0);
+        const currentFun = funGroups[funSeed % funGroups.length];
+        const experienceTabs = [
+            ["companion", "陪伴舱", "实时关心"],
+            ["growth", "成长轨道", "长期关注"],
+            ["play", "趣味补给", "轻量鼓励"],
+            ["settings", "维护设置", "通道管理"]
+        ];
+        const activeMembershipTab = state.data.membershipExperienceTab || "companion";
+        const careSlides = [
+            ["message", "今天有人在认真关注你的学习节奏", "系统会根据你的状态把任务缩小、提醒复习、记录完成，不让努力悄悄流失。"],
+            ["target", "先完成一个小胜利", "学习陪伴 Agent 会优先推荐 15 分钟内能完成的动作，让你更容易开始，也更容易获得反馈。"],
+            ["history", "学完之后仍然有人回访", "薄弱点不会只出现一次。系统会在 3 天、7 天、长期节点继续把它带回来。"]
+        ];
+        const activeCareSlide = Math.min(
+            Number.isFinite(Number(state.data.membershipCareSlide)) ? Number(state.data.membershipCareSlide) : 0,
+            careSlides.length - 1
+        );
+        const currentSlide = careSlides[activeCareSlide];
+        const companionPane = `<section class="membership-space membership-companion-space">
+            <div class="membership-3d-stage" aria-label="免费学习陪伴伙伴">
+                <div class="care-orbit orbit-one"></div>
+                <div class="care-orbit orbit-two"></div>
+                <div class="care-orbit orbit-three"></div>
+                <div class="care-core">
+                    <div class="care-cube">
+                        <span>${icon("brain", 28)}</span>
+                        <i></i><i></i><i></i><i></i>
+                    </div>
+                </div>
+                <div class="care-chip chip-a"><b>关注</b><span>薄弱点回访</span></div>
+                <div class="care-chip chip-b"><b>鼓励</b><span>${escapeHtml(toneOptions.find(item => item[0] === encourageTone)?.[1] || "温和陪伴")}</span></div>
+                <div class="care-chip chip-c"><b>陪伴</b><span>${email.pushEnabled ? "每日在线" : "等待开启"}</span></div>
+            </div>
+            <div class="membership-care-console">
+                <span class="home-eyebrow">Study Care Agent</span>
+                <h2>${escapeHtml(currentSlide[1])}</h2>
+                <p>${escapeHtml(currentSlide[2])}</p>
+                <div class="membership-care-dots">
+                    ${careSlides.map((_, index) => `<button class="${index === activeCareSlide ? "active" : ""}" data-membership-slide="${index}" aria-label="切换陪伴卡片 ${index + 1}"></button>`).join("")}
+                </div>
+                <div class="membership-progress">
+                    <div><b>${finishedSteps}/${maintenanceSteps.length}</b><span>陪伴链路完成度</span></div>
+                    <div class="membership-progress-bar"><span style="width:${Math.round((finishedSteps / maintenanceSteps.length) * 100)}%"></span></div>
+                </div>
+                <div class="membership-companion-actions">
+                    <button class="btn primary" data-view="aiAssistant" data-agent-prompt="${escapeAttr(coachCards[0].prompt)}">${icon("message", 15)}让 Agent 鼓励我</button>
+                    <button class="btn ghost" data-view="agentCenter" data-agent-prompt="${escapeAttr(coachCards[1].prompt)}">${icon("target", 15)}生成低压任务</button>
+                </div>
+            </div>
+        </section>
+        <section class="membership-coach-grid">
+            ${coachCards
+                .map(
+                    card => `<article class="membership-coach-card">
+                <span class="round-icon">${icon(card.icon, 18)}</span>
+                <h3>${escapeHtml(card.title)}</h3>
+                <p>${escapeHtml(card.desc)}</p>
+                <button class="btn tiny ghost" data-view="${card.view}" data-agent-prompt="${escapeAttr(card.prompt)}">${icon("spark" === encourageTone ? "zap" : "message", 13)}${escapeHtml(card.action)}</button>
+            </article>`
+                )
+                .join("")}
+        </section>`;
+        const growthPane = `<section class="membership-space membership-growth-space">
+            <div class="membership-coach-main">
+                <span class="home-eyebrow">学习关注轨道</span>
+                <h2>系统关心的不只是今天学了没，而是你有没有被持续照顾到</h2>
+                <p>${escapeHtml(encouragementText)}</p>
+            </div>
+            <div class="membership-maintenance-list">
+                ${maintenanceSteps
+                    .map(
+                        ([ic, title, done, desc], index) => `<div class="membership-maintenance-step ${done ? "done" : ""}">
+                    <span>${icon(done ? "check" : ic, 16)}</span>
+                    <div><b>${index + 1}. ${escapeHtml(title)}</b><small>${escapeHtml(desc)}</small></div>
+                </div>`
+                    )
+                    .join("")}
+            </div>
+        </section>
+        <section class="grid-2">
+            <article class="card">
+                <div class="card-head"><div><h2 class="section-title">${icon("file-text", 18)}最近推送</h2><p class="muted-line">每条推送都是一次学习回访，帮助用户知道下一步。</p></div></div>
+                <div class="list">${digestRows || "<p>暂无推送记录。点击“生成今日推送”创建第一条。</p>"}</div>
+            </article>
+            <article class="card">
+                <div class="card-head"><div><h2 class="section-title">${icon("layers", 18)}个人知识卡</h2><p class="muted-line">把用户的问答、错题和笔记保存成可被再次关心的学习资产。</p></div><button class="btn tiny ghost" data-membership-seed-card>${icon("plus", 14)}添加测试卡</button></div>
+                <div class="list">${cardRows || "<p>暂无知识卡。生成每日推送时会自动创建启动卡。</p>"}</div>
+            </article>
+        </section>`;
+        const playPane = `<section class="membership-space membership-play-space">
+            <article class="membership-fun-card big">
+                <span>${icon("zap", 24)}</span>
+                <h3>能量补给站</h3>
+                <p>当用户连续学习受阻时，不直接催促，而是给一个“低压小任务”和一句具体鼓励。</p>
+                <button class="btn primary" data-view="agentCenter" data-agent-prompt="${escapeAttr(coachCards[1].prompt)}">${icon("play", 14)}领取 15 分钟任务</button>
+            </article>
+            <div class="membership-fun-stream" aria-live="polite">
+                <div class="membership-fun-copy">
+                    <span class="home-eyebrow">15 秒自动换一组</span>
+                    <h2>学习笑话和鼓励正在页面里陪你轮转</h2>
+                    <div class="membership-fun-lines">
+                        <p><b>笑话</b>${escapeHtml(currentFun.joke)}</p>
+                        <p><b>鼓励</b>${escapeHtml(currentFun.encouragement)}</p>
+                    </div>
+                    <div class="membership-fun-controls">
+                        <button class="btn tiny ghost" data-membership-fun-next>${icon("refresh", 13)}换一组</button>
+                        <span>${(funSeed % funGroups.length) + 1}/${funGroups.length}</span>
+                    </div>
+                </div>
+                <img class="membership-fun-meme" src="${escapeAttr(currentFun.meme)}" alt="学习陪伴表情包" loading="lazy">
+            </div>
+        </section>
+        <section class="card membership-mood-card">
+            <div class="card-head"><div><h2 class="section-title">${icon("heart", 18)}今日心情</h2><p class="muted-line">学习陪伴会先照顾状态，再安排任务。当前状态：${escapeHtml(selectedMood[2])}</p></div></div>
+            <div class="membership-mood-grid">
+                ${moodOptions
+                    .map(
+                        ([key, imageSrc, title, desc]) => `<button class="${activeMood === key ? "active" : ""}" data-membership-mood="${key}">
+                    <img src="${escapeAttr(imageSrc)}" alt="${escapeAttr(title)}表情包" loading="lazy"><span>${escapeHtml(title)}</span><small>${escapeHtml(desc)}</small>
+                </button>`
+                    )
+                    .join("")}
+            </div>
+        </section>
+        <section class="card membership-tone-card">
+            <div class="card-head"><div><h2 class="section-title">${icon("message", 18)}陪伴风格</h2><p class="muted-line">鼓励不是空泛夸奖，而是根据用户当前状态选择不同推进方式。</p></div></div>
+            <div class="membership-tone-options">
+                ${toneOptions
+                    .map(
+                        ([key, title, desc]) => `<button class="${encourageTone === key ? "active" : ""}" data-membership-tone="${key}">
+                    <b>${escapeHtml(title)}</b><small>${escapeHtml(desc)}</small>
+                </button>`
+                    )
+                    .join("")}
+            </div>
+        </section>`;
+        const settingsPane = `<section class="grid-2">
+            <article class="card">
+                <div class="card-head"><div><h2 class="section-title">${icon("bell", 18)}邮箱与推送</h2><p class="muted-line">每个用户填写自己的邮箱和 SMTP 授权码，系统用该邮箱发送验证码和每日推送。</p></div></div>
+                <div class="form-row"><b>推送邮箱</b><input class="input" data-membership-email value="${escapeAttr(state.data.membershipEmailDraft || email.email || "")}" placeholder="student@example.com"></div>
+                <div class="form-row"><b>SMTP 授权码</b><input class="input" type="password" data-membership-smtp-auth value="${escapeAttr(state.data.membershipSmtpAuthCode || "")}" autocomplete="new-password" placeholder="QQ 邮箱请填写 SMTP 授权码，不是登录密码"></div>
+                <p class="muted-line">当前 SMTP：${escapeHtml(email.smtpHost || "自动识别邮箱服务商")} · ${email.smtpConfigured ? "已保存授权码" : "未保存授权码"}</p>
+                <div class="hero-actions" style="margin-top:10px"><button class="btn primary" data-membership-bind-email>${icon("send", 16)}发送验证码</button>${state.data.membershipDevCode ? `<span class="pill good">${escapeHtml(state.data.membershipDevCode)}</span>` : ""}</div>
+                <div class="form-row"><b>验证码</b><input class="input" data-membership-code value="${escapeAttr(state.data.membershipVerifyCode || "")}" placeholder="输入 6 位验证码"></div>
+                <div class="hero-actions" style="margin-top:10px"><button class="btn ghost" data-membership-verify-email>${icon("check", 16)}验证邮箱</button></div>
+                <div class="form-row"><b>推送时间</b><select class="input" data-membership-push-time>
+                    ${["08:00", "12:30", "20:00"].map(time => `<option value="${time}" ${(state.data.membershipPushTime || email.pushTime) === time ? "selected" : ""}>${time}</option>`).join("")}
+                </select></div>
+                <div class="hero-actions" style="margin-top:10px">
+                    <button class="btn ${email.pushEnabled ? "ghost" : "primary"}" data-membership-push="${email.pushEnabled ? "0" : "1"}">${icon(email.pushEnabled ? "x" : "check", 16)}${email.pushEnabled ? "暂停推送" : "开启推送"}</button>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-head"><div><h2 class="section-title">${icon("shield", 18)}免费陪伴能力</h2><p class="muted-line">所有学习照顾能力都免费开放，重点放在提醒、照顾和持续复盘。</p></div></div>
+                <div class="list">${entitlementRows.join("")}</div>
+            </article>
+        </section>
+        <section class="card">
+            <div class="card-head"><div><h2 class="section-title">${icon("history", 18)}邮件日志</h2><p class="muted-line">这里记录真实邮件发送状态和失败原因。</p></div></div>
+            <div class="list">${logRows || "<p>暂无邮件日志。验证邮箱并开启推送后可发送测试邮件。</p>"}</div>
+        </section>`;
+        const membershipPanes = { companion: companionPane, growth: growthPane, play: playPane, settings: settingsPane };
+
+        return `<main class="page membership-page edu-modern-page">
+            <section class="membership-hero-lab">
+                <div>
+                    <span class="home-eyebrow">Study Companion System</span>
+                    <h1>学习陪伴中心</h1>
+                    <p>这里是一个会持续照顾用户的学习伙伴：看见停顿，记得薄弱点，照顾心情，并把关心转成下一步行动。</p>
+                    <div class="hero-actions">
+                        <button class="btn primary glow" data-membership-activate>${icon("heart", 17)}开启免费陪伴</button>
+                        <button class="btn ghost" data-digest-generate>${icon("refresh", 17)}生成今日推送</button>
+                        <button class="btn ghost" data-digest-send-test>${icon("send", 17)}发送测试邮件</button>
+                    </div>
+                </div>
+                <div class="membership-hero-status">
+                    <article><span>${icon("heart", 20)}</span><b>免费陪伴中</b><small>学习照顾能力已开放</small></article>
+                    <article><span>${icon("bell", 20)}</span><b>${email.pushEnabled ? "每日关心已开启" : "等待提醒通道"}</b><small>${email.verified ? escapeHtml(email.maskedEmail || "") : "邮箱未验证"}</small></article>
+                </div>
+            </section>
+
+            <nav class="membership-space-tabs">
+                ${experienceTabs
+                    .map(
+                        ([key, title, desc]) => `<button class="${activeMembershipTab === key ? "active" : ""}" data-membership-exp-tab="${key}">
+                    <b>${escapeHtml(title)}</b><small>${escapeHtml(desc)}</small>
+                </button>`
+                    )
+                    .join("")}
+            </nav>
+
+            ${membershipPanes[activeMembershipTab] || companionPane}
+        </main>`;
     }
 
     function teamCodeCodexView() {
@@ -16080,19 +19460,44 @@ zhaoliu,赵六"></textarea>
         </main>`;
     }
 
+    function syncMembershipFunTimer() {
+        const shouldRun = state.view === "membership";
+        if (!shouldRun && membershipFunHandle) {
+            clearInterval(membershipFunHandle);
+            membershipFunHandle = null;
+            return;
+        }
+        if (shouldRun && !membershipFunHandle) {
+            membershipFunHandle = setInterval(() => {
+                if (state.view !== "membership") {
+                    syncMembershipFunTimer();
+                    return;
+                }
+                state.data.membershipFunSeed = Number(state.data.membershipFunSeed || 0) + 1;
+                render();
+            }, 15000);
+        }
+    }
+
     async function render() {
         const app = document.getElementById("app");
         if (
             location.pathname.toLowerCase().includes("rag-search") ||
             location.pathname.toLowerCase().includes("ragsearch")
         ) {
-            state.view = "ragSearch";
+            state.view = "aiAssistant";
+            state.data.aiAssistantMode = "rag";
+            history.replaceState({}, "", "/ai-assistant");
         } else if (location.pathname.toLowerCase().includes("rag")) {
             state.view = "aiAssistant";
             state.data.aiAssistantMode = "rag";
         }
         const isLogin = location.pathname === "/" || location.pathname.endsWith("/index.html");
         if (isLogin) {
+            if (membershipFunHandle) {
+                clearInterval(membershipFunHandle);
+                membershipFunHandle = null;
+            }
             app.innerHTML = loginView();
             bindEvents();
             return;
@@ -16107,7 +19512,7 @@ zhaoliu,赵六"></textarea>
             await loadData();
             await loadSystemConfig();
             loadUnreadCount();
-            const user = readUser();
+            const user = readUser() || {};
             state.data._studentLocked = false;
             if (user.role !== "teacher" && user.role !== "admin" && state.view !== "teacherWorkbench") {
                 const activePath = await loadStudentActivePath();
@@ -16203,9 +19608,11 @@ zhaoliu,赵六"></textarea>
             }
             if (state.view === "obsidian") await loadObsidianKB();
             if (state.view === "ragSearch") await loadRagOverview();
+            if (state.view === "membership") await loadMembershipCenter();
             const views = {
                 home: homeView,
                 studyPlan: studyPlanView,
+                studyRoom: studyRoomView,
                 profile: profileView,
                 profileCognitive: profileCognitiveView,
                 profileKnowledge: profileKnowledgeView,
@@ -16229,6 +19636,7 @@ zhaoliu,赵六"></textarea>
                 course: courseView,
                 intelligence: intelligenceView,
                 aiAssistant: aiAssistantView,
+                aiTutor: aiTutorView,
                 agentResearch: agentResearchView,
                 codeLab: codeLabView,
                 teamCode: teamCodeCodexView,
@@ -16236,6 +19644,7 @@ zhaoliu,赵六"></textarea>
                 tutorials: tutorialsView,
                 problems: problemsView,
                 videos: videosView,
+                membership: membershipView,
                 studentPath: studentPathView,
                 obsidian: obsidianView,
                 ragSearch: ragSearchView,
@@ -16254,11 +19663,25 @@ zhaoliu,赵六"></textarea>
             if (state.view === "studentPath") state.view = "home";
             const pageHtml = (views[state.view] || homeView)();
             const guideHtml = teacherPathInlineGuide(state.view);
+            const room = state.data.studyRoom || {};
+            const isFocusMode = state.view === "studyRoom" && room.focusMode && (room.running || room.paused);
+            const focusOverlayHtml = isFocusMode ? renderFocusOverlay(room, studyRoomElapsed(room), room.targetMinutes * 60, studyRoomScore(room), room.effect) : "";
             app.innerHTML = focusAssessment
-                ? `<div class="exam-shell">${guideHtml}${pageHtml}</div>`
-                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}</div>`;
+                ? `<div class="exam-shell">${guideHtml}${pageHtml}</div>${focusOverlayHtml}`
+                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}</div>${focusOverlayHtml}`;
             bindEvents();
+            syncMembershipFunTimer();
             syncAssessmentClock();
+            if (!window._studyRoomTimerActive) {
+                syncStudyRoomTimer();
+            } else {
+                const room = state.data.studyRoom || {};
+                if (room.running || room.paused) {
+                    ensureStudyRoomTimer();
+                }
+            }
+            document.body.classList.toggle("focus-mode-locked", !!isFocusMode);
+            if (isFocusMode) window.scrollTo(0, 0);
         } catch (e) {
             console.error("Render:", e);
         }

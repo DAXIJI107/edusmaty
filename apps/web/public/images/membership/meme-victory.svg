@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" role="img" aria-label="Study victory sticker">
+  <rect width="260" height="260" rx="54" fill="#FFFBEB"/>
+  <path d="M130 48l18 37 41 6-30 29 7 41-36-19-36 19 7-41-30-29 41-6z" fill="#F5A524" stroke="#B7791F" stroke-width="7" stroke-linejoin="round"/>
+  <circle cx="130" cy="124" r="45" fill="#FFFFFF" stroke="#FFE08A" stroke-width="7"/>
+  <path d="M109 116c7 7 15 7 22 0M134 116c7 7 15 7 22 0" fill="none" stroke="#23324D" stroke-width="7" stroke-linecap="round"/>
+  <path d="M111 139c12 13 26 13 38 0" fill="none" stroke="#16A34A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M72 205h116" stroke="#F5A524" stroke-width="12" stroke-linecap="round" opacity=".58"/>
+</svg>

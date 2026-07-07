@@ -11,6 +11,25 @@ const agentRuntime = new AgentRuntime(pool);
 
 router.use(authenticateJWT);
 
+/**
+ * 带超时的异步调用包装器
+ * 用于 LLM/Agent 调用，超时后自动降级
+ */
+async function withTimeout(promise, timeoutMs = 15000, label = "Agent") {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} 调用超时（${timeoutMs}ms）`)), timeoutMs);
+    });
+    try {
+        const result = await Promise.race([promise, timeout]);
+        clearTimeout(timer);
+        return result;
+    } catch (e) {
+        clearTimeout(timer);
+        throw e;
+    }
+}
+
 function toMetric(icon, label, value, unit, sub, trend, color, glow, grad) {
     return [icon, label, String(value), unit, sub, trend ? String(trend) : "", color, glow, grad];
 }
@@ -30,18 +49,28 @@ function parseOptions(value) {
 }
 
 async function tableExists(tableName) {
-    const [rows] = await pool.query("SHOW TABLES LIKE ?", [tableName]);
+    const [rows] = await pool.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName]
+    );
     return rows.length > 0;
 }
 
 async function columnExists(tableName, columnName) {
-    const [rows] = await pool.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [columnName]);
-    return rows.length > 0;
+    const [rows] = await pool.query(`PRAGMA table_info("${tableName}")`);
+    return rows.some(row => row.name === columnName);
 }
 
 async function ensureColumn(tableName, columnName, ddl) {
-    if (!(await columnExists(tableName, columnName))) {
-        await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN ${ddl}`);
+    try {
+        const [rows] = await pool.query(`PRAGMA table_info("${tableName}")`);
+        const exists = rows.some(row => row.name === columnName || row.name?.toLowerCase() === columnName.toLowerCase());
+        if (!exists) {
+            const cleanDdl = ddl.replace(/\s+AFTER\s+\w+/gi, '');
+            await pool.query(`ALTER TABLE "${tableName}" ADD COLUMN ${cleanDdl}`);
+        }
+    } catch (e) {
+        // ignore - column may already exist or table may not exist
     }
 }
 
@@ -49,45 +78,45 @@ async function ensureNotesSchema() {
     if (!(await tableExists("notes"))) {
         await pool.query(`
             CREATE TABLE notes (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                knowledge_id INT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                knowledge_id INTEGER NULL,
                 title VARCHAR(220) NOT NULL,
-                body MEDIUMTEXT,
+                body TEXT,
                 subject VARCHAR(80) NULL,
                 source_type VARCHAR(40) DEFAULT 'manual',
-                source_id INT NULL,
-                tags_json JSON NULL,
+                source_id INTEGER NULL,
+                tags_json TEXT NULL,
                 review_status VARCHAR(40) DEFAULT 'new',
-                next_review_at DATETIME NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                next_review_at TEXT NULL,
+                updated_at TEXT DEFAULT (DATETIME('now')),
+                created_at TEXT DEFAULT (DATETIME('now'))
+            )
         `);
     } else {
-        await ensureColumn("notes", "subject", "subject VARCHAR(80) NULL AFTER body");
-        await ensureColumn("notes", "source_type", "source_type VARCHAR(40) DEFAULT 'manual' AFTER subject");
-        await ensureColumn("notes", "source_id", "source_id INT NULL AFTER source_type");
-        await ensureColumn("notes", "tags_json", "tags_json JSON NULL AFTER source_id");
-        await ensureColumn("notes", "review_status", "review_status VARCHAR(40) DEFAULT 'new' AFTER tags_json");
-        await ensureColumn("notes", "next_review_at", "next_review_at DATETIME NULL AFTER review_status");
-        await ensureColumn("notes", "created_at", "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        await ensureColumn("notes", "subject", "subject VARCHAR(80) NULL");
+        await ensureColumn("notes", "source_type", "source_type VARCHAR(40) DEFAULT 'manual'");
+        await ensureColumn("notes", "source_id", "source_id INTEGER NULL");
+        await ensureColumn("notes", "tags_json", "tags_json TEXT NULL");
+        await ensureColumn("notes", "review_status", "review_status VARCHAR(40) DEFAULT 'new'");
+        await ensureColumn("notes", "next_review_at", "next_review_at TEXT NULL");
+        await ensureColumn("notes", "created_at", "created_at TEXT DEFAULT (DATETIME('now'))");
     }
 
     if (!(await tableExists("note_cards"))) {
         await pool.query(`
             CREATE TABLE note_cards (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                note_id INT NULL,
-                knowledge_id INT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                note_id INTEGER NULL,
+                knowledge_id INTEGER NULL,
                 title VARCHAR(220) NOT NULL,
                 card_type VARCHAR(80) DEFAULT 'concept',
-                content_json JSON,
-                backlinks_json JSON,
-                mastery_signal INT DEFAULT 50,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                content_json TEXT,
+                backlinks_json TEXT,
+                mastery_signal INTEGER DEFAULT 50,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
         `);
     }
 }
@@ -1590,10 +1619,16 @@ router.post("/teacher/action", async (req, res, next) => {
     }
 });
 
+// POST /api/app/closed-loop/run
+// 默认使用 AgenticLearningAgent + 星火大模型增强闭环
+// 可通过 ?mode=rule 降级为纯规则引擎
 router.post("/closed-loop/run", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
         const { topic = "Node.js" } = req.body || {};
+        const mode = req.body?.mode || req.query?.mode || "agent";
+
+        // 1. 查找知识点
         const [[point]] = await pool.query(
             `SELECT id, title, subject, mastery, summary
              FROM knowledge_points
@@ -1609,13 +1644,98 @@ router.post("/closed-loop/run", async (req, res, next) => {
             mastery: 45,
             summary: `${topic} 相关计算机知识点。`
         };
+
+        if (mode === "rule") {
+            // 纯规则引擎：固定模板任务
+            const [[course]] = await pool.query(
+                `SELECT id, title, provider, progress
+                 FROM courses
+                 WHERE title LIKE ? OR description LIKE ? OR subject = ?
+                 ORDER BY progress ASC, id
+                 LIMIT 1`,
+                [`%${knowledge.title}%`, `%${knowledge.title}%`, knowledge.subject]
+            );
+            const [questions] = await pool.query(
+                `SELECT q.id, q.question, q.difficulty, kp.title AS knowledgeTitle
+                 FROM questions q JOIN knowledge_points kp ON kp.id = q.knowledge_id
+                 WHERE kp.id = ? OR kp.subject = ?
+                 ORDER BY kp.id = ? DESC, q.id
+                 LIMIT 5`,
+                [knowledge.id || 0, knowledge.subject, knowledge.id || 0]
+            );
+
+            await pool.query(
+                'DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "closed_loop"',
+                [userId]
+            );
+            const taskRows = [
+                [`继续学习：${course?.title || knowledge.title}`, `${knowledge.subject} · 课程进度 ${course?.progress ?? 0}%`, "play", 25, "#2f6bff", "rgba(47,107,255,.12)"],
+                [`完成 ${knowledge.title} 专项练习`, `${questions.length || 5} 道题 · 答题后更新掌握度`, "exam", 18, "#18b87a", "rgba(24,184,122,.12)"],
+                [`整理 ${knowledge.title} 错题笔记`, "生成主动回忆卡和误区卡", "pen", 12, "#ff9500", "rgba(255,149,0,.12)"],
+                [`安排 ${knowledge.title} 间隔复习`, "明日回访，检查是否遗忘", "refresh", 8, "#7c4dff", "rgba(124,77,255,.12)"]
+            ];
+            for (let i = 0; i < taskRows.length; i += 1) {
+                const row = taskRows[i];
+                await pool.query(
+                    `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'closed_loop')`,
+                    [userId, knowledge.id, row[0], row[1], row[2], row[3], i + 1, row[4], row[5]]
+                );
+            }
+            await pool.query(
+                `INSERT INTO note_cards (user_id, knowledge_id, title, card_type, content_json, backlinks_json, mastery_signal)
+                 VALUES (?, ?, ?, 'plan', CAST(? AS JSON), CAST(? AS JSON), ?)`,
+                [userId, knowledge.id, `${knowledge.title} 闭环学习卡`,
+                    JSON.stringify({ concept: knowledge.title, explanation: knowledge.summary, activeRecall: `不用看资料，说明 ${knowledge.title} 的核心用途和一个常见误区。` }),
+                    JSON.stringify(["一键闭环", "今日计划", "主动回忆"]), knowledge.mastery || 50]
+            );
+            await pool.query(
+                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+                 VALUES (?, 'bolt', ?, '刚刚', '一键闭环', '#2f6bff', 'rgba(47,107,255,.12)')`,
+                [userId, `AI 已围绕「${knowledge.title}」生成学习闭环`]
+            );
+            return res.json({
+                success: true,
+                topic: knowledge.title,
+                subject: knowledge.subject,
+                mastery: knowledge.mastery,
+                course: course || null,
+                questions: questions.length,
+                tasks: taskRows.map(row => ({ title: row[0], subtitle: row[1], minutes: row[3] })),
+                effects: ["更新今日任务", "生成智能笔记卡", "推荐专项练习", "写入学习动态"]
+            });
+        }
+
+        // 默认：Agent + LLM 增强闭环
+        // 2. 调用 AgenticLearningAgent 获取推理建议（带超时保护）
+        const AgenticLearningAgent = require("../core/AgenticLearningAgent");
+        const agent = new AgenticLearningAgent(userId, pool);
+        let agentReasoning = null;
+        let agentPlan = null;
+        try {
+            agentReasoning = await withTimeout(agent.reasonNextStep(), 8000, "AgenticLearningAgent.reasonNextStep");
+        } catch (reasonErr) {
+            console.warn("AgenticLearningAgent 推理失败:", reasonErr.message);
+        }
+        try {
+            agentPlan = await withTimeout(agent.generateLearningPlan(knowledge.subject, 1), 8000, "AgenticLearningAgent.generateLearningPlan");
+        } catch (planErr) {
+            console.warn("AgenticLearningAgent 计划生成失败:", planErr.message);
+        }
+
+        // 3. 基于 Agent 推理结果构建闭环任务
+        const recommendedTopic = agentReasoning?.topic || knowledge.title;
+        const recommendedMethod = agentReasoning?.method || "费曼输出";
+        const recommendedReason = agentReasoning?.reason || "根据学习画像推荐";
+        const estimatedMinutes = agentReasoning?.estimatedMinutes || 25;
+
         const [[course]] = await pool.query(
             `SELECT id, title, provider, progress
              FROM courses
              WHERE title LIKE ? OR description LIKE ? OR subject = ?
              ORDER BY progress ASC, id
              LIMIT 1`,
-            [`%${knowledge.title}%`, `%${knowledge.title}%`, knowledge.subject]
+            [`%${recommendedTopic}%`, `%${recommendedTopic}%`, knowledge.subject]
         );
         const [questions] = await pool.query(
             `SELECT q.id, q.question, q.difficulty, kp.title AS knowledgeTitle
@@ -1626,13 +1746,18 @@ router.post("/closed-loop/run", async (req, res, next) => {
             [knowledge.id || 0, knowledge.subject, knowledge.id || 0]
         );
 
-        await pool.query(
-            'DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "closed_loop"',
-            [userId]
-        );
-        const taskRows = [
+        // 基于 Agent 推理构建个性化任务
+        const agentTaskRows = [
             [
-                `继续学习：${course?.title || knowledge.title}`,
+                `学习：${recommendedTopic}`,
+                `${recommendedReason} · ${recommendedMethod}`,
+                "brain",
+                estimatedMinutes,
+                "#7c4dff",
+                "rgba(124,77,255,.12)"
+            ],
+            [
+                `课程学习：${course?.title || recommendedTopic}`,
                 `${knowledge.subject} · 课程进度 ${course?.progress ?? 0}%`,
                 "play",
                 25,
@@ -1640,25 +1765,23 @@ router.post("/closed-loop/run", async (req, res, next) => {
                 "rgba(47,107,255,.12)"
             ],
             [
-                `完成 ${knowledge.title} 专项练习`,
+                `完成 ${recommendedTopic} 专项练习`,
                 `${questions.length || 5} 道题 · 答题后更新掌握度`,
                 "exam",
                 18,
                 "#18b87a",
                 "rgba(24,184,122,.12)"
             ],
-            [`整理 ${knowledge.title} 错题笔记`, "生成主动回忆卡和误区卡", "pen", 12, "#ff9500", "rgba(255,149,0,.12)"],
-            [
-                `安排 ${knowledge.title} 间隔复习`,
-                "明日回访，检查是否遗忘",
-                "refresh",
-                8,
-                "#7c4dff",
-                "rgba(124,77,255,.12)"
-            ]
+            [`${recommendedMethod}输出：${recommendedTopic}`, recommendedReason, "pen", 20, "#ff9500", "rgba(255,149,0,.12)"],
+            [`安排 ${recommendedTopic} 间隔复习`, "明日回访，检查是否遗忘", "refresh", 8, "#7c4dff", "rgba(124,77,255,.12)"]
         ];
-        for (let i = 0; i < taskRows.length; i += 1) {
-            const row = taskRows[i];
+
+        await pool.query(
+            'DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "closed_loop"',
+            [userId]
+        );
+        for (let i = 0; i < agentTaskRows.length; i += 1) {
+            const row = agentTaskRows[i];
             await pool.query(
                 `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
                  VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'closed_loop')`,
@@ -1671,33 +1794,69 @@ router.post("/closed-loop/run", async (req, res, next) => {
             [
                 userId,
                 knowledge.id,
-                `${knowledge.title} 闭环学习卡`,
+                `${recommendedTopic} Agent闭环学习卡`,
                 JSON.stringify({
-                    concept: knowledge.title,
+                    concept: recommendedTopic,
                     explanation: knowledge.summary,
-                    activeRecall: `不用看资料，说明 ${knowledge.title} 的核心用途和一个常见误区。`
+                    agentReasoning: agentReasoning || {},
+                    activeRecall: `不用看资料，说明 ${recommendedTopic} 的核心用途和一个常见误区。`
                 }),
-                JSON.stringify(["一键闭环", "今日计划", "主动回忆"]),
+                JSON.stringify(["Agent闭环", "今日计划", "主动回忆"]),
                 knowledge.mastery || 50
             ]
         );
         await pool.query(
             `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
-             VALUES (?, 'bolt', ?, '刚刚', '一键闭环', '#2f6bff', 'rgba(47,107,255,.12)')`,
-            [userId, `AI 已围绕「${knowledge.title}」生成学习闭环`]
+             VALUES (?, 'robot', ?, '刚刚', 'Agent闭环', '#7c4dff', 'rgba(124,77,255,.12)')`,
+            [userId, `Agent + 星火已围绕「${recommendedTopic}」生成个性化学习闭环`]
         );
+
         res.json({
             success: true,
-            topic: knowledge.title,
+            topic: recommendedTopic,
             subject: knowledge.subject,
             mastery: knowledge.mastery,
             course: course || null,
             questions: questions.length,
-            tasks: taskRows.map(row => ({ title: row[0], subtitle: row[1], minutes: row[3] })),
-            effects: ["更新今日任务", "生成智能笔记卡", "推荐专项练习", "写入学习动态"]
+            agentReasoning,
+            agentPlan: agentPlan || null,
+            tasks: agentTaskRows.map(row => ({ title: row[0], subtitle: row[1], minutes: row[3] })),
+            effects: ["Agent推理增强", "更新今日任务", "生成智能笔记卡", "推荐专项练习", "写入学习动态"]
         });
     } catch (error) {
-        next(error);
+        console.error("Agent闭环运行失败，降级到规则引擎:", error.message);
+        // fallback 到纯规则
+        try {
+            const userId = req.user?.id || 1;
+            const { topic = "Node.js" } = req.body || {};
+            const [[point]] = await pool.query(
+                `SELECT id, title, subject, mastery, summary FROM knowledge_points WHERE title LIKE ? OR summary LIKE ? ORDER BY CASE WHEN title = ? THEN 0 ELSE 1 END, mastery ASC LIMIT 1`,
+                [`%${topic}%`, `%${topic}%`, topic]
+            );
+            const knowledge = point || { id: null, title: topic, subject: "程序设计", mastery: 45, summary: `${topic} 相关计算机知识点。` };
+            const taskRows = [
+                [`学习：${knowledge.title}`, knowledge.summary?.slice(0, 80) || "", "play", 25, "#2f6bff", "rgba(47,107,255,.12)"],
+                [`练习：${knowledge.title}`, "完成 5 道诊断题", "exam", 18, "#18b87a", "rgba(24,184,122,.12)"],
+                [`整理 ${knowledge.title} 笔记`, "生成主动回忆卡", "pen", 12, "#ff9500", "rgba(255,149,0,.12)"]
+            ];
+            await pool.query('DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "closed_loop"', [userId]);
+            for (let i = 0; i < taskRows.length; i += 1) {
+                const row = taskRows[i];
+                await pool.query(
+                    `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'closed_loop')`,
+                    [userId, knowledge.id, row[0], row[1], row[2], row[3], i + 1, row[4], row[5]]
+                );
+            }
+            await pool.query(
+                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+                 VALUES (?, 'bolt', ?, '刚刚', '一键闭环', '#2f6bff', 'rgba(47,107,255,.12)')`,
+                [userId, `AI 已围绕「${knowledge.title}」生成学习闭环`]
+            );
+            return res.json({ success: true, topic: knowledge.title, subject: knowledge.subject, mastery: knowledge.mastery, tasks: taskRows.map(row => ({ title: row[0], subtitle: row[1], minutes: row[3] })), effects: ["更新今日任务", "写入学习动态"] });
+        } catch (fallbackErr) {
+            next(fallbackErr);
+        }
     }
 });
 
@@ -1864,23 +2023,176 @@ router.get("/path/center", async (req, res, next) => {
     }
 });
 
+// POST /api/app/path/generate
+// 默认使用星火大模型 Agent 增强生成学习路径
+// 可通过 ?mode=rule 降级为纯规则引擎
 router.post("/path/generate", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
         const goal = String(req.body?.goal || "系统掌握计算机核心能力").trim();
         const subject = String(req.body?.subject || "all");
+        const mode = req.body?.mode || req.query?.mode || "agent";
+
+        if (mode === "rule") {
+            // 纯规则引擎（模板化计划，不调 LLM）
+            const LearningLoopService = require("../core/LearningLoopService");
+            const learningLoop = new LearningLoopService(pool);
+            return res.json(
+                await learningLoop.start({
+                    userId,
+                    goal,
+                    subject,
+                    durationDays: req.body?.durationDays || 3
+                })
+            );
+        }
+
+        // 默认：Agent + LLM 增强路径生成
+        // 1. 先用 LearningLoopService 做基础知识匹配和诊断检查
         const LearningLoopService = require("../core/LearningLoopService");
         const learningLoop = new LearningLoopService(pool);
-        res.json(
-            await learningLoop.start({
-                userId,
-                goal,
-                subject,
-                durationDays: req.body?.durationDays || 3
-            })
+        await learningLoop.ensureSchema();
+        const knowledge = await learningLoop.resolveKnowledge(goal, subject);
+
+        if (!knowledge) {
+            return res.json({
+                success: true,
+                stage: "needs_clarification",
+                missingInputs: ["knowledge_topic"],
+                message: "知识库中没有匹配到该目标，请补充更具体的知识点，例如 TCP/IP、数据库索引或动态规划。"
+            });
+        }
+
+        // 2. 检查诊断状态
+        const [[mastery]] = await pool.query(
+            "SELECT mastery, confidence, evidence_count, trend FROM student_knowledge WHERE user_id = ? AND node_id = ?",
+            [userId, knowledge.id]
         );
+        if (!mastery || Number(mastery.evidence_count) < 5) {
+            const questions = await learningLoop.getQuestions(knowledge.id, 5);
+            return res.json({
+                success: true,
+                stage: "diagnosis_required",
+                knowledge,
+                questions,
+                missingInputs: ["knowledge_mastery"],
+                confidence: mastery ? Number(mastery.confidence) : 0.2,
+                message: `需要先完成 ${questions.length} 道 ${knowledge.title} 诊断题，再生成真实计划。`
+            });
+        }
+
+        // 3. 调用 AgenticLearningAgent + 星火大模型生成学习路径（带超时保护）
+        const AgenticLearningAgent = require("../core/AgenticLearningAgent");
+        const agent = new AgenticLearningAgent(userId, pool);
+        let agentPlan = null;
+        try {
+            agentPlan = await withTimeout(
+                agent.generateLearningPlan(subject, Math.max(1, Math.min(7, Number(req.body?.durationDays || 3)))),
+                15000,
+                "AgenticLearningAgent.generateLearningPlan"
+            );
+        } catch (agentErr) {
+            console.warn("AgenticLearningAgent 学习计划生成失败:", agentErr.message);
+        }
+
+        // 4. 同时用 AIPathGenerator 生成 LLM 增强的学习路径（带超时保护）
+        const AIPathGenerator = require("../core/AIPathGenerator");
+        const pathGen = new AIPathGenerator();
+        let pathResult = null;
+        try {
+            pathResult = await withTimeout(
+                pathGen.generateWithAgent(userId, pool, subject),
+                15000,
+                "AIPathGenerator.generateWithAgent"
+            );
+        } catch (pathErr) {
+            console.warn("AIPathGenerator Agent 路径生成失败，降级到规则:", pathErr.message);
+        }
+
+        // 5. 写入数据库并返回
+        const durationDays = Math.max(1, Math.min(7, Number(req.body?.durationDays || 3)));
+        const days = (agentPlan?.days || []).map((d, i) => ({
+            day: d.day || i + 1,
+            title: d.focus || d.title || `第 ${i + 1} 天`,
+            objective: d.goal || d.objective || "",
+            task: {
+                title: d.focus || d.title || `学习 ${knowledge.title}`,
+                subtitle: `${knowledge.subject} · Agent 推荐`,
+                icon: "brain",
+                minutes: d.estimatedMinutes || 25,
+                status: "pending"
+            }
+        }));
+
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+            await connection.query(
+                "DELETE FROM study_tasks WHERE user_id = ? AND source = 'agent-learning-loop' AND task_date >= CURDATE()",
+                [userId]
+            );
+            for (const day of days) {
+                await connection.query(
+                    `INSERT INTO study_tasks
+                        (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status,
+                         task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(CURDATE(), INTERVAL ? DAY), ?, '#7c4dff',
+                        'rgba(124,77,255,.12)', 'agent-learning-loop')`,
+                    [
+                        userId,
+                        knowledge.id,
+                        day.task.title,
+                        day.task.subtitle,
+                        day.task.icon,
+                        day.task.minutes,
+                        day.day - 1,
+                        day.day
+                    ]
+                );
+            }
+            await connection.commit();
+        } catch (dbErr) {
+            await connection.rollback();
+            throw dbErr;
+        } finally {
+            connection.release();
+        }
+
+        res.json({
+            success: true,
+            stage: "plan_ready",
+            generated: days.length,
+            plan: {
+                knowledge,
+                mastery: Number(mastery.mastery),
+                confidence: Number(mastery.confidence || 0.5),
+                days,
+                summary: agentPlan?.summary || "",
+                strategy: agentPlan?.strategy || "agent-driven",
+                pathResult: pathResult || null,
+                generatedAt: new Date().toISOString()
+            },
+            message: `Agent + 星火大模型已生成 ${days.length} 天个性化学习计划。`
+        });
     } catch (error) {
-        next(error);
+        console.error("Agent 学习路径生成失败，降级到规则引擎:", error.message);
+        // fallback 到纯规则引擎
+        try {
+            const LearningLoopService = require("../core/LearningLoopService");
+            const learningLoop = new LearningLoopService(pool);
+            const userId = req.user?.id || 1;
+            const goal = String(req.body?.goal || "系统掌握计算机核心能力").trim();
+            return res.json(
+                await learningLoop.start({
+                    userId,
+                    goal,
+                    subject: req.body?.subject || "all",
+                    durationDays: req.body?.durationDays || 3
+                })
+            );
+        } catch (fallbackErr) {
+            next(fallbackErr);
+        }
     }
 });
 
@@ -2594,27 +2906,142 @@ router.post("/practice/submit-set", async (req, res, next) => {
     }
 });
 
+// POST /api/app/plan/generate
+// 默认使用 StudyPlanEngine + AgenticLearningAgent + 星火大模型生成今日计划
+// 可通过 ?mode=rule 降级为纯规则引擎
 router.post("/plan/generate", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
-        const [weak] = await pool.query(
-            "SELECT id, title, subject, mastery FROM knowledge_points ORDER BY mastery ASC LIMIT 4"
-        );
+        const mode = req.body?.mode || req.query?.mode || "agent";
+
+        if (mode === "rule") {
+            // 纯规则引擎：直接查弱知识点写 tasks
+            const [weak] = await pool.query(
+                "SELECT id, title, subject, mastery FROM knowledge_points ORDER BY mastery ASC LIMIT 4"
+            );
+            await pool.query('DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "ai"', [
+                userId
+            ]);
+            for (let i = 0; i < weak.length; i += 1) {
+                const point = weak[i];
+                await pool.query(
+                    `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'ai')`,
+                    [
+                        userId,
+                        point.id,
+                        `AI 巩固：${point.title}`,
+                        `${point.subject} · 当前掌握度 ${point.mastery}%`,
+                        i % 2 ? "pen" : "brain",
+                        point.mastery < 50 ? 30 : 20,
+                        10 + i,
+                        i % 2 ? "#ff9500" : "#2f6bff",
+                        i % 2 ? "rgba(255,149,0,.12)" : "rgba(47,107,255,.12)"
+                    ]
+                );
+            }
+            await pool.query(
+                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+                 VALUES (?, 'robot', 'AI 已根据薄弱知识点生成今日学习闭环', '刚刚', '计划生成', '#7c4dff', 'rgba(124,77,255,.12)')`,
+                [userId]
+            );
+            return res.json({ success: true, generated: weak.length });
+        }
+
+        // 默认：Agent + LLM 增强今日计划生成
+        // 1. 调用 StudyPlanEngine.generateDailyWithProfile（画像驱动 + Agent 推理 + 星火大模型）
+        //    设置 12s 超时，超时则降级到规则引擎
+        const StudyPlanEngine = require("../core/StudyPlanEngine");
+        const engine = new StudyPlanEngine();
+        let plan = null;
+        try {
+            plan = await withTimeout(
+                engine.generateDailyWithProfile(pool, {
+                    userId,
+                    date: req.body?.date || null,
+                    title: req.body?.title || null,
+                    duration: req.body?.duration || null
+                }),
+                12000,
+                "StudyPlanEngine"
+            );
+        } catch (planErr) {
+            console.warn("StudyPlanEngine Agent 计划生成失败:", planErr.message);
+        }
+
+        // 2. 同时调用 AgenticLearningAgent 获取推理建议（8s 超时）
+        const AgenticLearningAgent = require("../core/AgenticLearningAgent");
+        const agent = new AgenticLearningAgent(userId, pool);
+        let agentReasoning = null;
+        try {
+            agentReasoning = await withTimeout(agent.reasonNextStep(), 8000, "AgenticLearningAgent");
+        } catch (reasonErr) {
+            console.warn("AgenticLearningAgent 推理失败:", reasonErr.message);
+        }
+
+        // 3. 写入数据库
+        const tasks = plan?.tasks || [];
+        const suggestion = plan?.ai_suggestion || plan?.aiSuggestion || "";
+        const strategy = plan?.strategy || "agent-driven";
+
+        // 如果 Agent 没有返回 tasks，则回退到查弱知识点
+        if (!tasks.length) {
+            const [weak] = await pool.query(
+                "SELECT id, title, subject, mastery FROM knowledge_points ORDER BY mastery ASC LIMIT 4"
+            );
+            await pool.query('DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "ai"', [
+                userId
+            ]);
+            for (let i = 0; i < weak.length; i += 1) {
+                const point = weak[i];
+                await pool.query(
+                    `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'ai')`,
+                    [
+                        userId,
+                        point.id,
+                        `AI 巩固：${point.title}`,
+                        `${point.subject} · 当前掌握度 ${point.mastery}%`,
+                        i % 2 ? "pen" : "brain",
+                        point.mastery < 50 ? 30 : 20,
+                        10 + i,
+                        i % 2 ? "#ff9500" : "#2f6bff",
+                        i % 2 ? "rgba(255,149,0,.12)" : "rgba(47,107,255,.12)"
+                    ]
+                );
+            }
+            await pool.query(
+                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+                 VALUES (?, 'robot', 'Agent + 星火已生成今日学习计划', '刚刚', '计划生成', '#7c4dff', 'rgba(124,77,255,.12)')`,
+                [userId]
+            );
+            return res.json({
+                success: true,
+                generated: weak.length,
+                suggestion,
+                agentReasoning: agentReasoning || null,
+                strategy,
+                plan
+            });
+        }
+
+        // Agent 返回了 tasks，写入
         await pool.query('DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "ai"', [
             userId
         ]);
-        for (let i = 0; i < weak.length; i += 1) {
-            const point = weak[i];
+        for (let i = 0; i < tasks.length; i += 1) {
+            const t = tasks[i];
+            const knowledgeId = t.knowledgeId || t.knowledge_id || null;
             await pool.query(
                 `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
                  VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'ai')`,
                 [
                     userId,
-                    point.id,
-                    `AI 巩固：${point.title}`,
-                    `${point.subject} · 当前掌握度 ${point.mastery}%`,
-                    i % 2 ? "pen" : "brain",
-                    point.mastery < 50 ? 30 : 20,
+                    knowledgeId,
+                    t.title || `Agent 推荐任务 ${i + 1}`,
+                    t.subtitle || t.description || "",
+                    t.icon || (i % 2 ? "pen" : "brain"),
+                    t.estimatedMinutes || t.duration || 25,
                     10 + i,
                     i % 2 ? "#ff9500" : "#2f6bff",
                     i % 2 ? "rgba(255,149,0,.12)" : "rgba(47,107,255,.12)"
@@ -2623,12 +3050,56 @@ router.post("/plan/generate", async (req, res, next) => {
         }
         await pool.query(
             `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
-             VALUES (?, 'robot', 'AI 已根据薄弱知识点生成今日学习闭环', '刚刚', '计划生成', '#7c4dff', 'rgba(124,77,255,.12)')`,
+             VALUES (?, 'robot', 'Agent + 星火已生成今日个性化学习计划', '刚刚', '计划生成', '#7c4dff', 'rgba(124,77,255,.12)')`,
             [userId]
         );
-        res.json({ success: true, generated: weak.length });
+
+        res.json({
+            success: true,
+            generated: tasks.length,
+            suggestion,
+            agentReasoning: agentReasoning || null,
+            strategy,
+            plan
+        });
     } catch (error) {
-        next(error);
+        console.error("Agent 今日计划生成失败，降级到规则引擎:", error.message);
+        // fallback 到纯规则
+        try {
+            const userId = req.user?.id || 1;
+            const [weak] = await pool.query(
+                "SELECT id, title, subject, mastery FROM knowledge_points ORDER BY mastery ASC LIMIT 4"
+            );
+            await pool.query('DELETE FROM study_tasks WHERE user_id = ? AND task_date = CURDATE() AND source = "ai"', [
+                userId
+            ]);
+            for (let i = 0; i < weak.length; i += 1) {
+                const point = weak[i];
+                await pool.query(
+                    `INSERT INTO study_tasks (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status, task_date, sort_order, color, soft_color, source)
+                     VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, ?, ?, 'ai')`,
+                    [
+                        userId,
+                        point.id,
+                        `AI 巩固：${point.title}`,
+                        `${point.subject} · 当前掌握度 ${point.mastery}%`,
+                        i % 2 ? "pen" : "brain",
+                        point.mastery < 50 ? 30 : 20,
+                        10 + i,
+                        i % 2 ? "#ff9500" : "#2f6bff",
+                        i % 2 ? "rgba(255,149,0,.12)" : "rgba(47,107,255,.12)"
+                    ]
+                );
+            }
+            await pool.query(
+                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+                 VALUES (?, 'robot', 'AI 已根据薄弱知识点生成今日学习闭环', '刚刚', '计划生成', '#7c4dff', 'rgba(124,77,255,.12)')`,
+                [userId]
+            );
+            return res.json({ success: true, generated: weak.length });
+        } catch (fallbackErr) {
+            next(fallbackErr);
+        }
     }
 });
 

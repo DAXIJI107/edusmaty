@@ -36,7 +36,14 @@ async function ensureTables() {
     `);
 }
 
-ensureTables().catch(e => console.warn("code-repo tables init:", e.message));
+let _tablesReady = false;
+router.use(async (req, res, next) => {
+  if (!_tablesReady) {
+    _tablesReady = true;
+    await ensureTables().catch(() => {});
+  }
+  next();
+});
 
 router.post("/create", authenticateJWT, async (req, res) => {
     try {

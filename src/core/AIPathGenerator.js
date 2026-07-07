@@ -545,7 +545,12 @@ class AIPathGenerator {
             // 3. 解析 LLM 返回的调整建议
             let llmAdjustments = null;
             try {
-                const content = result.content || "";
+                let content = result.content || "";
+                // 先剥离 markdown 代码块
+                const codeFenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (codeFenceMatch) {
+                    content = codeFenceMatch[1].trim();
+                }
                 const jsonMatch = content.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     llmAdjustments = JSON.parse(jsonMatch[0]);
@@ -558,8 +563,9 @@ class AIPathGenerator {
             if (llmAdjustments?.adjustments?.length > 0) {
                 const stepArray = [...steps];
                 for (const adj of llmAdjustments.adjustments) {
-                    const fromIdx = (adj.index || adj.originalIndex) - 1;
-                    const toIdx = (adj.newIndex || adj.targetIndex) - 1;
+                    // 兼容多种 JSON 字段名变体（index/originalIndex/oldPosition, newIndex/targetIndex/newPosition）
+                    const fromIdx = (adj.index || adj.originalIndex || adj.oldPosition) - 1;
+                    const toIdx = (adj.newIndex || adj.targetIndex || adj.newPosition) - 1;
                     if (fromIdx >= 0 && fromIdx < stepArray.length && toIdx >= 0 && toIdx < stepArray.length) {
                         const [moved] = stepArray.splice(fromIdx, 1);
                         stepArray.splice(toIdx, 0, moved);

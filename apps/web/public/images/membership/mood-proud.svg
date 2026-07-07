@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Proud mood sticker">
+  <defs>
+    <linearGradient id="bg" x1="26" x2="158" y1="24" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7C8"/>
+      <stop offset="1" stop-color="#E6F9F1"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="url(#bg)"/>
+  <circle cx="90" cy="88" r="52" fill="#FFFFFF" stroke="#F8D96B" stroke-width="6"/>
+  <path d="M60 76c8 8 18 8 26 0M94 76c8 8 18 8 26 0" fill="none" stroke="#24304A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M67 105c14 16 32 16 46 0" fill="none" stroke="#16A34A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M91 29l8 16 18 2-13 12 4 18-17-9-16 9 3-18-13-12 18-2z" fill="#F5A524"/>
+</svg>

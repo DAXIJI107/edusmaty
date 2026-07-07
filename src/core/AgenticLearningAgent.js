@@ -232,7 +232,13 @@ ${recentHistory.map(h => `- ${h}`).join("\n") || "暂无记录"}
             });
 
             // 解析LLM返回的JSON
-            const jsonMatch = String(result).match(/\{[\s\S]*\}/);
+            // 星火等大模型常将JSON包裹在 ```json ... ``` 代码块中，先剥离
+            let rawResult = String(result);
+            const codeFenceMatch = rawResult.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (codeFenceMatch) {
+                rawResult = codeFenceMatch[1].trim();
+            }
+            const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 this.state._lastReasoning = parsed;
@@ -360,7 +366,13 @@ ${weakNodes.map(([id, s]) => `- ${s.name} (${s.subject}, 掌握度: ${s.mastery}
                 maxTokens: 2048
             });
 
-            const jsonMatch = String(result).match(/\{[\s\S]*\}/);
+            // 先剥离可能的 markdown 代码块包裹
+            let rawResult = String(result);
+            const codeFenceMatch = rawResult.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (codeFenceMatch) {
+                rawResult = codeFenceMatch[1].trim();
+            }
+            const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
             if (jsonMatch) return JSON.parse(jsonMatch[0]);
         } catch (e) {
             console.warn("学习计划生成失败:", e.message);

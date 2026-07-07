@@ -3,11 +3,12 @@
     "version": "2.0.0",
     "description": "EduSmart 智能化学习平台重构版，前后端与旧项目独立运行。",
     "main": "src/server/index.js",
+    "bin": "src/server/index.js",
     "scripts": {
         "start": "node src/server",
         "dev": "nodemon src/server",
         "check": "node scripts/check-syntax.js",
-        "test": "node --test test/agent-foundation.test.js test/learning-loop.test.js",
+        "test": "node --test test\\agent-foundation.test.js test\\learning-loop.test.js test\\llm-gateway.test.js",
         "test:integration": "node --test test/learning-loop.integration.test.js",
         "db:migrate": "node scripts/migrate.js",
         "db:migrate:status": "node scripts/migrate.js status",
@@ -19,7 +20,9 @@
         "obsidian:preview": "node scripts/sync-obsidian-questions.js --dry-run",
         "obsidian:sync-rag": "node scripts/sync-obsidian-rag.js",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "build": "pkg . --out-path dist",
+        "build:debug": "pkg . --out-path dist --debug"
     },
     "dependencies": {
         "@faker-js/faker": "^9.8.0",
@@ -32,13 +35,16 @@
         "jsonwebtoken": "^9.0.3",
         "mysql2": "^3.14.1",
         "node-cron": "^3.0.3",
+        "nodemailer": "^9.0.1",
         "querystring": "^0.2.1",
+        "sql.js": "^1.14.1",
         "url": "^0.11.4",
         "ws": "^8.18.3"
     },
     "devDependencies": {
         "axios": "^1.16.1",
         "nodemon": "^3.0.2",
+        "pkg": "^5.8.1",
         "prettier": "^3.8.3"
     },
     "keywords": [
@@ -46,5 +52,17 @@
         "ai-learning",
         "edusmart"
     ],
-    "license": "ISC"
+    "license": "ISC",
+    "pkg": {
+        "assets": [
+            "apps/web/public/**/*",
+            "rag_software_engineering_bundle/**/*",
+            "ops/database/sql/**/*",
+            "node_modules/sql.js/**/*"
+        ],
+        "targets": [
+            "node18-win-x64"
+        ],
+        "outputPath": "dist"
+    }
 }
