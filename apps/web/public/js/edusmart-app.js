@@ -564,6 +564,11 @@
         } catch {
             state.data.learningLoop = null;
         }
+        try {
+            await ensurePersonalizedPath({ forceReload: force, silent: true });
+        } catch {
+            /* 计划页仍可展示空态 */
+        }
         const center = await loadPathCenter(force);
         const tasks = (center.tasks || []).map(task => ({
             id: task.id,
@@ -1066,6 +1071,62 @@
         const json = await request(`/api/app/path/center?${params.toString()}`);
         state.data.pathCenter = json;
         return json;
+    }
+
+    /** 打开路径相关页面时：若尚无 Agent 计划，自动生成一次，避免必须手动点按钮 */
+    async function ensurePersonalizedPath(options = {}) {
+        const forceReload = Boolean(options.forceReload);
+        const silent = Boolean(options.silent);
+        const center = await loadPathCenter(forceReload);
+        if (center?.generatedByAgent === true && ((center.pathNodes || []).length || (center.tasks || []).length)) {
+            return center;
+        }
+        const goal = state.data.pathGoal || "系统掌握计算机核心能力";
+        const subject = state.data.pathSubject || "all";
+        const intensity = state.data.pathIntensity || "normal";
+        const autoKey = `${goal}|${subject}|${intensity}`;
+        const loop = state.data.learningLoop;
+        if (
+            state.data._pathAutoKey === autoKey &&
+            loop &&
+            ["needs_clarification", "diagnosis_required"].includes(loop.stage)
+        ) {
+            return center;
+        }
+        if (state.data._pathAutoPromise) return state.data._pathAutoPromise;
+
+        state.data._pathAutoKey = autoKey;
+        state.data.pathAutoGenerating = true;
+        state.data._pathAutoPromise = (async () => {
+            try {
+                if (!silent) toast("正在自动生成个性化路径…");
+                const result = await request("/api/app/path/generate", {
+                    method: "POST",
+                    body: JSON.stringify({ goal, subject, intensity })
+                });
+                state.data.learningLoop = result;
+                state.data.pathCenter = null;
+                state.data.studyPlan = null;
+                if (result.stage === "plan_ready") {
+                    updateOnboardingProgress({ pathDone: true });
+                    await loadPathCenter(true);
+                    if (!silent) {
+                        toast(
+                            `已自动生成 ${result.generated || result.plan?.days?.length || 0} 天学习计划`
+                        );
+                    }
+                } else if (result.stage === "diagnosis_required") {
+                    if (!silent) toast("需要先完成诊断题，见页面提示");
+                } else if (result.stage === "needs_clarification") {
+                    if (!silent) toast(result.message || "请输入更具体的知识点目标");
+                }
+                return state.data.pathCenter;
+            } finally {
+                state.data.pathAutoGenerating = false;
+                state.data._pathAutoPromise = null;
+            }
+        })();
+        return state.data._pathAutoPromise;
     }
 
     async function loadCodeRepos() {
@@ -8446,6 +8507,7 @@
         if (!hasAgentPath) {
             const profile = center.profileContext || {};
             const loop = state.data.learningLoop || {};
+            const generating = Boolean(state.data.pathAutoGenerating);
             const loopBanner =
                 loop.stage === "needs_clarification"
                     ? `<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="pill warn">目标需更具体</span><h2 class="section-title">${icon("target", 18)}请补充知识点</h2></div><p>${escapeHtml(loop.message || "请输入更具体的目标，例如：数据结构、哈希表、操作系统。")}</p></section>`
@@ -8453,11 +8515,15 @@
             return `<main class="page path-page agent-path-empty-page">
                 <section class="hero-row">
                     <div class="hero">
-                        <span class="pill">Agent 个性化学习</span>
-                        <h1>尚未生成学习路径</h1>
-                        <p>这里不会再显示规则路径、固定课程或硬编码资源。只有你点击下方按钮，让 Agent 读取画像、目标、薄弱点和学习记录后，才会写入并展示学习路径和今日计划。</p>
+                        <span class="pill">${generating ? "正在生成" : "Agent 个性化学习"}</span>
+                        <h1>${generating ? "正在生成个性化路径…" : "尚未生成学习路径"}</h1>
+                        <p>${
+                            generating
+                                ? "已自动调用 Agent：读取画像、目标与学习记录，写入路径和今日计划，请稍候。"
+                                : "打开本页会自动生成路径。若未出现计划，可调整下方目标后再次生成，或先完成诊断。"
+                        }</p>
                         <div class="hero-actions">
-                            <button class="btn primary glow" data-path-generate>${icon("robot", 17)}调用 Agent 个性化学习</button>
+                            <button class="btn primary glow${generating ? " is-loading" : ""}" data-path-generate ${generating ? "disabled" : ""}>${icon("robot", 17)}${generating ? "生成中…" : "重新生成个性化路径"}</button>
                             <button class="btn ghost" data-view="profile">${icon("user", 17)}查看学习画像</button>
                             <button class="btn ghost" data-view="diagnostic">${icon("brain", 17)}重新诊断</button>
                         </div>
@@ -19903,7 +19969,27 @@ zhaoliu,赵六"></textarea>
                 }
             }
             if (state.view === "smartNotes") await loadNotesCenter();
-            // 路径页不再自动加载规则路径；只有点击 Agent 个性化生成后才读取 path/center。
+            // 打开路径页：若无计划则自动生成；先展示「生成中」，完成后再刷新
+            if (state.view === "path") {
+                try {
+                    await loadPathCenter();
+                    const center = state.data.pathCenter || {};
+                    const ready =
+                        center.generatedByAgent === true &&
+                        ((center.pathNodes || []).length > 0 || (center.tasks || []).length > 0);
+                    if (!ready) {
+                        state.data.pathAutoGenerating = true;
+                        ensurePersonalizedPath({ silent: false })
+                            .catch(error => toast(error.message || "自动生成路径失败"))
+                            .finally(() => {
+                                state.data.pathAutoGenerating = false;
+                                if (state.view === "path") render();
+                            });
+                    }
+                } catch (error) {
+                    toast(error.message || "路径加载失败");
+                }
+            }
             if (state.view === "profile") await loadProfileInsight();
             if (state.view === "conceptCanvas" && !state.data._canvases) {
                 try {
