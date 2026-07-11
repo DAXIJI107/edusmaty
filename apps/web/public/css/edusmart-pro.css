@@ -32616,6 +32616,65 @@ body.focus-mode-locked .shell > .topbar {
     background: rgba(99, 130, 255, 0.2);
 }
 
+/* 新建文档下拉菜单 */
+.new-doc-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.new-doc-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 220px;
+    display: none;
+    z-index: 1000;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.new-doc-menu.show {
+    display: block;
+}
+
+.doc-template-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.doc-template-item:hover {
+    background-color: #f8fafc;
+}
+
+.doc-template-item svg {
+    flex-shrink: 0;
+    color: #6366f1;
+}
+
+.template-info {
+    flex: 1;
+}
+
+.template-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.template-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
 .doc-list {
     display: flex;
     flex-direction: column;
@@ -32834,6 +32893,108 @@ body.focus-mode-locked .shell > .topbar {
 
 .study-focus-editor-header .hdr-btn.share:hover {
     background: rgba(16, 185, 129, 0.15);
+}
+
+/* 讯飞星火AI工具栏样式 */
+.ai-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 32px;
+    background: linear-gradient(135deg, #fff7ed 0%, #fff 50%, #fef3c7 100%);
+    border-bottom: 2px solid #f97316;
+    flex-shrink: 0;
+}
+
+.ai-toolbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-toolbar-brand svg {
+    flex-shrink: 0;
+}
+
+.ai-brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ea580c;
+    letter-spacing: 0.5px;
+}
+
+.ai-brand-tag {
+    font-size: 11px;
+    color: #ea580c;
+    opacity: 0.8;
+    background: rgba(234, 88, 12, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.ai-toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(234, 88, 12, 0.2);
+}
+
+.ai-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ai-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(234, 88, 12, 0.3);
+    background: rgba(255, 255, 255, 0.9);
+    color: #ea580c;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ai-action-btn:hover {
+    background: linear-gradient(135deg, #fdba74 0%, #fb923c 100%);
+    color: #fff;
+    border-color: #fb923c;
+    box-shadow: 0 4px 12px rgba(251, 146, 60, 0.3);
+    transform: translateY(-1px);
+}
+
+.ai-action-btn:active {
+    transform: translateY(0);
+}
+
+.ai-action-btn svg {
+    flex-shrink: 0;
+}
+
+.ai-toolbar-status {
+    font-size: 12px;
+    color: #ea580c;
+    opacity: 0.8;
+    min-width: 100px;
+    text-align: right;
+}
+
+.ai-toolbar-status.loading {
+    color: #ea580c;
+}
+
+.ai-toolbar-status.success {
+    color: #16a34a;
+}
+
+.ai-toolbar-status.error {
+    color: #dc2626;
 }
 
 .study-focus-toolbar {

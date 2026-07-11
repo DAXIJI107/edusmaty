@@ -1078,6 +1078,102 @@ router.post("/tasks/:id/toggle", async (req, res, next) => {
     }
 });
 
+/**
+ * AI文本扩写接口 - 使用讯飞星火大模型
+ * 将用户输入的文本进行智能扩写，丰富内容细节
+ */
+router.post("/ai/expand", async (req, res, next) => {
+    try {
+        const userId = req.user.id || 1;
+        const { text } = req.body;
+        
+        if (!text || text.trim().length === 0) {
+            return res.status(400).json({ success: false, message: "请输入需要扩写的文本" });
+        }
+
+        const messages = [
+            {
+                role: "system",
+                content: "你是一个专业的学习助手，擅长将简短的学习笔记和心得进行智能扩写。请保留原文的核心观点，同时增加详细的解释、实例、案例和相关知识链接。扩写后的内容应该逻辑清晰、层次分明、语言流畅。"
+            },
+            {
+                role: "user",
+                content: `请将以下学习心得文本进行智能扩写，丰富内容细节，增加实例和解释：\n\n${text}`
+            }
+        ];
+
+        const result = await llmGateway.chatText({ 
+            messages, 
+            temperature: 0.7, 
+            maxTokens: 2048 
+        });
+
+        res.json({ 
+            success: true, 
+            data: {
+                original: text,
+                expanded: result,
+                provider: "讯飞星火"
+            } 
+        });
+    } catch (error) {
+        console.error("[AI扩写] 调用失败:", error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: "AI扩写服务暂时不可用，请稍后重试",
+            error: error.message 
+        });
+    }
+});
+
+/**
+ * AI文本美化接口 - 使用讯飞星火大模型
+ * 将用户输入的文本进行语言美化和优化
+ */
+router.post("/ai/polish", async (req, res, next) => {
+    try {
+        const userId = req.user.id || 1;
+        const { text } = req.body;
+        
+        if (!text || text.trim().length === 0) {
+            return res.status(400).json({ success: false, message: "请输入需要美化的文本" });
+        }
+
+        const messages = [
+            {
+                role: "system",
+                content: "你是一个专业的文本美化师，擅长优化学习笔记和心得的语言表达。请保持原文的核心内容和观点不变，优化语言结构、用词选择和表达流畅度，使文本更加专业、优美、易读。"
+            },
+            {
+                role: "user",
+                content: `请对以下学习心得文本进行语言美化和优化，保持核心内容不变：\n\n${text}`
+            }
+        ];
+
+        const result = await llmGateway.chatText({ 
+            messages, 
+            temperature: 0.6, 
+            maxTokens: 2048 
+        });
+
+        res.json({ 
+            success: true, 
+            data: {
+                original: text,
+                polished: result,
+                provider: "讯飞星火"
+            } 
+        });
+    } catch (error) {
+        console.error("[AI美化] 调用失败:", error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: "AI美化服务暂时不可用，请稍后重试",
+            error: error.message 
+        });
+    }
+});
+
 router.post("/practice/answer", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;

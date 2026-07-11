@@ -86,7 +86,9 @@
         image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 19"/>',
         briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M12 12v.01"/>',
         "file-word": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2l2 5 2-5h2"/>',
-        sparkles: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>'
+        sparkles: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>',
+    // 讯飞星火大模型图标 - 火焰形状的logo
+    xfyun: '<path d="M12 2l2.5 8.5 9 1.5-7 6.5 2 9-8.5-5-8.5 5 2-9-7-6.5 9-1.5z" fill="#FF6B00"/>'
     };
 
     const state = {
@@ -2463,7 +2465,54 @@
         };
     }
 
-    function generateStudyDocTemplate(subject) {
+    /**
+     * 文档格式模板配置 - 支持多种文档类型
+     * @type {Object}
+     */
+    const docTemplates = {
+        normal: { 
+            name: '普通文档', 
+            icon: 'file-text', 
+            description: '空白文档，自由编写',
+            title: '新建文档'
+        },
+        structured: { 
+            name: '结构化文档', 
+            icon: 'layout', 
+            description: '带目录的学习心得框架',
+            title: '学习心得'
+        },
+        note: { 
+            name: '学习笔记', 
+            icon: 'sticky-note', 
+            description: '简洁的笔记格式',
+            title: '学习笔记'
+        },
+        report: { 
+            name: '学习报告', 
+            icon: 'file-report', 
+            description: '正式的学习报告格式',
+            title: '学习报告'
+        },
+        diary: { 
+            name: '学习日记', 
+            icon: 'calendar', 
+            description: '日记形式的学习记录',
+            title: '学习日记'
+        }
+    };
+
+    /**
+     * 生成普通文档模板 - 空白文档
+     */
+    function generateNormalTemplate() {
+        return '<p></p>';
+    }
+
+    /**
+     * 生成结构化学习心得模板 - 完整的学习心得框架
+     */
+    function generateStructuredTemplate(subject) {
         const dateStr = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
         return `
 <h1>学习主题</h1>
@@ -2502,6 +2551,153 @@
 <p><strong>掌握程度：</strong>□ 入门 □ 理解 □ 熟练 □ 精通</p>
 <p><strong>学习效果：</strong></p>
 `;
+    }
+
+    /**
+     * 生成学习笔记模板 - 简洁的笔记格式
+     */
+    function generateNoteTemplate(subject) {
+        const dateStr = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+        return `
+<h2>${subject || '学习笔记'}</h2>
+<p><strong>日期：</strong>${dateStr}</p>
+
+<h3>📌 重点内容</h3>
+<ul>
+<li></li>
+<li></li>
+<li></li>
+</ul>
+
+<h3>💡 个人感悟</h3>
+<p></p>
+
+<h3>🔗 相关链接</h3>
+<ul>
+<li></li>
+</ul>
+`;
+    }
+
+    /**
+     * 生成学习报告模板 - 正式的报告格式
+     */
+    function generateReportTemplate(subject) {
+        const dateStr = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+        return `
+<h1>学习报告</h1>
+
+<h2>基本信息</h2>
+<p><strong>学习主题：</strong>${subject || ''}</p>
+<p><strong>报告日期：</strong>${dateStr}</p>
+<p><strong>报告人：</strong></p>
+
+<h2>一、学习目标</h2>
+<p></p>
+
+<h2>二、学习内容概述</h2>
+<p></p>
+
+<h2>三、学习成果</h2>
+<h3>3.1 知识掌握情况</h3>
+<p></p>
+<h3>3.2 技能提升</h3>
+<p></p>
+
+<h2>四、问题与解决方案</h2>
+<p></p>
+
+<h2>五、后续计划</h2>
+<p></p>
+
+<h2>六、总结与反思</h2>
+<p></p>
+`;
+    }
+
+    /**
+     * 生成学习日记模板 - 日记形式的学习记录
+     */
+    function generateDiaryTemplate(subject) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+        const timeStr = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+        return `
+<h2>${dateStr} ${timeStr}</h2>
+
+<h3>📚 今日学习内容</h3>
+<p></p>
+
+<h3>✨ 学习收获</h3>
+<ul>
+<li></li>
+<li></li>
+<li></li>
+</ul>
+
+<h3>📖 明日计划</h3>
+<ul>
+<li></li>
+<li></li>
+</ul>
+
+<h3>❤️ 心情记录</h3>
+<p></p>
+`;
+    }
+
+    /**
+     * 根据模板类型生成文档内容
+     * @param {string} templateType - 模板类型：normal/structured/note/report/diary
+     * @param {string} subject - 学习主题
+     * @returns {string} 生成的文档HTML内容
+     */
+    function generateDocContent(templateType, subject) {
+        switch (templateType) {
+            case 'structured':
+                return generateStructuredTemplate(subject);
+            case 'note':
+                return generateNoteTemplate(subject);
+            case 'report':
+                return generateReportTemplate(subject);
+            case 'diary':
+                return generateDiaryTemplate(subject);
+            case 'normal':
+            default:
+                return generateNormalTemplate();
+        }
+    }
+
+    /**
+     * 根据模板类型创建新文档
+     * @param {string} templateType - 模板类型
+     */
+    function createNewDocWithTemplate(templateType) {
+        saveFocusEditorContent();
+        const room = studyRoomState();
+        const template = docTemplates[templateType] || docTemplates.normal;
+        const content = generateDocContent(templateType, room.subject);
+        const newDoc = {
+            id: `doc-${Date.now()}`,
+            title: template.title,
+            content: content,
+            subject: room.subject || "",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tags: [],
+            version: 1,
+            templateType: templateType
+        };
+        room.editorDocs = room.editorDocs || [];
+        room.editorDocs.unshift(newDoc);
+        room.focusCurrentDocId = newDoc.id;
+        saveStudyRoom();
+        render();
+        showFocusToast(`已创建${template.name}`);
+    }
+
+    function generateStudyDocTemplate(subject) {
+        return generateStructuredTemplate(subject);
     }
 
     function studyRoomState() {
@@ -3126,9 +3322,22 @@
                 <div class="sidebar-section">
                     <div class="section-header">
                         <span class="section-title">${icon("file-text", 16)}学习心得</span>
-                        <button class="new-doc-btn" data-focus-new-doc title="新建文档">
-                            ${icon("plus", 14)}
-                        </button>
+                        <div class="new-doc-dropdown">
+                            <button class="new-doc-btn" data-focus-new-doc title="新建文档">
+                                ${icon("plus", 14)}
+                            </button>
+                            <div class="new-doc-menu" data-focus-doc-menu>
+                                ${Object.entries(docTemplates).map(([key, template]) => `
+                                    <div class="doc-template-item" data-focus-doc-template="${key}">
+                                        ${icon(template.icon, 16)}
+                                        <div class="template-info">
+                                            <div class="template-name">${template.name}</div>
+                                            <div class="template-desc">${template.description}</div>
+                                        </div>
+                                    </div>
+                                `).join("")}
+                            </div>
+                        </div>
                     </div>
                     <div class="doc-list">
                         ${docList || '<div class="empty-docs">暂无文档，点击上方按钮创建</div>'}
@@ -3163,6 +3372,26 @@
                             ${icon("check", 14)}保存
                         </button>
                     </div>
+                </div>
+                <!-- 讯飞星火AI工具栏 - 提供AI扩写和美化功能 -->
+                <div class="ai-toolbar" data-ai-toolbar>
+                    <div class="ai-toolbar-brand">
+                        ${icon("xfyun", 22)}
+                        <span class="ai-brand-name">讯飞星火</span>
+                        <span class="ai-brand-tag">AI智能助手</span>
+                    </div>
+                    <div class="ai-toolbar-divider"></div>
+                    <div class="ai-toolbar-actions">
+                        <button class="ai-action-btn expand-btn" data-ai-expand title="AI扩写 - 智能丰富内容细节">
+                            ${icon("sparkles", 18)}
+                            <span>AI扩写</span>
+                        </button>
+                        <button class="ai-action-btn polish-btn" data-ai-polish title="AI美化 - 优化语言表达">
+                            ${icon("palette", 18)}
+                            <span>AI美化</span>
+                        </button>
+                    </div>
+                    <div class="ai-toolbar-status" data-ai-status></div>
                 </div>
                 <div class="study-focus-toolbar" data-focus-toolbar>
                     <div class="tb-group">
@@ -13102,20 +13331,139 @@ ${content}
             })
         );
 
-        // 新建文档
-        document.querySelectorAll("[data-focus-new-doc]").forEach(btn =>
-            btn.addEventListener("click", () => {
-                saveFocusEditorContent();
-                const room = studyRoomState();
-                const newDoc = createNewStudyDoc(room.subject);
-                room.editorDocs = room.editorDocs || [];
-                room.editorDocs.unshift(newDoc);
-                room.focusCurrentDocId = newDoc.id;
-                saveStudyRoom();
-                render();
-                showFocusToast("已创建新文档");
+        // ===== 讯飞星火AI功能 =====
+        // AI扩写功能 - 使用统一的request函数处理API调用
+        document.querySelectorAll("[data-ai-expand]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const canvas = document.querySelector("[data-focus-canvas]");
+                const statusEl = document.querySelector("[data-ai-status]");
+                if (!canvas) return;
+                
+                const content = canvas.innerText.trim();
+                if (!content) {
+                    showFocusToast("请先输入内容再进行AI扩写");
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.style.opacity = "0.6";
+                statusEl.textContent = "扩写中...";
+                statusEl.className = "ai-toolbar-status loading";
+
+                try {
+                    // 使用项目统一的request函数，自动处理cookie认证
+                    const result = await request("/api/app/ai/expand", {
+                        method: "POST",
+                        body: JSON.stringify({ text: content })
+                    });
+
+                    if (result.success && result.data?.expanded) {
+                        canvas.innerHTML = result.data.expanded.replace(/\n/g, "<br>");
+                        statusEl.textContent = "扩写完成";
+                        statusEl.className = "ai-toolbar-status success";
+                        showFocusToast("AI扩写成功！");
+                    } else {
+                        statusEl.textContent = "扩写失败";
+                        statusEl.className = "ai-toolbar-status error";
+                        showFocusToast(result.message || "扩写失败，请重试");
+                    }
+                } catch (error) {
+                    statusEl.textContent = "连接失败";
+                    statusEl.className = "ai-toolbar-status error";
+                    showFocusToast("AI服务连接失败，请检查网络");
+                } finally {
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                    setTimeout(() => {
+                        statusEl.textContent = "";
+                        statusEl.className = "ai-toolbar-status";
+                    }, 3000);
+                }
             })
         );
+
+        // AI美化功能 - 使用统一的request函数处理API调用
+        document.querySelectorAll("[data-ai-polish]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const canvas = document.querySelector("[data-focus-canvas]");
+                const statusEl = document.querySelector("[data-ai-status]");
+                if (!canvas) return;
+                
+                const content = canvas.innerText.trim();
+                if (!content) {
+                    showFocusToast("请先输入内容再进行AI美化");
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.style.opacity = "0.6";
+                statusEl.textContent = "美化中...";
+                statusEl.className = "ai-toolbar-status loading";
+
+                try {
+                    // 使用项目统一的request函数，自动处理cookie认证
+                    const result = await request("/api/app/ai/polish", {
+                        method: "POST",
+                        body: JSON.stringify({ text: content })
+                    });
+
+                    if (result.success && result.data?.polished) {
+                        canvas.innerHTML = result.data.polished.replace(/\n/g, "<br>");
+                        statusEl.textContent = "美化完成";
+                        statusEl.className = "ai-toolbar-status success";
+                        showFocusToast("AI美化成功！");
+                    } else {
+                        statusEl.textContent = "美化失败";
+                        statusEl.className = "ai-toolbar-status error";
+                        showFocusToast(result.message || "美化失败，请重试");
+                    }
+                } catch (error) {
+                    statusEl.textContent = "连接失败";
+                    statusEl.className = "ai-toolbar-status error";
+                    showFocusToast("AI服务连接失败，请检查网络");
+                } finally {
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                    setTimeout(() => {
+                        statusEl.textContent = "";
+                        statusEl.className = "ai-toolbar-status";
+                    }, 3000);
+                }
+            })
+        );
+
+        // 新建文档 - 切换模板选择菜单（使用事件委托，支持动态生成的元素）
+        // 使用标志防止重复添加事件监听器
+        if (!window._docTemplateEventBound) {
+            window._docTemplateEventBound = true;
+            document.addEventListener("click", (e) => {
+                const newDocBtn = e.target.closest("[data-focus-new-doc]");
+                if (newDocBtn) {
+                    const menu = newDocBtn.parentElement.querySelector("[data-focus-doc-menu]");
+                    if (menu) {
+                        menu.classList.toggle("show");
+                    }
+                    return;
+                }
+
+                const templateItem = e.target.closest("[data-focus-doc-template]");
+                if (templateItem) {
+                    const templateType = templateItem.dataset.focusDocTemplate;
+                    createNewDocWithTemplate(templateType);
+                    const menu = document.querySelector("[data-focus-doc-menu]");
+                    if (menu) {
+                        menu.classList.remove("show");
+                    }
+                    return;
+                }
+
+                const menu = document.querySelector("[data-focus-doc-menu]");
+                const dropdown = document.querySelector(".new-doc-dropdown");
+                if (menu && dropdown && !dropdown.contains(e.target)) {
+                    menu.classList.remove("show");
+                }
+            });
+        }
 
         // 选择文档
         document.querySelectorAll("[data-focus-doc-id]").forEach(el =>
