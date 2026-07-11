@@ -8445,6 +8445,11 @@
         const statusIcon = { priority: "bolt", learning: "play", review: "refresh", done: "check" };
         if (!hasAgentPath) {
             const profile = center.profileContext || {};
+            const loop = state.data.learningLoop || {};
+            const loopBanner =
+                loop.stage === "needs_clarification"
+                    ? `<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="pill warn">目标需更具体</span><h2 class="section-title">${icon("target", 18)}请补充知识点</h2></div><p>${escapeHtml(loop.message || "请输入更具体的目标，例如：数据结构、哈希表、操作系统。")}</p></section>`
+                    : learningLoopDiagnosisCard(loop);
             return `<main class="page path-page agent-path-empty-page">
                 <section class="hero-row">
                     <div class="hero">
@@ -8463,6 +8468,7 @@
                         <p>每日可用 ${escapeHtml(String(profile.dailyMinutes || "--"))} 分钟 · 专注时长 ${escapeHtml(String(profile.attentionSpan || "--"))} 分钟</p>
                     </article>
                 </section>
+                ${loopBanner}
                 <section class="path-control card agent-only-control">
                     <div><label>学习目标</label><input data-path-goal value="${escapeHtml(state.data.pathGoal)}" placeholder="例如：两周掌握数据结构基础"></div>
                     <div><label>学科范围</label><select data-path-subject><option value="all">由 Agent 判断</option></select></div>
@@ -13880,7 +13886,11 @@ ${content}
                     toast(
                         result.stage === "diagnosis_required"
                             ? "当前证据不足，请先完成 5 道诊断题"
-                            : `Agent 已生成 ${result.generated || 0} 天学习计划`
+                            : result.stage === "needs_clarification"
+                              ? result.message || "请输入更具体的知识点目标"
+                              : result.stage === "plan_ready"
+                                ? `Agent 已生成 ${result.generated || result.plan?.days?.length || 0} 天学习计划`
+                                : result.message || "路径已更新"
                     );
                 } catch (error) {
                     toast(error.message);
@@ -15486,8 +15496,12 @@ zhaoliu,赵六"></textarea>
                     render();
                     toast(
                         result.stage === "diagnosis_required"
-                            ? "需要先完成目标知识点诊断"
-                            : `已生成 ${result.generated} 天学习计划`
+                            ? "需要先完成目标知识点诊断（见下方题目）"
+                            : result.stage === "needs_clarification"
+                              ? result.message || "请输入更具体的知识点目标"
+                              : result.stage === "plan_ready"
+                                ? `已生成 ${result.generated || result.plan?.days?.length || 0} 天学习计划`
+                                : result.message || "路径已更新"
                     );
                 } catch (error) {
                     toast(error.message);

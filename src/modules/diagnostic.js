@@ -41,6 +41,42 @@ router.get("/questionnaire", authenticateJWT, async (req, res) => {
     }
 });
 
+// 对话式六维画像（与 DiagnosticEngine 维度对齐）
+const { ConversationalProfileEngine } = require("../core/ConversationalProfileEngine");
+const conversationalProfileEngine = new ConversationalProfileEngine(pool);
+
+router.post("/conversation/turn", authenticateJWT, async (req, res) => {
+    try {
+        const userId = getUserId(req);
+        const message = req.body?.message || req.body?.content || "";
+        const confirm = Boolean(req.body?.confirm);
+        const result = await conversationalProfileEngine.processTurn(userId, message, { confirm });
+        res.json(result);
+    } catch (error) {
+        console.error("对话画像失败:", error);
+        res.status(500).json({ success: false, message: error.message || "对话画像失败" });
+    }
+});
+
+router.get("/conversation/state", authenticateJWT, async (req, res) => {
+    try {
+        const userId = getUserId(req);
+        const session = conversationalProfileEngine.getSession(userId);
+        res.json({
+            success: true,
+            dimensions: session.dimensions,
+            preferences: session.preferences,
+            turns: session.turns.length,
+            nextQuestion: require("../core/ConversationalProfileEngine").SLOT_QUESTIONS[
+                Math.min(session.stepIndex, 5)
+            ].prompt
+        });
+    } catch (error) {
+        console.error("读取对话画像失败:", error);
+        res.status(500).json({ success: false, message: "服务器错误" });
+    }
+});
+
 router.post("/submit", authenticateJWT, async (req, res) => {
     try {
         const userId = getUserId(req);

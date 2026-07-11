@@ -49,25 +49,28 @@ function parseOptions(value) {
 }
 
 async function tableExists(tableName) {
-    const [rows] = await pool.query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        [tableName]
-    );
-    return rows.length > 0;
+    try {
+        const [rows] = await pool.query("SHOW TABLES LIKE ?", [tableName]);
+        return rows.length > 0;
+    } catch {
+        return false;
+    }
 }
 
 async function columnExists(tableName, columnName) {
-    const [rows] = await pool.query(`PRAGMA table_info("${tableName}")`);
-    return rows.some(row => row.name === columnName);
+    try {
+        const [rows] = await pool.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [columnName]);
+        return rows.length > 0;
+    } catch {
+        return false;
+    }
 }
 
 async function ensureColumn(tableName, columnName, ddl) {
     try {
-        const [rows] = await pool.query(`PRAGMA table_info("${tableName}")`);
-        const exists = rows.some(row => row.name === columnName || row.name?.toLowerCase() === columnName.toLowerCase());
-        if (!exists) {
-            const cleanDdl = ddl.replace(/\s+AFTER\s+\w+/gi, '');
-            await pool.query(`ALTER TABLE "${tableName}" ADD COLUMN ${cleanDdl}`);
+        if (!(await columnExists(tableName, columnName))) {
+            const cleanDdl = ddl.replace(/\s+AFTER\s+\w+/gi, "");
+            await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN ${cleanDdl}`);
         }
     } catch (e) {
         // ignore - column may already exist or table may not exist
@@ -78,45 +81,47 @@ async function ensureNotesSchema() {
     if (!(await tableExists("notes"))) {
         await pool.query(`
             CREATE TABLE notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                knowledge_id INTEGER NULL,
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                knowledge_id INT NULL,
                 title VARCHAR(220) NOT NULL,
                 body TEXT,
                 subject VARCHAR(80) NULL,
                 source_type VARCHAR(40) DEFAULT 'manual',
-                source_id INTEGER NULL,
+                source_id INT NULL,
                 tags_json TEXT NULL,
                 review_status VARCHAR(40) DEFAULT 'new',
-                next_review_at TEXT NULL,
-                updated_at TEXT DEFAULT (DATETIME('now')),
-                created_at TEXT DEFAULT (DATETIME('now'))
-            )
+                next_review_at DATETIME NULL,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_notes_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
     } else {
         await ensureColumn("notes", "subject", "subject VARCHAR(80) NULL");
         await ensureColumn("notes", "source_type", "source_type VARCHAR(40) DEFAULT 'manual'");
-        await ensureColumn("notes", "source_id", "source_id INTEGER NULL");
+        await ensureColumn("notes", "source_id", "source_id INT NULL");
         await ensureColumn("notes", "tags_json", "tags_json TEXT NULL");
         await ensureColumn("notes", "review_status", "review_status VARCHAR(40) DEFAULT 'new'");
-        await ensureColumn("notes", "next_review_at", "next_review_at TEXT NULL");
-        await ensureColumn("notes", "created_at", "created_at TEXT DEFAULT (DATETIME('now'))");
+        await ensureColumn("notes", "next_review_at", "next_review_at DATETIME NULL");
+        await ensureColumn("notes", "created_at", "created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP");
     }
 
     if (!(await tableExists("note_cards"))) {
         await pool.query(`
             CREATE TABLE note_cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                note_id INTEGER NULL,
-                knowledge_id INTEGER NULL,
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                note_id INT NULL,
+                knowledge_id INT NULL,
                 title VARCHAR(220) NOT NULL,
                 card_type VARCHAR(80) DEFAULT 'concept',
                 content_json TEXT,
                 backlinks_json TEXT,
-                mastery_signal INTEGER DEFAULT 50,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
+                mastery_signal INT DEFAULT 50,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_note_cards_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
     }
 }
@@ -2159,12 +2164,13 @@ router.post("/path/generate", async (req, res, next) => {
             });
         }
 
-        // 2. 检查诊断状态
-        const [[mastery]] = await pool.query(
+        // 2. 检查诊断状态（演示模式可跳过，直接生成计划）
+        const [[masteryRow]] = await pool.query(
             "SELECT mastery, confidence, evidence_count, trend FROM student_knowledge WHERE user_id = ? AND node_id = ?",
             [userId, knowledge.id]
         );
-        if (!mastery || Number(mastery.evidence_count) < 5) {
+        const demoMode = Boolean(config.app?.demoMode);
+        if (!demoMode && (!masteryRow || Number(masteryRow.evidence_count) < 5)) {
             const questions = await learningLoop.getQuestions(knowledge.id, 5);
             return res.json({
                 success: true,
@@ -2172,10 +2178,30 @@ router.post("/path/generate", async (req, res, next) => {
                 knowledge,
                 questions,
                 missingInputs: ["knowledge_mastery"],
-                confidence: mastery ? Number(mastery.confidence) : 0.2,
+                confidence: masteryRow ? Number(masteryRow.confidence) : 0.2,
                 message: `需要先完成 ${questions.length} 道 ${knowledge.title} 诊断题，再生成真实计划。`
             });
         }
+        // 演示模式：若无掌握度记录，写入基线，便于直接出计划
+        if (demoMode && (!masteryRow || Number(masteryRow.evidence_count) < 5)) {
+            await pool.query(
+                `INSERT INTO student_knowledge
+                    (user_id, node_id, mastery, confidence, evidence_count, trend, last_practice_at)
+                 VALUES (?, ?, 55, 0.45, 5, 'demo_baseline', NOW())
+                 ON DUPLICATE KEY UPDATE
+                    mastery = GREATEST(mastery, 55),
+                    confidence = GREATEST(confidence, 0.45),
+                    evidence_count = GREATEST(evidence_count, 5),
+                    trend = 'demo_baseline',
+                    last_practice_at = NOW()`,
+                [userId, knowledge.id]
+            );
+        }
+        const [[masteryReady]] = await pool.query(
+            "SELECT mastery, confidence, evidence_count, trend FROM student_knowledge WHERE user_id = ? AND node_id = ?",
+            [userId, knowledge.id]
+        );
+        const mastery = masteryReady || masteryRow || { mastery: 55, confidence: 0.45, evidence_count: 5 };
 
         // 3. 调用 AgenticLearningAgent + 星火大模型生成学习路径（带超时保护）
         const AgenticLearningAgent = require("../core/AgenticLearningAgent");
@@ -2205,9 +2231,9 @@ router.post("/path/generate", async (req, res, next) => {
             console.warn("AIPathGenerator Agent 路径生成失败，降级到规则:", pathErr.message);
         }
 
-        // 5. 写入数据库并返回
+        // 5. 写入数据库并返回（Agent 失败时用知识点兜底生成 3 天计划，避免空计划）
         const durationDays = Math.max(1, Math.min(7, Number(req.body?.durationDays || 3)));
-        const days = (agentPlan?.days || []).map((d, i) => ({
+        let days = (agentPlan?.days || []).map((d, i) => ({
             day: d.day || i + 1,
             title: d.focus || d.title || `第 ${i + 1} 天`,
             objective: d.goal || d.objective || "",
@@ -2219,12 +2245,31 @@ router.post("/path/generate", async (req, res, next) => {
                 status: "pending"
             }
         }));
+        if (!days.length) {
+            const templates = [
+                { title: `理解「${knowledge.title}」核心概念`, minutes: 25, icon: "book" },
+                { title: `练习「${knowledge.title}」典型例题`, minutes: 30, icon: "exam" },
+                { title: `复盘「${knowledge.title}」并整理笔记`, minutes: 20, icon: "pen" }
+            ];
+            days = templates.slice(0, durationDays).map((item, i) => ({
+                day: i + 1,
+                title: item.title,
+                objective: `围绕 ${knowledge.title} 完成第 ${i + 1} 天任务`,
+                task: {
+                    title: item.title,
+                    subtitle: `${knowledge.subject} · 规则兜底计划`,
+                    icon: item.icon,
+                    minutes: item.minutes,
+                    status: "pending"
+                }
+            }));
+        }
 
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
             await connection.query(
-                "DELETE FROM study_tasks WHERE user_id = ? AND source = 'agent-learning-loop' AND task_date >= CURDATE()",
+                "DELETE FROM study_tasks WHERE user_id = ? AND source IN ('agent-learning-loop', 'agent-runtime') AND task_date >= CURDATE()",
                 [userId]
             );
             for (const day of days) {
@@ -2241,7 +2286,7 @@ router.post("/path/generate", async (req, res, next) => {
                         day.task.subtitle,
                         day.task.icon,
                         day.task.minutes,
-                        day.day - 1,
+                        Math.max(0, Number(day.day || 1) - 1),
                         day.day
                     ]
                 );
@@ -2263,12 +2308,12 @@ router.post("/path/generate", async (req, res, next) => {
                 mastery: Number(mastery.mastery),
                 confidence: Number(mastery.confidence || 0.5),
                 days,
-                summary: agentPlan?.summary || "",
-                strategy: agentPlan?.strategy || "agent-driven",
+                summary: agentPlan?.summary || `已为「${knowledge.title}」生成 ${days.length} 天学习计划`,
+                strategy: agentPlan?.strategy || (agentPlan ? "agent-driven" : "rule-fallback"),
                 pathResult: pathResult || null,
                 generatedAt: new Date().toISOString()
             },
-            message: `Agent + 星火大模型已生成 ${days.length} 天个性化学习计划。`
+            message: `已生成 ${days.length} 天个性化学习计划（${knowledge.title}）。`
         });
     } catch (error) {
         console.error("Agent 学习路径生成失败，降级到规则引擎:", error.message);

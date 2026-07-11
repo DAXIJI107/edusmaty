@@ -106,6 +106,42 @@ router.post("/ingest-public", authenticateJWT, async (req, res) => {
     }
 });
 
+// 用户资料入库工作台：文本/Markdown → 分块 → rag_*（供检索与资源生成溯源）
+router.post("/ingest-workspace", authenticateJWT, async (req, res) => {
+    try {
+        const { ingestWorkspaceDocument } = require("../core/WorkspaceIngestor");
+        const result = await ingestWorkspaceDocument(pool, {
+            userId: req.user.id,
+            title: req.body?.title,
+            filename: req.body?.filename,
+            content: req.body?.content,
+            subject: req.body?.subject,
+            knowledgePoint: req.body?.knowledgePoint,
+            course: req.body?.course
+        });
+        res.json(result);
+    } catch (error) {
+        console.error("工作台资料入库失败:", error);
+        res.status(400).json({ success: false, message: error.message || "资料入库失败" });
+    }
+});
+
+router.post("/quality-check", authenticateJWT, async (req, res) => {
+    try {
+        const { evaluateResource } = require("../core/ResourceQualityGate");
+        const resource = req.body?.resource || {
+            title: req.body?.title || "未命名",
+            content: req.body?.content || "",
+            citations: req.body?.citations || []
+        };
+        const quality = evaluateResource(resource, req.body?.subject || "计算机科学");
+        res.json({ success: true, quality });
+    } catch (error) {
+        console.error("资源质检失败:", error);
+        res.status(500).json({ success: false, message: error.message || "质检失败" });
+    }
+});
+
 async function handleOverview(req, res) {
     try {
         await ensureRagData(pool);

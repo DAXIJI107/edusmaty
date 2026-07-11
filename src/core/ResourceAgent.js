@@ -1,10 +1,14 @@
 // core/ResourceAgent.js
-// 资源生成智能体 - 支持多种类型的个性化学习资源生成
+// 资源生成智能体 - 支持多种类型的个性化学习资源生成（含 RAG 溯源与质检）
+
+const RagSearchService = require("./RagSearchService");
+const { attachQuality } = require("./ResourceQualityGate");
 
 class ResourceAgent {
     constructor(userId, pool) {
         this.userId = userId;
         this.pool = pool;
+        this.ragSearch = new RagSearchService(pool);
         this.resourceTypes = {
             document: this.generateDocument.bind(this),
             ppt: this.generatePptOutline.bind(this),
@@ -12,7 +16,8 @@ class ResourceAgent {
             video: this.generateVideo.bind(this),
             mindmap: this.generateMindMap.bind(this),
             reading: this.generateReading.bind(this),
-            practice: this.generatePracticeCase.bind(this)
+            practice: this.generatePracticeCase.bind(this),
+            micro_lesson: this.generateMicroLesson.bind(this)
         };
     }
 
@@ -41,8 +46,42 @@ class ResourceAgent {
             { id: "video", name: "教学视频", description: "知识点讲解视频推荐" },
             { id: "mindmap", name: "思维导图", description: "知识结构思维导图" },
             { id: "reading", name: "拓展阅读", description: "相关文献和扩展资料" },
-            { id: "practice", name: "实操案例", description: "代码实操和实践项目" }
+            { id: "practice", name: "实操案例", description: "代码实操和实践项目" },
+            { id: "micro_lesson", name: "微课脚本", description: "3-8分钟讲解脚本，可接TTS/数字人" }
         ];
+    }
+
+    async collectCitations(knowledgePoint, limit = 4) {
+        try {
+            const result = await this.ragSearch.search({
+                query: knowledgePoint,
+                userId: this.userId,
+                limit
+            });
+            const hits = result?.citations || result?.evidenceChain || [];
+            return hits.slice(0, limit).map((item, index) => ({
+                id: index + 1,
+                chunkId: item.chunkId || item.chunk_id || null,
+                title: item.title || item.knowledgePoint || knowledgePoint,
+                knowledgePoint: item.knowledgePoint || item.knowledge_point || knowledgePoint,
+                source: item.source?.name || item.course || "knowledge_base",
+                excerpt: String(item.snippet || item.chunk_text || item.excerpt || "").slice(0, 180),
+                score: item.score || item.relevance || null
+            }));
+        } catch (error) {
+            console.warn("资源生成引用检索降级:", error.message);
+            return [];
+        }
+    }
+
+    formatCitationAppendix(citations = []) {
+        if (!citations.length) {
+            return "\n\n## 引用与溯源\n\n暂无检索到知识库片段。建议先在「资料入库」上传讲义后再生成，以降低幻觉风险。\n";
+        }
+        const lines = citations.map(
+            c => `- [${c.id}] ${c.title}（${c.source}）: ${c.excerpt || "（无摘录）"}`
+        );
+        return `\n\n## 引用与溯源\n\n${lines.join("\n")}\n`;
     }
 
     async generateResources(params) {
@@ -53,12 +92,32 @@ class ResourceAgent {
         }
 
         const requestedTypes = types.length > 0 ? types : Object.keys(this.resourceTypes);
+        let sharedCitations = await this.collectCitations(knowledgePoint, 4);
+        if (!sharedCitations.length) {
+            const node = await this.findKnowledge(knowledgePoint);
+            sharedCitations = [
+                {
+                    id: 1,
+                    chunkId: null,
+                    title: node.name || knowledgePoint,
+                    knowledgePoint: node.name || knowledgePoint,
+                    source: node.schema === "fallback" ? "generated_knowledge_card" : "knowledge_nodes",
+                    excerpt: String(node.description || `${knowledgePoint}的核心概念、应用场景与常见误区。`).slice(
+                        0,
+                        180
+                    ),
+                    score: 1
+                }
+            ];
+        }
         const results = [];
 
         for (const type of requestedTypes) {
             if (this.resourceTypes[type]) {
                 try {
-                    const resource = await this.resourceTypes[type](knowledgePoint, profile);
+                    let resource = await this.resourceTypes[type](knowledgePoint, profile, sharedCitations);
+                    if (!resource.citations) resource.citations = sharedCitations;
+                    resource = attachQuality(resource, profile.basicInfo?.major || this.inferSubject(knowledgePoint));
                     results.push(resource);
                 } catch (error) {
                     console.error(`生成${type}资源失败:`, error);
@@ -74,7 +133,9 @@ class ResourceAgent {
         return {
             success: true,
             knowledgePoint: knowledgePoint,
-            resources: results
+            citationCount: sharedCitations.length,
+            resources: results,
+            factoryVersion: "p0-grounded-v1"
         };
     }
 
@@ -131,37 +192,43 @@ class ResourceAgent {
         return "计算机科学";
     }
 
-    async generateDocument(knowledgePoint, profile) {
+    async generateDocument(knowledgePoint, profile, citations = []) {
         const node = await this.findKnowledge(knowledgePoint);
 
-        const cognitiveStyle = profile.cognitiveStyle?.type || "visual";
+        const cognitiveStyle = profile.cognitiveStyle?.type || profile.preferences?.cognitiveStyle || "visual";
         const depth = profile.learningPatterns?.学习速度 === "slow" ? "详细版" : "标准版";
+        const grounded = citations[0]?.excerpt || node?.description || "待补充详细说明";
 
         return {
             type: "document",
             title: `${knowledgePoint}知识点详解${depth}`,
             description: node?.description || `${knowledgePoint}的核心概念与应用`,
-            content: await this.generateDocumentContent(knowledgePoint, node, cognitiveStyle),
+            content: await this.generateDocumentContent(knowledgePoint, node, cognitiveStyle, citations, grounded),
             format: "markdown",
             estimatedReadingTime: cognitiveStyle === "slow" ? "15分钟" : "8分钟",
-            relatedKnowledge: await this.getRelatedKnowledge(knowledgePoint)
+            relatedKnowledge: await this.getRelatedKnowledge(knowledgePoint),
+            citations
         };
     }
 
-    async generateDocumentContent(knowledgePoint, node, cognitiveStyle) {
+    async generateDocumentContent(knowledgePoint, node, cognitiveStyle, citations = [], grounded = "") {
+        const evidence = citations
+            .slice(0, 3)
+            .map(c => `> [${c.id}] ${c.excerpt}`)
+            .join("\n\n");
         const content =
             `# ${knowledgePoint}\n\n` +
             `## 一、核心概念\n\n` +
-            `${node?.description || "待补充详细说明"}\n\n` +
+            `${grounded}\n\n` +
+            (evidence ? `### 知识库证据\n\n${evidence}\n\n` : "") +
             `## 二、关键知识点\n\n` +
             `- 定义与内涵\n` +
             `- 核心原理\n` +
             `- 应用场景\n` +
             `- 常见误区\n\n` +
             `## 三、学习建议\n\n` +
-            `${this.getLearningTips(cognitiveStyle)}\n\n` +
-            `## 四、拓展阅读\n\n` +
-            `推荐参考教材和学术论文...`;
+            `${this.getLearningTips(cognitiveStyle)}\n` +
+            this.formatCitationAppendix(citations);
 
         return content;
     }
@@ -365,27 +432,34 @@ class ResourceAgent {
         };
     }
 
-    async generateMindMap(knowledgePoint, profile) {
+    async generateMindMap(knowledgePoint, profile, citations = []) {
         const node = await this.findKnowledge(knowledgePoint);
+        const related = await this.getRelatedKnowledgeNames(knowledgePoint);
+        const evidenceNodes = citations
+            .map(c => (c.knowledgePoint || "").trim())
+            .filter(Boolean)
+            .slice(0, 4);
 
         const mindmap = {
             root: knowledgePoint,
             children: [
                 {
                     name: "核心概念",
-                    children: ["定义", "特点", "原理"]
+                    children: ["定义", "特点", "原理"].concat(evidenceNodes.slice(0, 1))
                 },
                 {
                     name: "相关知识点",
-                    children: await this.getRelatedKnowledgeNames(knowledgePoint)
+                    children: related.length ? related : evidenceNodes
                 },
                 {
-                    name: "应用场景",
-                    children: ["场景1", "场景2", "场景3"]
+                    name: "证据来源",
+                    children: citations.length
+                        ? citations.map(c => `[${c.id}] ${c.source || "知识库"}`)
+                        : ["待补充资料入库"]
                 },
                 {
                     name: "学习路径",
-                    children: ["基础", "进阶", "实践"]
+                    children: ["基础", "进阶", "实践", "复习"]
                 }
             ]
         };
@@ -393,9 +467,42 @@ class ResourceAgent {
         return {
             type: "mindmap",
             title: `${knowledgePoint}知识结构图`,
-            description: "基于知识点关联自动生成的学习路径图",
+            description: "基于知识点关联与知识库证据生成的学习路径图",
             mindmap: mindmap,
-            nodeId: node?.id
+            nodeId: node?.id,
+            citations,
+            content: `思维导图根节点：${knowledgePoint}\n关联：${related.join("、")}`
+        };
+    }
+
+    async generateMicroLesson(knowledgePoint, profile, citations = []) {
+        const node = await this.findKnowledge(knowledgePoint);
+        const style = profile.preferences?.cognitiveStyle || profile.cognitiveStyle?.type || "visual";
+        const hook = citations[0]?.excerpt || node?.description || `${knowledgePoint}的核心思想`;
+        const script =
+            `# 微课脚本：${knowledgePoint}\n\n` +
+            `## 0. 开场（20秒）\n` +
+            `今天用 5 分钟讲清「${knowledgePoint}」：它是什么、为什么重要、怎么用。\n\n` +
+            `## 1. 概念锚定（90秒）\n` +
+            `${hook}\n\n` +
+            `## 2. 最小例子（120秒）\n` +
+            `给出一个最小可运行/可推演例子，并指出最容易错的一步。\n\n` +
+            `## 3. 对照检查（60秒）\n` +
+            `请你用一句话复述定义，并判断一个正例和一个反例。\n\n` +
+            `## 4. 收束与作业（40秒）\n` +
+            `课后完成 1 道练习 + 1 张主动回忆卡。学习风格建议：${this.getLearningTips(style)}\n` +
+            this.formatCitationAppendix(citations);
+
+        return {
+            type: "micro_lesson",
+            title: `${knowledgePoint}微课（5分钟）`,
+            description: "可直接用于 TTS / 数字人讲解的结构化脚本",
+            script,
+            content: script,
+            format: "lesson_script",
+            estimatedDuration: "5分钟",
+            ttsReady: true,
+            citations
         };
     }
 
@@ -458,13 +565,14 @@ class ResourceAgent {
         };
     }
 
-    async generatePracticeCase(knowledgePoint, profile) {
+    async generatePracticeCase(knowledgePoint, profile, citations = []) {
         const node = await this.findKnowledge(knowledgePoint);
+        const evidence = citations[0]?.excerpt || node?.description || knowledgePoint;
 
         let cases = [];
 
         if (
-            /programming|程序|编程|Python|JavaScript|Java|代码|函数|循环/i.test(
+            /programming|程序|编程|Python|JavaScript|Java|代码|函数|循环|算法|数据结构/i.test(
                 `${node?.subject || ""} ${knowledgePoint}`
             )
         ) {
@@ -474,14 +582,15 @@ class ResourceAgent {
                     type: "代码示例",
                     difficulty: "easy",
                     estimatedTime: "30分钟",
-                    content: `# ${knowledgePoint}实践案例\n\n## 目标\n学习${knowledgePoint}的基本用法\n\n## 步骤\n1. 环境准备\n2. 基础实现\n3. 进阶优化\n\n## 代码框架\n\`\`\`python\n# 在这里编写代码\n\`\`\``
+                    content:
+                        `# ${knowledgePoint}实践案例\n\n## 目标\n基于证据理解并实现最小版本：\n> ${evidence}\n\n## 步骤\n1. 写出输入/输出约定\n2. 实现核心函数\n3. 补 2 个边界测试\n\n## 代码框架\n\`\`\`python\ndef solve(data):\n    """实现 ${knowledgePoint} 的最小可运行版本"""\n    # TODO: 根据知识库证据完成实现\n    return data\n\nif __name__ == "__main__":\n    assert solve([1, 2, 3]) is not None\n    print("ok")\n\`\`\``
                 },
                 {
                     title: `${knowledgePoint}综合项目`,
                     type: "项目实战",
                     difficulty: "hard",
                     estimatedTime: "2小时",
-                    content: `# ${knowledgePoint}综合项目\n\n## 项目描述\n基于${knowledgePoint}实现完整功能\n\n## 需求分析\n...`
+                    content: `# ${knowledgePoint}综合项目\n\n## 项目描述\n将「${knowledgePoint}」嵌入一个小工具（CLI/API/可视化其一）。\n\n## 验收\n- 有 README\n- 有测试\n- 能解释与知识库证据的对应关系`
                 }
             ];
         } else {
@@ -491,14 +600,14 @@ class ResourceAgent {
                     type: "例题解析",
                     difficulty: "medium",
                     estimatedTime: "15分钟",
-                    content: `# ${knowledgePoint}例题详解\n\n## 题目描述\n...\n\n## 解题思路\n...\n\n## 答案解析\n...`
+                    content: `# ${knowledgePoint}例题详解\n\n## 背景证据\n> ${evidence}\n\n## 题目\n请用自己的话解释该概念，并给出一个正例与反例。\n\n## 评分点\n定义准确、边界清楚、能迁移到新场景。`
                 },
                 {
                     title: `${knowledgePoint}实验报告`,
                     type: "实验指导",
                     difficulty: "hard",
                     estimatedTime: "1小时",
-                    content: `# ${knowledgePoint}实验报告\n\n## 实验目的\n...\n\n## 实验步骤\n...\n\n## 数据记录\n...`
+                    content: `# ${knowledgePoint}实验报告\n\n## 实验目的\n验证核心性质并记录失败案例。\n\n## 实验步骤\n1. 复述定义\n2. 设计对照实验\n3. 记录结果与误区`
                 }
             ];
         }
@@ -508,7 +617,9 @@ class ResourceAgent {
             title: `${knowledgePoint}实操案例`,
             description: `为您推荐${cases.length}个实践项目`,
             cases: cases,
-            subject: node?.subject
+            subject: node?.subject,
+            citations,
+            content: cases.map(c => c.content).join("\n\n")
         };
     }
 

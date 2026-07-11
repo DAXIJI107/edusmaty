@@ -84,7 +84,20 @@ const COMPUTER_TOPICS = [
 async function getWikipediaTopics() {
     const topics = COMPUTER_TOPICS;
     const rows = [];
+    // 本地环境默认走兜底，避免外网 Wikipedia 超时阻塞首页所需核心表重建
+    const useNetwork = String(process.env.REBUILD_FETCH_WIKI || "").toLowerCase() === "true";
     for (const [title, page, subject] of topics) {
+        if (!useNetwork) {
+            rows.push({
+                title,
+                subject,
+                summary: `${title} 是计算机学习路径中的核心知识点，适合通过概念解释、代码实践、典型题和项目任务形成闭环。`,
+                sourceName: "本地计算机知识点兜底",
+                sourceUrl: "",
+                mastery: Math.floor(42 + Math.random() * 42)
+            });
+            continue;
+        }
         try {
             const url = `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page)}`;
             const data = await fetchJson(url);
@@ -108,7 +121,7 @@ async function getWikipediaTopics() {
             });
         }
     }
-    sourceNotes.push("中文维基百科 REST API page summary");
+    sourceNotes.push(useNetwork ? "中文维基百科 REST API page summary" : "本地计算机知识点兜底");
     return rows;
 }
 
