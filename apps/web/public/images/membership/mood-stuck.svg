@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Stuck mood sticker">
+  <defs>
+    <linearGradient id="bg" x1="24" x2="154" y1="22" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE5E8"/>
+      <stop offset="1" stop-color="#EEF5FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="url(#bg)"/>
+  <circle cx="90" cy="90" r="52" fill="#FFFFFF" stroke="#FDB8C2" stroke-width="6"/>
+  <circle cx="72" cy="80" r="8" fill="#24304A"/>
+  <circle cx="108" cy="80" r="8" fill="#24304A"/>
+  <path d="M70 113c12-7 28-7 40 0" fill="none" stroke="#E35D6A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M51 52l-12-12M129 52l12-12" stroke="#E35D6A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M43 139h94" stroke="#FDB8C2" stroke-width="10" stroke-linecap="round" opacity=".62"/>
+</svg>

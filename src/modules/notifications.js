@@ -5,7 +5,8 @@ const { authenticateJWT } = require("../middleware");
 
 router.use(authenticateJWT);
 
-pool.query(
+async function ensureTables() {
+  await pool.query(
     `CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -18,10 +19,19 @@ pool.query(
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user_unread (user_id, is_read),
     INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
-).catch(() => {});
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
-pool.query("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(300)").catch(() => {});
+  await pool.query("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(300)");
+}
+
+let _tablesReady = false;
+router.use(async (req, res, next) => {
+  if (!_tablesReady) {
+    _tablesReady = true;
+    await ensureTables().catch(() => {});
+  }
+  next();
+});
 
 router.get("/", async (req, res) => {
     try {
@@ -86,3 +96,4 @@ async function createNotification(userId, title, content, type, relatedId = null
 
 module.exports = router;
 module.exports.createNotification = createNotification;
+module.exports.ensureTables = ensureTables;

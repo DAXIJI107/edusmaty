@@ -452,18 +452,31 @@ router.get("/study-plan/progress", async (req, res) => {
     }
 });
 
+// POST /api/closed-loop/study-plan/generate
+// 默认使用 AgenticLearningAgent + 星火大模型增强生成
+// 可通过 ?mode=rule 降级为纯规则引擎
 router.post("/study-plan/generate", async (req, res) => {
     try {
         const userId = req.user.id;
-        const { date, title, duration } = req.body;
+        const { date, title, duration, mode } = req.body;
         const StudyPlanEngine = require("../core/StudyPlanEngine");
         const engine = new StudyPlanEngine();
-        const plan = await engine.generateDaily(pool, { userId, date, title, duration });
+
+        let plan;
+        if (mode === "rule") {
+            // 纯规则引擎
+            plan = await engine.generateDaily(pool, { userId, date, title, duration });
+        } else {
+            // 默认：画像驱动 + Agent 推理增强（星火大模型）
+            plan = await engine.generateDailyWithProfile(pool, { userId, date, title, duration });
+        }
+
         res.json({
             success: true,
             plan,
             tasks: plan?.tasks || [],
-            suggestion: plan?.ai_suggestion || plan?.aiSuggestion || ""
+            suggestion: plan?.ai_suggestion || plan?.aiSuggestion || "",
+            strategy: plan?.strategy || "agent-driven"
         });
     } catch (error) {
         console.error("生成学习计划失败:", error);

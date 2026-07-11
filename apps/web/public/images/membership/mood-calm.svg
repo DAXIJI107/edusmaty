@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Calm mood sticker">
+  <defs>
+    <linearGradient id="bg" x1="24" x2="156" y1="24" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DDF7EF"/>
+      <stop offset="1" stop-color="#EAF2FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="url(#bg)"/>
+  <circle cx="90" cy="84" r="52" fill="#FFFFFF" stroke="#BEE7DA" stroke-width="6"/>
+  <path d="M61 78c7-9 18-9 25 0M94 78c7-9 18-9 25 0" fill="none" stroke="#24304A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M68 104c14 12 31 12 45 0" fill="none" stroke="#24A86B" stroke-width="7" stroke-linecap="round"/>
+  <path d="M42 136h96" stroke="#9DD8C7" stroke-width="10" stroke-linecap="round" opacity=".65"/>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">EduSmart</title>
+  <defs>
+    <linearGradient id="brand-gradient" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#356BFF"/>
+      <stop offset="1" stop-color="#7557FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M14 10h26a7 7 0 0 1 0 14H21a5 5 0 0 0-5 5v1h18" fill="none" stroke="url(#brand-gradient)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50 54H24a7 7 0 0 1 0-14h19a5 5 0 0 0 5-5v-1H30" fill="none" stroke="url(#brand-gradient)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17 49 47 15" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="16" cy="50" r="5.5" fill="#356BFF" stroke="#ffffff" stroke-width="3"/>
+  <circle cx="32" cy="32" r="6" fill="#2BC5A4" stroke="#ffffff" stroke-width="3"/>
+  <circle cx="48" cy="14" r="5.5" fill="#7557FF" stroke="#ffffff" stroke-width="3"/>
+  <path d="m55 3 1.7 4.3L61 9l-4.3 1.7L55 15l-1.7-4.3L49 9l4.3-1.7L55 3Z" fill="#7557FF"/>
+</svg>

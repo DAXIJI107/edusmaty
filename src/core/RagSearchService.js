@@ -653,7 +653,7 @@ RagSearchService.prototype.hybridSearch = async function ({
 
     // BM25 结果先入库
     for (const ev of bm25Result.evidenceChain) {
-        mergedMap.set(ev.chunkId, { ...ev, source: "bm25", vectorScore: 0 });
+        mergedMap.set(ev.chunkId, { ...ev, retrievalMode: "bm25", vectorScore: 0 });
     }
 
     // 向量结果：尝试匹配到已有 chunk（通过 chunk_id 在 metadata 中）
@@ -661,7 +661,7 @@ RagSearchService.prototype.hybridSearch = async function ({
         const chunkId = vr.metadata?.chunk_id || vr.id;
         if (mergedMap.has(chunkId)) {
             mergedMap.get(chunkId).vectorScore = vr.similarity;
-            mergedMap.get(chunkId).source = "hybrid";
+            mergedMap.get(chunkId).retrievalMode = "hybrid";
         } else {
             // 新结果，构建最小 evidence
             mergedMap.set(vr.id, {

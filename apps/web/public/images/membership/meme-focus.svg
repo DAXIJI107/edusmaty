@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" role="img" aria-label="Focus study sticker">
+  <rect width="260" height="260" rx="54" fill="#F4F8FF"/>
+  <circle cx="130" cy="116" r="70" fill="#FFFFFF" stroke="#CFE1FF" stroke-width="8"/>
+  <path d="M83 104c10-12 26-12 36 0M141 104c10-12 26-12 36 0" fill="none" stroke="#23324D" stroke-width="8" stroke-linecap="round"/>
+  <path d="M101 137c18 15 40 15 58 0" fill="none" stroke="#2F6BFF" stroke-width="8" stroke-linecap="round"/>
+  <rect x="62" y="184" width="136" height="28" rx="14" fill="#FFE8A3"/>
+  <path d="M84 198h92" stroke="#B7791F" stroke-width="7" stroke-linecap="round"/>
+</svg>

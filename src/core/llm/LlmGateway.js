@@ -1,42 +1,62 @@
 const axios = require("axios");
 const config = require("../../config");
 const LocalLlmClient = require("./LocalLlmClient");
+const aiInteractionStore = require("./AiInteractionStore");
 
 class LlmGateway {
     constructor(options = {}) {
         this.config = options.config || config;
-        // 自动检测：如果明确配置了 herdsman 模型名，优先使用 herdsman
+        this._explicitProvider = String(this.config.llm.provider || "").toLowerCase();
+        // 自动检测：未显式指定 provider 时，如果明确配置了 herdsman 模型名，优先使用 herdsman
         this._useHerdsman = Boolean(
+            !this._explicitProvider &&
             this.config.llm.herdsman?.model && this.config.llm.herdsman.model !== "local-model"
         );
-        const llmConfig = this._useHerdsman ? { ...this.config.llm.herdsman } : { ...this.config.llm.local };
+        const llmConfig =
+            this._explicitProvider === "herdsman" || this._useHerdsman
+                ? { ...this.config.llm.herdsman }
+                : { ...this.config.llm.local };
         this.localClient = new LocalLlmClient(llmConfig);
     }
 
     get provider() {
-        return this._useHerdsman ? "herdsman" : this.config.llm.provider || "local";
+        if (this._explicitProvider) return this._explicitProvider;
+        return this._useHerdsman ? "herdsman" : "local";
     }
 
     async chat({ messages, temperature, maxTokens, fallbackContent = "" } = {}) {
+        const startedAt = Date.now();
         try {
+            let result;
             if (this.provider === "spark") {
-                return await this.chatSpark({ messages, temperature, maxTokens });
+                result = await this.chatSpark({ messages, temperature, maxTokens });
+            } else {
+                result = await this.localClient.chat({ messages, temperature, maxTokens });
             }
-            return await this.localClient.chat({ messages, temperature, maxTokens });
+            this.logInteraction({ messages, result, startedAt, status: "success" });
+            return result;
         } catch (error) {
             if (this.config.llm.allowSparkFallback && this.provider !== "spark") {
                 try {
-                    return await this.chatSpark({ messages, temperature, maxTokens });
+                    const result = await this.chatSpark({ messages, temperature, maxTokens });
+                    this.logInteraction({ messages, result, startedAt, status: "success" });
+                    return result;
                 } catch (sparkError) {
                     if (fallbackContent) {
-                        return { provider: "fallback", content: fallbackContent, error: sparkError.message };
+                        const result = { provider: "fallback", content: fallbackContent, error: sparkError.message };
+                        this.logInteraction({ messages, result, startedAt, status: "fallback", error: sparkError });
+                        return result;
                     }
+                    this.logInteraction({ messages, startedAt, status: "error", error: sparkError });
                     throw sparkError;
                 }
             }
             if (fallbackContent) {
-                return { provider: "fallback", content: fallbackContent, error: error.message };
+                const result = { provider: "fallback", content: fallbackContent, error: error.message };
+                this.logInteraction({ messages, result, startedAt, status: "fallback", error });
+                return result;
             }
+            this.logInteraction({ messages, startedAt, status: "error", error });
             throw error;
         }
     }
@@ -76,8 +96,26 @@ class LlmGateway {
                 response.data?.choices?.[0]?.delta?.content ||
                 response.data?.content ||
                 "",
+            usage: response.data?.usage || null,
             raw: response.data
         };
+    }
+
+    logInteraction({ messages, result = {}, startedAt, status, error } = {}) {
+        try {
+            aiInteractionStore.append({
+                provider: result.provider || this.provider,
+                model: result.model || (this.provider === "spark" ? this.config.spark.model : this.localClient.model),
+                status,
+                durationMs: Date.now() - Number(startedAt || Date.now()),
+                messages,
+                answer: result.content || "",
+                usage: result.usage || result.raw?.usage || null,
+                error: error?.message || result.error || null
+            });
+        } catch (logError) {
+            console.warn("AI问答日志写入失败:", logError.message);
+        }
     }
 
     async health() {

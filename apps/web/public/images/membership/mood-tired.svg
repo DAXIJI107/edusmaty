@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Tired mood sticker">
+  <defs>
+    <linearGradient id="bg" x1="26" x2="154" y1="20" y2="158" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF1D8"/>
+      <stop offset="1" stop-color="#ECF2FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="url(#bg)"/>
+  <circle cx="90" cy="88" r="52" fill="#FFFFFF" stroke="#F5C677" stroke-width="6"/>
+  <path d="M57 78h28M96 78h28" stroke="#24304A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M74 113c10-5 22-5 32 0" fill="none" stroke="#B7791F" stroke-width="7" stroke-linecap="round"/>
+  <path d="M122 45h19M132 34v22" stroke="#5B7CFA" stroke-width="7" stroke-linecap="round"/>
+  <path d="M39 137h102" stroke="#F1BD63" stroke-width="10" stroke-linecap="round" opacity=".55"/>
+</svg>

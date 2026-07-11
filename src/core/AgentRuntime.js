@@ -1,27 +1,14 @@
-const ProfileTool = require("./agent-tools/ProfileTool");
-const ResourceTool = require("./agent-tools/ResourceTool");
-const PracticeTool = require("./agent-tools/PracticeTool");
-const NoteTool = require("./agent-tools/NoteTool");
-const PathTool = require("./agent-tools/PathTool");
-const CourseDesignTool = require("./agent-tools/CourseDesignTool");
-const MasteryTool = require("./agent-tools/MasteryTool");
-const RagTool = require("./agent-tools/RagTool");
-const PublicSourceTool = require("./agent-tools/PublicSourceTool");
+const config = require("../config");
+const { buildAgentRunMetadata } = require("./AgentRunMetadata");
+const createToolRegistry = require("./agent-tools/createToolRegistry");
 
 class AgentRuntime {
     constructor(pool) {
         this.pool = pool;
-        this.tools = {
-            profile: new ProfileTool(pool),
-            resource: new ResourceTool(pool),
-            practice: new PracticeTool(pool),
-            note: new NoteTool(pool),
-            path: new PathTool(pool),
-            courseDesign: new CourseDesignTool(pool),
-            mastery: new MasteryTool(pool),
-            rag: new RagTool(pool),
-            publicSource: new PublicSourceTool(pool)
-        };
+        this.toolRegistry = createToolRegistry(pool);
+        this.tools = Object.fromEntries(
+            this.toolRegistry.describe().map(definition => [definition.name, this.toolRegistry.get(definition.name)])
+        );
     }
 
     async ensureSchema() {
@@ -262,7 +249,30 @@ class AgentRuntime {
         return result?.insertId;
     }
 
+    async recordEvaluation({ userId, sessionId, metadata, executionPlan, writebackCount, latencyMs }) {
+        await this.pool
+            .query(
+                `INSERT INTO agent_evaluations
+                (user_id, session_id, tools_called, fallback_used, writeback_count,
+                 evidence_count, missing_inputs, score, latency_ms)
+             VALUES (?, ?, CAST(? AS JSON), ?, ?, ?, CAST(? AS JSON), ?, ?)`,
+                [
+                    userId,
+                    sessionId,
+                    JSON.stringify(executionPlan.map(step => step.tool)),
+                    metadata.fallbackUsed ? 1 : 0,
+                    writebackCount,
+                    metadata.evidenceCount,
+                    JSON.stringify(metadata.missingInputs),
+                    metadata.confidence * 100,
+                    latencyMs
+                ]
+            )
+            .catch(() => {});
+    }
+
     async run({ userId, message = "", intent = "", context = {} }) {
+        const startedAt = Date.now();
         await this.ensureSchema();
         const sessionId = this.createSessionId();
         const resolvedIntent = this.inferIntent(message, intent);
@@ -271,7 +281,9 @@ class AgentRuntime {
         const goal = String(context.goal || message || "完成今日智能学习闭环").trim();
         const durationDays = Number(context.durationDays || this.inferDurationDays(message));
         const intensity = context.intensity || "normal";
-        const executionPlan = this.createExecutionPlan({ intent: resolvedIntent, message, context, sourceName });
+        const executionPlan = this.toolRegistry.validatePlan(
+            this.createExecutionPlan({ intent: resolvedIntent, message, context, sourceName })
+        );
         const shouldRun = tool => executionPlan.some(step => step.tool === tool);
         const traces = [];
 
@@ -473,8 +485,23 @@ class AgentRuntime {
             );
         }
 
+        const metadata = buildAgentRunMetadata({
+            sessionId,
+            config,
+            profile,
+            rag,
+            resources,
+            message,
+            context,
+            plannerSource: "rule_fallback"
+        });
+        const needsProfile = metadata.missingInputs.includes("learning_profile");
         const nextActions = [
-            path.generated ? `完成今日 ${path.generated} 个智能体任务。` : "先完成一次诊断，建立学习画像。",
+            needsProfile
+                ? "先完成一次短诊断，补充当前水平和薄弱点。"
+                : path.generated
+                  ? `完成今日 ${path.generated} 个智能体任务。`
+                  : "确认学习目标与每天可用时间后再生成任务。",
             courseDesign ? `按 ${durationDays} 天课程设计推进，今天先完成第 1 个学习单元。` : "先完成薄弱点专项练习。",
             note.noteId ? "今晚复习 AI 任务卡，并标记掌握情况。" : "把今天的错因写成一张复盘卡。"
         ];
@@ -535,6 +562,15 @@ class AgentRuntime {
             confidence: 0.82
         });
 
+        await this.recordEvaluation({
+            userId,
+            sessionId,
+            metadata,
+            executionPlan,
+            writebackCount: Number(path.generated || 0) + (note.noteId ? 1 : 0) + (courseDesign?.designId ? 1 : 0),
+            latencyMs: Date.now() - startedAt
+        });
+
         return {
             success: true,
             sessionId,
@@ -549,7 +585,8 @@ class AgentRuntime {
             path,
             note,
             nextActions,
-            traces
+            traces,
+            metadata
         };
     }
 

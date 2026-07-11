@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" role="img" aria-label="Memory cache study sticker">
+  <rect width="260" height="260" rx="54" fill="#F8FFF7"/>
+  <rect x="60" y="58" width="140" height="122" rx="34" fill="#FFFFFF" stroke="#BDE8C8" stroke-width="8"/>
+  <path d="M88 94h84M88 124h84M88 154h54" stroke="#22A35A" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="196" cy="72" r="28" fill="#EAF2FF" stroke="#2F6BFF" stroke-width="7"/>
+  <path d="M184 73l8 8 16-18" fill="none" stroke="#2F6BFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M78 204h104" stroke="#9DD8C7" stroke-width="12" stroke-linecap="round"/>
+</svg>

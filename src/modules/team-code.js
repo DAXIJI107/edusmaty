@@ -235,7 +235,14 @@ async function ensureTables() {
     `);
 }
 
-ensureTables().catch(e => console.warn("team-code tables init:", e.message));
+let _tablesReady = false;
+router.use(async (req, res, next) => {
+  if (!_tablesReady) {
+    _tablesReady = true;
+    await ensureTables().catch(() => {});
+  }
+  next();
+});
 
 async function assertProjectAccess(projectId, userId) {
     const [[project]] = await pool.query("SELECT * FROM team_projects WHERE id = ?", [projectId]);

@@ -1,6 +1,17 @@
-const mysql = require("mysql2/promise");
-const config = require("./config");
+/**
+ * =============================================================================
+ * 兼容转发：src/db.js → src/database/connection.js
+ * =============================================================================
+ *
+ * @file       src/db.js
+ * @description
+ *   旧代码兼容入口，所有 require('../db') 自动转发到新的数据库连接模块。
+ *   Phase 2 重构完成后可移除此文件。
+ *
+ * @author     EduSmart Team
+ * @since      v2.0.0
+ * @refactored 2026-06-27 - 改为兼容转发
+ * =============================================================================
+ */
 
-const pool = mysql.createPool(config.database);
-
-module.exports = pool;
+module.exports = require('./database/connection');

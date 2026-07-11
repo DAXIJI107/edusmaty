@@ -47,7 +47,14 @@ async function ensureTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
-ensureTables().catch(e => console.warn("resources table init:", e.message));
+let _tablesReady = false;
+router.use(async (req, res, next) => {
+  if (!_tablesReady) {
+    _tablesReady = true;
+    await ensureTables().catch(() => {});
+  }
+  next();
+});
 
 router.get("/categories", async (req, res) => {
     try {
