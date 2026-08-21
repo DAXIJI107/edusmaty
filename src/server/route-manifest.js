@@ -54,6 +54,7 @@ const _modules = {
   '../modules/knowledge-graph': require('../modules/knowledge-graph'),
   '../modules/concept-canvas': require('../modules/concept-canvas'),
   '../modules/personal-knowledge': require('../modules/personal-knowledge'),
+  '../modules/personal-docs': require('../modules/personal-docs'),
   // 课程系统
   '../modules/course': require('../modules/course'),
   '../modules/resources': require('../modules/resources'),
@@ -133,6 +134,7 @@ module.exports = [
   ['/api/knowledge-graph', _modules['../modules/knowledge-graph']],
   ['/api/concept-canvas', _modules['../modules/concept-canvas']],
   ['/api/personal-knowledge', _modules['../modules/personal-knowledge']],
+  ['/api/personal-docs', _modules['../modules/personal-docs']],
 
   // ========== 课程系统 ==========
   ['/api/course', _modules['../modules/course']],

@@ -465,6 +465,7 @@
         if (p.includes("account") || p.includes("me")) return "account";
         if (p.includes("teacher-workbench") || p.includes("teacher")) return "teacherWorkbench";
         if (p.includes("online-exam")) return "onlineExam";
+        if (p.includes("study-room/shared/") || p.includes("studyroom/shared/")) return "studyRoomShared";
         if (p.includes("study-room") || p.includes("studyroom") || p.includes("focus-room")) return "studyRoom";
         if (p.includes("ai-tutor") || p.includes("ai-learning-partner") || p.includes("learning-partner")) return "aiTutor";
         if (p.includes("learning-center") || p.includes("learn-center") || p.includes("learning")) return "studyPlan";
@@ -2733,28 +2734,34 @@
      * 根据模板类型创建新文档
      * @param {string} templateType - 模板类型
      */
-    function createNewDocWithTemplate(templateType) {
-        saveFocusEditorContent();
+    async function createNewDocWithTemplate(templateType) {
+        try {
+            await saveFocusEditorContent(true);
+        } catch {}
         const room = studyRoomState();
         const template = docTemplates[templateType] || docTemplates.normal;
         const content = generateDocContent(templateType, room.subject);
-        const newDoc = {
-            id: `doc-${Date.now()}`,
-            title: template.title,
-            content: content,
-            subject: room.subject || "",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            tags: [],
-            version: 1,
-            templateType: templateType
-        };
-        room.editorDocs = room.editorDocs || [];
-        room.editorDocs.unshift(newDoc);
-        room.focusCurrentDocId = newDoc.id;
-        saveStudyRoom();
-        render();
-        showFocusToast(`已创建${template.name}`);
+        try {
+            const json = await request("/api/personal-docs", {
+                method: "POST",
+                body: JSON.stringify({
+                    title: template.title,
+                    contentHtml: content,
+                    templateType,
+                    tags: []
+                })
+            });
+            const newDoc = normalizePersonalDoc(json.data);
+            room.editorDocs = [newDoc, ...(room.editorDocs || []).filter(d => String(d.id) !== String(newDoc.id))];
+            room.focusCurrentDocId = newDoc.id;
+            room.kbStats = room.kbStats || {};
+            room.kbStats.total = (room.editorDocs || []).length;
+            saveStudyRoom();
+            render();
+            toast(`已创建${template.name}`);
+        } catch (error) {
+            toast(error.message || "创建失败");
+        }
     }
 
     function generateStudyDocTemplate(subject) {
@@ -2792,6 +2799,141 @@
         try {
             localStorage.setItem(studyRoomKey(), JSON.stringify(studyRoomState()));
         } catch {}
+    }
+
+    function personalDocsMigratedKey() {
+        return `edusmart_kb_migrated_${state.user?.username || readUser()?.username || "guest"}`;
+    }
+
+    function normalizePersonalDoc(doc) {
+        return {
+            id: String(doc.id),
+            title: doc.title || "未命名文档",
+            content: doc.contentHtml || doc.content || "",
+            templateType: doc.templateType || "normal",
+            visibility: doc.visibility || "private",
+            shareToken: doc.shareToken || null,
+            shareUrl: doc.shareUrl || null,
+            subject: doc.subject || "",
+            tags: Array.isArray(doc.tags) ? doc.tags : [],
+            createdAt: doc.createdAt || new Date().toISOString(),
+            updatedAt: doc.updatedAt || new Date().toISOString()
+        };
+    }
+
+    let personalDocSaveTimer = null;
+
+    async function loadPersonalDocs(force = false) {
+        const room = studyRoomState();
+        if (!force && room._docsLoaded && Array.isArray(room.editorDocs)) return room.editorDocs;
+        try {
+            const json = await request("/api/personal-docs");
+            let docs = (json.data?.docs || []).map(normalizePersonalDoc);
+            room.kbStats = json.data?.stats || { total: docs.length, shared: 0, private: docs.length, byTemplate: {} };
+
+            if (!docs.length && !localStorage.getItem(personalDocsMigratedKey())) {
+                const localDocs = (room.editorDocs || []).filter(d => d && d.content);
+                if (localDocs.length) {
+                    for (const local of localDocs.slice(0, 40)) {
+                        try {
+                            const created = await request("/api/personal-docs", {
+                                method: "POST",
+                                body: JSON.stringify({
+                                    title: local.title || "学习心得",
+                                    contentHtml: local.content || "<p></p>",
+                                    templateType: local.templateType || "structured",
+                                    tags: local.tags || []
+                                })
+                            });
+                            if (created.data) docs.push(normalizePersonalDoc(created.data));
+                        } catch {}
+                    }
+                    localStorage.setItem(personalDocsMigratedKey(), "1");
+                    if (docs.length) {
+                        const refreshed = await request("/api/personal-docs");
+                        docs = (refreshed.data?.docs || []).map(normalizePersonalDoc);
+                        room.kbStats = refreshed.data?.stats || room.kbStats;
+                    }
+                } else {
+                    localStorage.setItem(personalDocsMigratedKey(), "1");
+                }
+            }
+
+            room.editorDocs = docs;
+            room._docsLoaded = true;
+            if (room.focusCurrentDocId && !docs.find(d => String(d.id) === String(room.focusCurrentDocId))) {
+                room.focusCurrentDocId = docs[0]?.id || null;
+            }
+            if (!room.focusCurrentDocId && docs[0]) room.focusCurrentDocId = docs[0].id;
+            saveStudyRoom();
+            return docs;
+        } catch (error) {
+            console.warn("加载个人知识库失败:", error.message);
+            room._docsLoaded = true;
+            return room.editorDocs || [];
+        }
+    }
+
+    async function persistPersonalDoc(partial = {}) {
+        const room = studyRoomState();
+        const id = room.focusCurrentDocId;
+        if (!id || String(id).startsWith("doc-")) return null;
+        const canvas = document.querySelector("[data-focus-canvas]");
+        const titleInput = document.querySelector("[data-focus-doc-title]");
+        const doc = (room.editorDocs || []).find(d => String(d.id) === String(id));
+        const title = partial.title ?? (titleInput ? titleInput.value : doc?.title) ?? "未命名文档";
+        const contentHtml = partial.contentHtml ?? (canvas ? canvas.innerHTML : doc?.content) ?? "<p></p>";
+        const json = await request(`/api/personal-docs/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+                title,
+                contentHtml,
+                templateType: doc?.templateType || "normal",
+                visibility: partial.visibility || doc?.visibility || "private",
+                tags: doc?.tags || []
+            })
+        });
+        const mapped = normalizePersonalDoc(json.data);
+        room.editorDocs = (room.editorDocs || []).map(d => (String(d.id) === String(id) ? mapped : d));
+        saveStudyRoom();
+        return mapped;
+    }
+
+    function schedulePersistPersonalDoc() {
+        clearTimeout(personalDocSaveTimer);
+        personalDocSaveTimer = setTimeout(() => {
+            persistPersonalDoc().catch(err => console.warn("自动保存失败:", err.message));
+        }, 900);
+    }
+
+    function getSharedTokenFromPath() {
+        const match = location.pathname.match(/study-room\/shared\/([^/]+)/i);
+        return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    async function loadSharedPersonalDoc() {
+        const token = getSharedTokenFromPath();
+        if (!token) return null;
+        const json = await request(`/api/personal-docs/shared/${encodeURIComponent(token)}`);
+        state.data.sharedPersonalDoc = normalizePersonalDoc(json.data);
+        return state.data.sharedPersonalDoc;
+    }
+
+    function studyRoomSharedView() {
+        const doc = state.data.sharedPersonalDoc;
+        if (!doc) {
+            return `<main class="page study-shared-page"><section class="card"><h1>分享不可用</h1><p>链接无效、已关闭，或文档不存在。</p><a class="btn primary" href="/">返回首页</a></section></main>`;
+        }
+        return `<main class="page study-shared-page">
+            <section class="study-shared-shell card">
+                <div class="study-shared-head">
+                    <span class="pill">只读分享</span>
+                    <h1>${escapeHtml(doc.title)}</h1>
+                    <p>更新于 ${escapeHtml(formatDate(doc.updatedAt))} · 模板 ${escapeHtml((docTemplates[doc.templateType] || docTemplates.normal).name)}</p>
+                </div>
+                <article class="study-shared-body">${doc.content || "<p>暂无内容</p>"}</article>
+            </section>
+        </main>`;
     }
 
     function studyRoomElapsed(room = studyRoomState()) {
@@ -3345,21 +3487,27 @@
     function renderFocusEditorView(room) {
         const user = state.user || readUser() || { username: "学习者" };
         const docs = room.editorDocs || [];
-        const currentDoc = docs.find(d => d.id === room.focusCurrentDocId) || {
+        const currentDoc = docs.find(d => String(d.id) === String(room.focusCurrentDocId)) || {
             id: null,
             title: room.focusEditorTitle || "学习心得",
-            content: room.focusEditorContent || generateStudyDocTemplate(room.subject)
+            content: room.focusEditorContent || generateStudyDocTemplate(room.subject),
+            visibility: "private",
+            templateType: "structured"
         };
         const voiceRecording = room.voiceRecording || false;
         const elapsed = studyRoomElapsed(room);
         const sortedDocs = [...docs].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        const stats = room.kbStats || {};
+        const isShared = currentDoc.visibility === "link";
 
         const docList = sortedDocs.map(doc => {
-            const isActive = doc.id === room.focusCurrentDocId;
+            const isActive = String(doc.id) === String(room.focusCurrentDocId);
             const dateStr = new Date(doc.updatedAt).toLocaleDateString("zh-CN");
-            return `<div class="sidebar-doc-item ${isActive ? "active" : ""}" data-focus-doc-id="${doc.id}">
+            const tmpl = (docTemplates[doc.templateType] || docTemplates.normal).name;
+            const vis = doc.visibility === "link" ? "可分享" : "私密";
+            return `<div class="sidebar-doc-item ${isActive ? "active" : ""}" data-focus-doc-id="${escapeHtml(String(doc.id))}">
                 <div class="doc-item-title">${escapeHtml(doc.title)}</div>
-                <div class="doc-item-meta">${dateStr} · ${doc.subject || "综合"}</div>
+                <div class="doc-item-meta">${dateStr} · ${escapeHtml(tmpl)} · ${vis}</div>
             </div>`;
         }).join("");
 
@@ -3375,14 +3523,22 @@
                 <div class="sidebar-section">
                     <div class="section-title">${icon("book-open", 16)}我的知识库</div>
                     <div class="section-stats">
-                        <span class="stat-item">${docs.length} 篇文档</span>
+                        <span class="stat-item">${stats.total ?? docs.length} 篇文档</span>
+                        <span class="stat-divider">|</span>
+                        <span class="stat-item">${stats.shared || 0} 已分享</span>
                         <span class="stat-divider">|</span>
                         <span class="stat-item">${room.records?.length || 0} 次自习</span>
                     </div>
+                    <div class="kb-io-row">
+                        <button class="hdr-btn tiny" data-focus-import-doc type="button">${icon("upload", 13)}导入</button>
+                        <button class="hdr-btn tiny" data-focus-export-md type="button">${icon("download", 13)}导出MD</button>
+                        <button class="hdr-btn tiny" data-focus-export-json type="button">${icon("file", 13)}导出JSON</button>
+                    </div>
+                    <input type="file" accept=".md,.markdown,.json,text/markdown,application/json" data-focus-import-file hidden>
                 </div>
                 <div class="sidebar-section">
                     <div class="section-header">
-                        <span class="section-title">${icon("file-text", 16)}学习心得</span>
+                        <span class="section-title">${icon("file-text", 16)}学习文档</span>
                         <div class="new-doc-dropdown">
                             <button class="new-doc-btn" data-focus-new-doc title="新建文档">
                                 ${icon("plus", 14)}
@@ -3414,6 +3570,7 @@
                 <div class="study-focus-editor-header">
                     <div class="editor-header-left">
                         <input class="doc-title-input" type="text" data-focus-doc-title value="${escapeHtml(currentDoc.title)}" placeholder="输入标题...">
+                        <span class="pill ${isShared ? "good" : ""}">${isShared ? "链接可访问" : "仅自己可见"}</span>
                         <span class="doc-meta" data-focus-editor-timer>${icon("clock", 12)} ${formatClock(elapsed)}</span>
                     </div>
                     <div class="editor-header-right">
@@ -3423,14 +3580,20 @@
                                 <small>分钟</small>
                             </label>
                         </div>
-                        <button class="hdr-btn" data-focus-export-word>
+                        <button class="hdr-btn" data-focus-toggle-privacy type="button">
+                            ${icon(isShared ? "lock" : "link", 14)}${isShared ? "设为私密" : "开启分享"}
+                        </button>
+                        <button class="hdr-btn" data-focus-export-word type="button">
                             ${icon("download", 14)}导出Word
                         </button>
-                        <button class="hdr-btn share" data-focus-share-link>
-                            ${icon("link", 14)}分享链接
+                        <button class="hdr-btn share" data-focus-share-link type="button">
+                            ${icon("link", 14)}复制分享链接
                         </button>
-                        <button class="hdr-btn save" data-focus-save-editor>
+                        <button class="hdr-btn save" data-focus-save-editor type="button">
                             ${icon("check", 14)}保存
+                        </button>
+                        <button class="hdr-btn danger" data-focus-delete-doc type="button" title="删除文档">
+                            ${icon("trash", 14)}
                         </button>
                     </div>
                 </div>
@@ -3498,6 +3661,8 @@
                     <div class="tb-group">
                         <button class="tb-btn" data-tb-insert-link title="插入链接">${icon("link", 15)}</button>
                         <button class="tb-btn" data-tb-insert-image title="插入图片">${icon("image", 15)}</button>
+                        <button class="tb-btn" data-tb-insert-note title="插入笔记">${icon("pen", 15)}</button>
+                        <button class="tb-btn" data-tb-insert-doc title="插入知识库文档">${icon("book", 15)}</button>
                         <button class="tb-btn voice-btn ${voiceRecording ? "recording" : ""}" data-tb-voice title="语音转文字">
                             ${icon("mic", 15)}
                             ${voiceRecording ? '<span class="voice-dot"></span>' : ""}
@@ -3508,6 +3673,7 @@
                         <button class="tb-btn" data-tb-redo title="重做">↷</button>
                     </div>
                 </div>
+                <div class="kb-insert-panel" data-kb-insert-panel hidden></div>
                 <div class="study-focus-editor-body">
                     <div class="study-focus-editor-canvas"
                          contenteditable="true"
@@ -12927,7 +13093,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             setTimeout(() => toastEl.classList.remove("show"), 2200);
         }
 
-        function saveFocusEditorContent() {
+        async function saveFocusEditorContent(persistNow = false) {
             const canvas = document.querySelector("[data-focus-canvas]");
             const titleInput = document.querySelector("[data-focus-doc-title]");
             const room = studyRoomState();
@@ -12935,7 +13101,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
             const title = titleInput ? titleInput.value : "";
 
             if (room.focusCurrentDocId) {
-                const docIndex = room.editorDocs.findIndex(d => d.id === room.focusCurrentDocId);
+                const docIndex = room.editorDocs.findIndex(d => String(d.id) === String(room.focusCurrentDocId));
                 if (docIndex !== -1) {
                     room.editorDocs[docIndex].content = content;
                     room.editorDocs[docIndex].title = title;
@@ -12946,6 +13112,15 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                 room.focusEditorTitle = title;
             }
             saveStudyRoom();
+            if (persistNow) {
+                try {
+                    await persistPersonalDoc({ title, contentHtml: content });
+                } catch (error) {
+                    console.warn(error.message);
+                }
+            } else {
+                schedulePersistPersonalDoc();
+            }
         }
 
         function startEditorVoiceRecognition() {
@@ -13048,9 +13223,10 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
 
         function exportFocusWord() {
             const room = studyRoomState();
-            saveFocusEditorContent();
-            const title = room.focusEditorTitle || `${room.subject || "学习"}心得`;
-            const content = room.focusEditorContent || "<p>暂无内容</p>";
+            saveFocusEditorContent(true);
+            const current = (room.editorDocs || []).find(d => String(d.id) === String(room.focusCurrentDocId));
+            const title = current?.title || room.focusEditorTitle || `${room.subject || "学习"}心得`;
+            const content = current?.content || room.focusEditorContent || "<p>暂无内容</p>";
             const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
@@ -13086,26 +13262,152 @@ ${content}
             showFocusToast("Word文档已导出");
         }
 
-        function shareFocusLink() {
-            saveFocusEditorContent();
+        async function shareFocusLink() {
+            await saveFocusEditorContent(true);
             const room = studyRoomState();
-            const title = room.focusEditorTitle || `${room.subject || "学习"}心得`;
-            const content = room.focusEditorContent || "";
-            const shareData = {
-                title: title,
-                text: content.replace(/<[^>]*>/g, '').substring(0, 200),
-                url: window.location.href
-            };
-            if (navigator.share) {
-                navigator.share(shareData).catch(() => {});
-            } else {
-                const textToCopy = `${title}\n\n${content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 300)}\n\n${window.location.href}`;
-                navigator.clipboard.writeText(textToCopy).then(() => {
-                    showFocusToast("链接和内容已复制到剪贴板");
-                }).catch(() => {
-                    showFocusToast("分享链接已准备：" + window.location.href);
-                });
+            const id = room.focusCurrentDocId;
+            if (!id || String(id).startsWith("doc-")) {
+                showFocusToast("请先创建并保存文档", true);
+                return;
             }
+            try {
+                const json = await request(`/api/personal-docs/${id}/share`, { method: "POST", body: "{}" });
+                const mapped = normalizePersonalDoc(json.data);
+                room.editorDocs = (room.editorDocs || []).map(d => (String(d.id) === String(id) ? mapped : d));
+                room.kbStats = room.kbStats || {};
+                room.kbStats.shared = (room.editorDocs || []).filter(d => d.visibility === "link").length;
+                saveStudyRoom();
+                const shareUrl = json.data.shareUrl || `${location.origin}/study-room/shared/${mapped.shareToken}`;
+                await navigator.clipboard.writeText(shareUrl);
+                showFocusToast("分享链接已复制");
+                render();
+            } catch (error) {
+                showFocusToast(error.message || "分享失败", true);
+            }
+        }
+
+        async function toggleFocusPrivacy() {
+            await saveFocusEditorContent(true);
+            const room = studyRoomState();
+            const id = room.focusCurrentDocId;
+            const current = (room.editorDocs || []).find(d => String(d.id) === String(id));
+            if (!current) return;
+            try {
+                if (current.visibility === "link") {
+                    const json = await request(`/api/personal-docs/${id}/unshare`, { method: "POST", body: "{}" });
+                    const mapped = normalizePersonalDoc(json.data);
+                    room.editorDocs = (room.editorDocs || []).map(d => (String(d.id) === String(id) ? mapped : d));
+                    showFocusToast("已设为私密");
+                } else {
+                    const json = await request(`/api/personal-docs/${id}/share`, { method: "POST", body: "{}" });
+                    const mapped = normalizePersonalDoc(json.data);
+                    room.editorDocs = (room.editorDocs || []).map(d => (String(d.id) === String(id) ? mapped : d));
+                    const shareUrl = json.data.shareUrl || `${location.origin}/study-room/shared/${mapped.shareToken}`;
+                    await navigator.clipboard.writeText(shareUrl);
+                    showFocusToast("已开启分享并复制链接");
+                }
+                room.kbStats = room.kbStats || {};
+                room.kbStats.shared = (room.editorDocs || []).filter(d => d.visibility === "link").length;
+                saveStudyRoom();
+                render();
+            } catch (error) {
+                showFocusToast(error.message || "操作失败", true);
+            }
+        }
+
+        async function exportPersonalDocFormat(format) {
+            const room = studyRoomState();
+            const id = room.focusCurrentDocId;
+            if (!id) return showFocusToast("请先选择文档", true);
+            try {
+                await saveFocusEditorContent(true);
+                const json = await request(`/api/personal-docs/${id}/export?format=${format}`);
+                const title = (room.editorDocs || []).find(d => String(d.id) === String(id))?.title || "document";
+                if (format === "json") {
+                    downloadStudyRoomText(`${title}.json`, JSON.stringify(json.data, null, 2));
+                } else {
+                    downloadStudyRoomText(json.filename || `${title}.md`, json.data || "");
+                }
+                showFocusToast("导出成功");
+            } catch (error) {
+                showFocusToast(error.message || "导出失败", true);
+            }
+        }
+
+        async function importPersonalDocFile(file) {
+            if (!file) return;
+            const text = await file.text();
+            const isJson = /\.json$/i.test(file.name) || file.type.includes("json");
+            try {
+                const body = isJson
+                    ? { format: "json", filename: file.name, payload: JSON.parse(text) }
+                    : { format: "md", filename: file.name, content: text };
+                const json = await request("/api/personal-docs/import", {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+                const room = studyRoomState();
+                const mapped = normalizePersonalDoc(json.data);
+                room.editorDocs = [mapped, ...(room.editorDocs || [])];
+                room.focusCurrentDocId = mapped.id;
+                room.kbStats = room.kbStats || {};
+                room.kbStats.total = room.editorDocs.length;
+                saveStudyRoom();
+                showFocusToast("导入成功");
+                render();
+            } catch (error) {
+                showFocusToast(error.message || "导入失败", true);
+            }
+        }
+
+        function insertHtmlAtCursor(html) {
+            const canvas = document.querySelector("[data-focus-canvas]");
+            if (!canvas) return;
+            canvas.focus();
+            document.execCommand("insertHTML", false, html);
+            saveFocusEditorContent();
+        }
+
+        async function openInsertNotePanel() {
+            const panel = document.querySelector("[data-kb-insert-panel]");
+            if (!panel) return;
+            panel.hidden = false;
+            panel.innerHTML = `<div class="kb-insert-card"><b>插入笔记</b><p>加载中…</p></div>`;
+            try {
+                const json = await request("/api/app/notes/center");
+                const notes = json.notes || json.data?.notes || [];
+                if (!notes.length) {
+                    panel.innerHTML = `<div class="kb-insert-card"><b>插入笔记</b><p>暂无笔记</p><button class="btn tiny" data-kb-insert-close>关闭</button></div>`;
+                    return;
+                }
+                panel.innerHTML = `<div class="kb-insert-card"><b>插入笔记</b><div class="kb-insert-list">${notes
+                    .slice(0, 20)
+                    .map(
+                        n =>
+                            `<button type="button" data-kb-pick-note="${n.id}" data-kb-pick-title="${escapeAttr(n.title || "笔记")}">${escapeHtml(n.title || "未命名笔记")}<small>${escapeHtml((n.body || "").replace(/<[^>]+>/g, "").slice(0, 60))}</small></button>`
+                    )
+                    .join("")}</div><button class="btn tiny" data-kb-insert-close>关闭</button></div>`;
+            } catch (error) {
+                panel.innerHTML = `<div class="kb-insert-card"><b>插入笔记</b><p>${escapeHtml(error.message)}</p><button class="btn tiny" data-kb-insert-close>关闭</button></div>`;
+            }
+        }
+
+        function openInsertDocPanel() {
+            const panel = document.querySelector("[data-kb-insert-panel]");
+            const room = studyRoomState();
+            if (!panel) return;
+            const docs = (room.editorDocs || []).filter(d => String(d.id) !== String(room.focusCurrentDocId));
+            panel.hidden = false;
+            if (!docs.length) {
+                panel.innerHTML = `<div class="kb-insert-card"><b>插入文档引用</b><p>暂无其他文档</p><button class="btn tiny" data-kb-insert-close>关闭</button></div>`;
+                return;
+            }
+            panel.innerHTML = `<div class="kb-insert-card"><b>插入文档引用</b><div class="kb-insert-list">${docs
+                .map(
+                    d =>
+                        `<button type="button" data-kb-pick-doc="${escapeAttr(String(d.id))}" data-kb-pick-title="${escapeAttr(d.title)}">${escapeHtml(d.title)}<small>${escapeHtml((docTemplates[d.templateType] || docTemplates.normal).name)}</small></button>`
+                )
+                .join("")}</div><button class="btn tiny" data-kb-insert-close>关闭</button></div>`;
         }
 
         function insertLink() {
@@ -13187,10 +13489,13 @@ ${content}
 
         // 打开学习心得编辑器
         document.querySelectorAll("[data-focus-open-editor]").forEach(btn =>
-            btn.addEventListener("click", () => {
+            btn.addEventListener("click", async () => {
                 const room = studyRoomState();
                 room.focusView = "editor";
                 saveStudyRoom();
+                try {
+                    await loadPersonalDocs(true);
+                } catch {}
                 render();
                 syncStudyRoomTimer();
                 setTimeout(() => {
@@ -13383,23 +13688,111 @@ ${content}
 
         // 分享链接
         document.querySelectorAll("[data-focus-share-link]").forEach(btn =>
-            btn.addEventListener("click", shareFocusLink)
+            btn.addEventListener("click", () => shareFocusLink())
         );
+
+        document.querySelectorAll("[data-focus-toggle-privacy]").forEach(btn =>
+            btn.addEventListener("click", () => toggleFocusPrivacy())
+        );
+
+        document.querySelectorAll("[data-focus-export-md]").forEach(btn =>
+            btn.addEventListener("click", () => exportPersonalDocFormat("md"))
+        );
+        document.querySelectorAll("[data-focus-export-json]").forEach(btn =>
+            btn.addEventListener("click", () => exportPersonalDocFormat("json"))
+        );
+        document.querySelectorAll("[data-focus-import-doc]").forEach(btn =>
+            btn.addEventListener("click", () => document.querySelector("[data-focus-import-file]")?.click())
+        );
+        document.querySelectorAll("[data-focus-import-file]").forEach(input =>
+            input.addEventListener("change", () => {
+                const file = input.files?.[0];
+                importPersonalDocFile(file).finally(() => {
+                    input.value = "";
+                });
+            })
+        );
+        document.querySelectorAll("[data-focus-delete-doc]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const room = studyRoomState();
+                const id = room.focusCurrentDocId;
+                if (!id || !confirm("确定删除这篇知识库文档？")) return;
+                try {
+                    await request(`/api/personal-docs/${id}`, { method: "DELETE" });
+                    room.editorDocs = (room.editorDocs || []).filter(d => String(d.id) !== String(id));
+                    room.focusCurrentDocId = room.editorDocs[0]?.id || null;
+                    room.kbStats = room.kbStats || {};
+                    room.kbStats.total = room.editorDocs.length;
+                    saveStudyRoom();
+                    showFocusToast("已删除");
+                    render();
+                } catch (error) {
+                    showFocusToast(error.message || "删除失败", true);
+                }
+            })
+        );
+
+        document.querySelectorAll("[data-tb-insert-note]").forEach(btn =>
+            btn.addEventListener("click", () => openInsertNotePanel())
+        );
+        document.querySelectorAll("[data-tb-insert-doc]").forEach(btn =>
+            btn.addEventListener("click", () => openInsertDocPanel())
+        );
+        if (!window._kbInsertEventBound) {
+            window._kbInsertEventBound = true;
+            document.addEventListener("click", e => {
+                if (e.target.closest("[data-kb-insert-close]")) {
+                    const panel = document.querySelector("[data-kb-insert-panel]");
+                    if (panel) panel.hidden = true;
+                    return;
+                }
+                const noteBtn = e.target.closest("[data-kb-pick-note]");
+                if (noteBtn) {
+                    const id = noteBtn.dataset.kbPickNote;
+                    const title = noteBtn.dataset.kbPickTitle || "笔记";
+                    const canvas = document.querySelector("[data-focus-canvas]");
+                    if (canvas) {
+                        canvas.focus();
+                        document.execCommand(
+                            "insertHTML",
+                            false,
+                            `<blockquote class="kb-embed kb-embed-note" data-note-id="${escapeAttr(id)}"><strong>笔记引用：</strong>${escapeHtml(title)}</blockquote><p></p>`
+                        );
+                        saveFocusEditorContent();
+                    }
+                    const panel = document.querySelector("[data-kb-insert-panel]");
+                    if (panel) panel.hidden = true;
+                    return;
+                }
+                const docBtn = e.target.closest("[data-kb-pick-doc]");
+                if (docBtn) {
+                    const id = docBtn.dataset.kbPickDoc;
+                    const title = docBtn.dataset.kbPickTitle || "文档";
+                    const canvas = document.querySelector("[data-focus-canvas]");
+                    if (canvas) {
+                        canvas.focus();
+                        document.execCommand(
+                            "insertHTML",
+                            false,
+                            `<blockquote class="kb-embed kb-embed-doc" data-doc-id="${escapeAttr(id)}"><strong>知识库文档：</strong>${escapeHtml(title)}</blockquote><p></p>`
+                        );
+                        saveFocusEditorContent();
+                    }
+                    const panel = document.querySelector("[data-kb-insert-panel]");
+                    if (panel) panel.hidden = true;
+                }
+            });
+        }
 
         // 保存编辑器
         document.querySelectorAll("[data-focus-save-editor]").forEach(btn =>
-            btn.addEventListener("click", () => {
-                saveFocusEditorContent();
-                const room = studyRoomState();
-                let contentToSave = room.focusEditorContent;
-                if (room.focusCurrentDocId) {
-                    const doc = room.editorDocs.find(d => d.id === room.focusCurrentDocId);
-                    if (doc) contentToSave = doc.content;
+            btn.addEventListener("click", async () => {
+                try {
+                    await saveFocusEditorContent(true);
+                    showFocusToast("已保存到知识库");
+                } catch (error) {
+                    showFocusToast(error.message || "保存失败", true);
                 }
-                if (contentToSave && contentToSave.replace(/<[^>]*>/g, '').trim()) {
-                    addStudyRoomQuickItem("note", contentToSave.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200));
-                }
-                showFocusToast("已保存学习心得");
             })
         );
 
@@ -13539,10 +13932,17 @@ ${content}
 
         // 选择文档
         document.querySelectorAll("[data-focus-doc-id]").forEach(el =>
-            el.addEventListener("click", () => {
-                saveFocusEditorContent();
+            el.addEventListener("click", async () => {
+                await saveFocusEditorContent(true);
                 const room = studyRoomState();
                 room.focusCurrentDocId = el.dataset.focusDocId;
+                try {
+                    const json = await request(`/api/personal-docs/${room.focusCurrentDocId}`);
+                    const mapped = normalizePersonalDoc(json.data);
+                    room.editorDocs = (room.editorDocs || []).map(d =>
+                        String(d.id) === String(mapped.id) ? mapped : d
+                    );
+                } catch {}
                 saveStudyRoom();
                 render();
             })
@@ -19930,6 +20330,18 @@ zhaoliu,赵六"></textarea>
             bindEvents();
             return;
         }
+        // 公开分享页：无需登录壳数据
+        if (state.view === "studyRoomShared" || getSharedTokenFromPath()) {
+            state.view = "studyRoomShared";
+            try {
+                await loadSharedPersonalDoc();
+            } catch {
+                state.data.sharedPersonalDoc = null;
+            }
+            app.innerHTML = studyRoomSharedView();
+            bindEvents();
+            return;
+        }
         const guardedView = guardOnboardingView(state.view, false);
         if (guardedView !== state.view) {
             state.view = guardedView;
@@ -19988,6 +20400,13 @@ zhaoliu,赵六"></textarea>
                     }
                 } catch (error) {
                     toast(error.message || "路径加载失败");
+                }
+            }
+            if (state.view === "studyRoom") {
+                try {
+                    await loadPersonalDocs();
+                } catch (error) {
+                    console.warn(error.message);
                 }
             }
             if (state.view === "profile") await loadProfileInsight();
@@ -20061,6 +20480,7 @@ zhaoliu,赵六"></textarea>
                 home: homeView,
                 studyPlan: studyPlanView,
                 studyRoom: studyRoomView,
+                studyRoomShared: studyRoomSharedView,
                 profile: profileView,
                 profileCognitive: profileCognitiveView,
                 profileKnowledge: profileKnowledgeView,
