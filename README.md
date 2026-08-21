@@ -2,6 +2,9 @@
 
 EduSmart 是一个面向计算机学习场景的 AI 个性化学习平台。系统围绕“诊断画像 → 知识库/RAG → 个性化路径 → 今日任务 → 笔记复盘 → 间隔复习”的闭环工作，帮助学生把课程、题库、笔记和智能体建议串成可执行的学习计划。
 
+**当前发布：[`v2.1.0`](https://github.com/DAXIJI107/edusmaty/releases/tag/v2.1.0)**（2026-08-21）  
+完整说明：[docs/RELEASE-v2.1.0.md](docs/RELEASE-v2.1.0.md) · 回滚：[docs/ROLLBACK-learning-path.md](docs/ROLLBACK-learning-path.md)
+
 ![EduSmart 登录页](docs/screenshots/showcase/01-login.png)
 
 ## 项目亮点

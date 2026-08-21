@@ -1,7 +1,7 @@
 {
     "name": "edusmart-rebuild",
-    "version": "2.0.0",
-    "description": "EduSmart 智能化学习平台重构版，前后端与旧项目独立运行。",
+    "version": "2.1.0",
+    "description": "EduSmart 智能化学习平台重构版，前后端与旧项目独立运行。v2.1.0：个性化路径自动生成与演示兜底。",
     "main": "src/server/index.js",
     "bin": "src/server/index.js",
     "scripts": {
