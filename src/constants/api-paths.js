@@ -64,6 +64,7 @@ module.exports = {
     GRAPH: `${API_PREFIX}/knowledge-graph`,
     NOTES: `${API_PREFIX}/app/notes`,
     PERSONAL: `${API_PREFIX}/personal-knowledge`,
+    DOCS: `${API_PREFIX}/personal-docs`,
   },
 
   // ========== 考试 ==========
