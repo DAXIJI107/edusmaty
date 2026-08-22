@@ -12194,24 +12194,13 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     <a class="login-modal-close" href="#" aria-label="关闭">×</a>
                     <div class="login-card-glow"></div>
                     <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
-                    <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
                     <div class="future-auth-panel active" data-auth-panel="account">
-                        <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                        <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="admin" autocomplete="username" placeholder="请输入账号"></label>
                         <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
-                        <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
-                    </div>
-                    <div class="future-auth-panel" data-auth-panel="code">
-                        <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
-                        <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+                        <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label></div>
                     </div>
                     <button class="future-login-submit" type="submit">登录</button>
                     <div class="message" id="login-message-modal"></div>
-                    <div class="future-divider"><span>其他登录方式</span></div>
-                    <div class="future-socials">
-                        <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
-                        <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
-                        <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
-                    </div>
                     <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
                 </form>
             </section>
@@ -12237,24 +12226,13 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         return `<form class="future-auth-dialog auth-form login-modal-card" id="login-form" data-mode="account">
             <div class="login-card-glow"></div>
             <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
-            <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
             <div class="future-auth-panel active" data-auth-panel="account">
-                <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="admin" autocomplete="username" placeholder="请输入账号"></label>
                 <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
-                <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
-            </div>
-            <div class="future-auth-panel" data-auth-panel="code">
-                <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
-                <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+                <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label></div>
             </div>
             <button class="future-login-submit" type="submit">登录</button>
             <div class="message" id="login-message"></div>
-            <div class="future-divider"><span>其他登录方式</span></div>
-            <div class="future-socials">
-                <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
-                <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
-                <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
-            </div>
             <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
         </form>`;
     }
