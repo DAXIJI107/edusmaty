@@ -21,6 +21,8 @@
         "obsidian:sync-rag": "node scripts/sync-obsidian-rag.js",
         "test:p0": "node scripts/test-p0-features.js",
         "test:spark": "node scripts/test-spark.js",
+        "test:team-project": "node scripts/test-team-project.js",
+        "seed:team-project": "node scripts/seed-team-project.js",
         "db:seed-demo-pack": "node scripts/seed-demo-knowledge-pack.js",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
