@@ -5494,8 +5494,10 @@ button {
 
 .nav {
     flex: 1;
+    min-width: 0;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: center;
     gap: 12px;
 }
 
@@ -27330,7 +27332,7 @@ body::before {
 }
 
 .brand {
-    min-width: 202px;
+    min-width: 140px;
     gap: 9px;
     font-size: 22px;
     letter-spacing: -0.4px;
@@ -30786,13 +30788,28 @@ textarea {
 }
 
 .topbar {
+    position: sticky;
+    top: 16px;
     width: min(1540px, calc(100% - 32px));
     margin: 16px auto 0;
+    padding: 0 22px;
+    overflow: visible;
+    background: transparent;
+    border: none;
+    z-index: 30;
+}
+
+.topbar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     border: 1px solid rgba(219, 232, 252, 0.92);
     border-radius: 24px;
     background: rgba(255, 255, 255, 0.76);
     box-shadow: 0 22px 54px rgba(51, 88, 154, 0.11), inset 0 1px rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(24px) saturate(1.18);
+    z-index: -1;
+    pointer-events: none;
 }
 
 .page.edu-modern-page,
