@@ -81,7 +81,7 @@ http://localhost:3020
 演示账号：
 
 ```text
-zhangsan / 123456
+admin / 123456
 teacher / 123456
 ```
 
