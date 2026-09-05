@@ -519,8 +519,150 @@ async function loadSchema() {
   const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
   const tableCount = tables.length && tables[0].values ? tables[0].values.length : 0;
   console.log(`[SQLite] 验证: 数据库中共有 ${tableCount} 张表`);
+
+  // 如果没有表或关键表缺失，强制 bootstrap
+  if (tableCount === 0) {
+    console.warn('[SQLite] 没有找到任何表，执行强制 bootstrap');
+    await bootstrapEssentialTables();
+  } else {
+    // 检查关键表是否存在
+    const tableNames = tables[0].values.map(r => r[0]);
+    const needed = ['users'];
+    for (const t of needed) {
+      if (!tableNames.includes(t)) {
+        console.warn(`[SQLite] 关键表 ${t} 缺失，补充创建`);
+      }
+    }
+    if (!tableNames.includes('users')) {
+      await bootstrapEssentialTables();
+    }
+  }
+
+  // 确保 admin 用户存在
+  await ensureAdminUser();
   
   saveToDisk();
+}
+
+/**
+ * 强制创建关键表（schema 加载失败时的保底方案）
+ */
+async function bootstrapEssentialTables() {
+  const essentialSQL = [
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      email TEXT,
+      phone TEXT,
+      password TEXT NOT NULL,
+      nickname TEXT,
+      avatar TEXT,
+      role TEXT DEFAULT 'student',
+      status TEXT DEFAULT 'active',
+      points INTEGER DEFAULT 0,
+      xp INTEGER DEFAULT 0,
+      level INTEGER DEFAULT 1,
+      streak_days INTEGER DEFAULT 0,
+      last_active_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS subjects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT,
+      description TEXT,
+      icon TEXT,
+      color TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS problems (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id INTEGER,
+      title TEXT NOT NULL,
+      content TEXT,
+      problem_type TEXT DEFAULT 'choice',
+      difficulty INTEGER DEFAULT 1,
+      options TEXT,
+      correct_answer TEXT,
+      explanation TEXT,
+      points INTEGER DEFAULT 10,
+      tags TEXT,
+      created_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS user_answers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      problem_id INTEGER,
+      answer TEXT,
+      is_correct INTEGER DEFAULT 0,
+      time_spent INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS study_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      subject_id INTEGER,
+      study_date TEXT,
+      duration INTEGER DEFAULT 0,
+      xp_earned INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      title TEXT,
+      subject_id INTEGER,
+      model TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER,
+      role TEXT,
+      content TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  ];
+
+  for (const sql of essentialSQL) {
+    try {
+      db.run(sql);
+      console.log(`  [BOOTSTRAP] Created table`);
+    } catch (err) {
+      if (!err.message.includes('already exists')) {
+        console.warn(`  [BOOTSTRAP] Warning: ${err.message.substring(0, 80)}`);
+      }
+    }
+  }
+  console.log('[SQLite] Bootstrap essential tables done');
+}
+
+/**
+ * 确保 admin 用户存在（默认密码 123456）
+ */
+async function ensureAdminUser() {
+  try {
+    const result = db.exec("SELECT id FROM users WHERE username = 'admin'");
+    if (!result.length || !result[0].values.length) {
+      // 使用 bcryptjs hash "123456"
+      const bcrypt = require('bcryptjs');
+      const hash = bcrypt.hashSync('123456', 10);
+      db.run(
+        `INSERT INTO users (username, password, nickname, role, status) VALUES ('admin', ?, 'EduSmart管理员', 'admin', 'active')`,
+        [hash]
+      );
+      console.log('[SQLite] Created default admin user (password: 123456)');
+    } else {
+      console.log('[SQLite] admin user exists');
+    }
+  } catch (err) {
+    console.warn(`[SQLite] ensureAdminUser: ${err.message}`);
+  }
 }
 
 /**

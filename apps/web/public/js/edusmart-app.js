@@ -267,6 +267,7 @@
             problemRunning: false,
             problemResult: "",
             algoViz: { kind: "bubble", values: "8,3,5,1,9,2", steps: [], index: 0, playing: false },
+            algoModal: { visible: false, kind: "bubble", values: "8,3,5,1,9,2", target: 7, steps: [], index: 0, playing: false, speed: 1000, mode: "demo" },
             tutorialsUrl: "https://www.runoob.com",
             tutorialLoading: false,
             teacherTab: "overview",
@@ -7277,6 +7278,651 @@
         </section>`;
     }
 
+    /* ==================== 增强版算法可视化引擎 ==================== */
+
+    const ENHANCED_ALGO_REGISTRY = {
+      bubble: { name: "冒泡排序", icon: "🔄", category: "排序", desc: "相邻元素两两比较交换，最大的元素像冒泡一样浮到末尾。" },
+      selection: { name: "选择排序", icon: "🎯", category: "排序", desc: "每轮从未排序区选择最小值，放到已排序区末尾。" },
+      insertion: { name: "插入排序", icon: "📥", category: "排序", desc: "将未排序元素逐个插入到已排序序列的正确位置。" },
+      quicksort: { name: "快速排序", icon: "⚡", category: "排序", desc: "选择基准元素，通过分区操作将数组分成两部分递归排序。" },
+      binary: { name: "二分查找", icon: "🔍", category: "查找", desc: "在有序数组中每次排除一半区间，快速定位目标元素。" },
+      linear: { name: "顺序查找", icon: "👀", category: "查找", desc: "从头到尾逐个比较，直到找到目标元素或遍历完数组。" },
+      stack: { name: "栈 (Stack)", icon: "📚", category: "数据结构", desc: "后进先出(LIFO)的数据结构，只能在栈顶进行插入和删除。" },
+      queue: { name: "队列 (Queue)", icon: "🚶", category: "数据结构", desc: "先进先出(FIFO)的数据结构，从队尾入队，队头出队。" },
+      hashtable: { name: "哈希表", icon: "🔑", category: "数据结构", desc: "通过哈希函数将键映射到数组下标，实现O(1)时间的查找。" },
+      bst: { name: "二叉搜索树", icon: "🌳", category: "树结构", desc: "左子树所有节点值小于根，右子树所有节点值大于根，支持高效查找。" },
+      dfs: { name: "深度优先搜索", icon: "🗺️", category: "图算法", desc: "沿着一条路径尽可能深入探索，再回溯到其他分支，使用栈实现。" },
+    };
+
+    function buildEnhancedAlgoSteps(kind, rawValues, options = {}) {
+      const initial = parseAlgoValues(rawValues);
+      const target = options.target !== undefined ? options.target : (initial.length > 0 ? initial[Math.floor(initial.length / 2)] : 0);
+      const steps = [];
+
+      const makeStep = (overrides = {}) => ({
+        array: [...(overrides.array || initial)],
+        active: overrides.active || [],
+        sorted: overrides.sorted || [],
+        message: overrides.message || "",
+        pointers: overrides.pointers || {},
+        userAction: overrides.userAction || null,
+        correctAnswer: overrides.correctAnswer || null,
+        expectedStep: overrides.expectedStep || null,
+      });
+
+      if (kind === "bubble") {
+        const arr = [...initial];
+        steps.push(makeStep({ array: [...arr], message: "准备开始：冒泡排序开始，观察输入数组。" }));
+        for (let end = arr.length - 1; end > 0; end--) {
+          for (let i = 0; i < end; i++) {
+            steps.push(makeStep({ array: [...arr], active: [i, i + 1], sorted: Array.from({ length: arr.length - 1 - end }, (_, n) => end + 1 + n), message: `比较 ${arr[i]} 和 ${arr[i + 1]}。`, pointers: { i, j: i + 1 } }));
+            if (arr[i] > arr[i + 1]) {
+              [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+              steps.push(makeStep({ array: [...arr], active: [i, i + 1], sorted: Array.from({ length: arr.length - end }, (_, n) => end + n), message: `${arr[i]} > ${arr[i + 1]}，交换这两个元素。`, pointers: { i, j: i + 1 } }));
+            } else {
+              steps.push(makeStep({ array: [...arr], active: [i, i + 1], sorted: Array.from({ length: arr.length - 1 - end }, (_, n) => end + 1 + n), message: `顺序正确，不交换。`, pointers: { i, j: i + 1 } }));
+            }
+          }
+          steps.push(makeStep({ array: [...arr], active: [end], sorted: Array.from({ length: arr.length - end }, (_, n) => end + n), message: `本轮结束，最大值 ${arr[end]} 冒泡到位置 ${end}。` }));
+        }
+        steps.push(makeStep({ array: [...arr], sorted: arr.map((_, i) => i), message: "🎉 冒泡排序完成！所有元素已排好序。" }));
+        return steps;
+      }
+
+      if (kind === "selection") {
+        const arr = [...initial];
+        steps.push(makeStep({ array: [...arr], message: "准备开始：选择排序开始。" }));
+        for (let i = 0; i < arr.length - 1; i++) {
+          let min = i;
+          steps.push(makeStep({ array: [...arr], active: [i], sorted: Array.from({ length: i }, (_, n) => n), message: `第 ${i + 1} 轮：假设位置 ${i} (值 ${arr[i]}) 是最小值。`, pointers: { i, min } }));
+          for (let j = i + 1; j < arr.length; j++) {
+            steps.push(makeStep({ array: [...arr], active: [min, j], sorted: Array.from({ length: i }, (_, n) => n), message: `比较当前最小值 ${arr[min]} 和候选值 ${arr[j]}。`, pointers: { i, j, min } }));
+            if (arr[j] < arr[min]) {
+              min = j;
+              steps.push(makeStep({ array: [...arr], active: [min], sorted: Array.from({ length: i }, (_, n) => n), message: `发现更小的 ${arr[min]}，更新最小值位置为 ${min}。`, pointers: { i, j, min } }));
+            }
+          }
+          if (min !== i) {
+            [arr[i], arr[min]] = [arr[min], arr[i]];
+            steps.push(makeStep({ array: [...arr], active: [i, min], sorted: Array.from({ length: i + 1 }, (_, n) => n), message: `交换位置 ${i} 和 ${min}，把本轮最小值 ${arr[i]} 放到前面。`, pointers: { i, min } }));
+          }
+        }
+        steps.push(makeStep({ array: [...arr], sorted: arr.map((_, i) => i), message: "🎉 选择排序完成！每轮都把最小值放到未排序区开头。" }));
+        return steps;
+      }
+
+      if (kind === "insertion") {
+        const arr = [...initial];
+        steps.push(makeStep({ array: [...arr], message: "准备开始：插入排序。第一个元素 ${arr[0]} 视为已排序。" }));
+        for (let i = 1; i < arr.length; i++) {
+          const key = arr[i];
+          let j = i - 1;
+          steps.push(makeStep({ array: [...arr], active: [i], sorted: Array.from({ length: i }, (_, n) => n), message: `取出元素 ${key} (位置 ${i})，准备插入到已排序部分。`, pointers: { i, key } }));
+          while (j >= 0 && arr[j] > key) {
+            arr[j + 1] = arr[j];
+            steps.push(makeStep({ array: [...arr], active: [j, j + 1], sorted: Array.from({ length: i }, (_, n) => n), message: `${arr[j]} > ${key}，将 ${arr[j]} 后移到位置 ${j + 1}。`, pointers: { j } }));
+            j--;
+          }
+          arr[j + 1] = key;
+          steps.push(makeStep({ array: [...arr], active: [j + 1], sorted: Array.from({ length: i + 1 }, (_, n) => n), message: `将 ${key} 插入到位置 ${j + 1}。`, pointers: { j: j + 1 } }));
+        }
+        steps.push(makeStep({ array: [...arr], sorted: arr.map((_, i) => i), message: "🎉 插入排序完成！每个元素都已插入到正确位置。" }));
+        return steps;
+      }
+
+      if (kind === "quicksort") {
+        const arr = [...initial];
+        function quickSortRec(start, end) {
+          if (start >= end) return;
+          const pivot = arr[end];
+          steps.push(makeStep({ array: [...arr], active: [end], message: `选择基准元素 ${pivot} (位置 ${end})。`, pointers: { pivot: end, start, end } }));
+          let i = start - 1;
+          for (let j = start; j < end; j++) {
+            steps.push(makeStep({ array: [...arr], active: [j], message: `比较 ${arr[j]} 和基准 ${pivot}。`, pointers: { j, pivot: end } }));
+            if (arr[j] <= pivot) {
+              i++;
+              if (i !== j) {
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+                steps.push(makeStep({ array: [...arr], active: [i, j], message: `${arr[j]} ≤ ${pivot}，交换位置 ${i} 和 ${j}。`, pointers: { i, j } }));
+              }
+            }
+          }
+          [arr[i + 1], arr[end]] = [arr[end], arr[i + 1]];
+          const pivotFinal = i + 1;
+          steps.push(makeStep({ array: [...arr], active: [pivotFinal], message: `基准元素 ${pivot} 已就位 (位置 ${pivotFinal})。`, pointers: { pivot: pivotFinal } }));
+          quickSortRec(start, pivotFinal - 1);
+          quickSortRec(pivotFinal + 1, end);
+        }
+        steps.push(makeStep({ array: [...arr], message: "准备开始：快速排序。" }));
+        quickSortRec(0, arr.length - 1);
+        steps.push(makeStep({ array: [...arr], sorted: arr.map((_, i) => i), message: "🎉 快速排序完成！" }));
+        return steps;
+      }
+
+      if (kind === "binary") {
+        const arr = [...initial].sort((a, b) => a - b);
+        let left = 0, right = arr.length - 1;
+        steps.push(makeStep({ array: [...arr], sorted: [], message: `二分查找：在有序数组中查找目标值 ${target}。区间 [0, ${right}]。`, pointers: { left, right, target } }));
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          steps.push(makeStep({ array: [...arr], active: [mid], message: `计算中点 ${mid}，值为 ${arr[mid]}。`, pointers: { left, right, mid, target } }));
+          if (arr[mid] === target) {
+            steps.push(makeStep({ array: [...arr], active: [mid], sorted: [mid], message: `🎉 找到目标值 ${target}，位置是 ${mid}！`, pointers: { left, right, mid, target } }));
+            return steps;
+          }
+          if (arr[mid] < target) {
+            left = mid + 1;
+            steps.push(makeStep({ array: [...arr], active: [mid], message: `${arr[mid]} < ${target}，丢弃左半区，新区间 [${left}, ${right}]。`, pointers: { left, right, target } }));
+          } else {
+            right = mid - 1;
+            steps.push(makeStep({ array: [...arr], active: [mid], message: `${arr[mid]} > ${target}，丢弃右半区，新区间 [${left}, ${right}]。`, pointers: { left, right, target } }));
+          }
+        }
+        steps.push(makeStep({ array: [...arr], message: `查找结束，没有找到目标值 ${target}。`, pointers: { left, right, target } }));
+        return steps;
+      }
+
+      if (kind === "linear") {
+        const arr = [...initial];
+        steps.push(makeStep({ array: [...arr], message: `顺序查找：从头到尾遍历数组，查找目标值 ${target}。` }));
+        for (let i = 0; i < arr.length; i++) {
+          steps.push(makeStep({ array: [...arr], active: [i], message: `检查位置 ${i}，值为 ${arr[i]}。`, pointers: { i, target } }));
+          if (arr[i] === target) {
+            steps.push(makeStep({ array: [...arr], active: [i], sorted: [i], message: `🎉 找到目标值 ${target}，位置是 ${i}！` }));
+            return steps;
+          }
+        }
+        steps.push(makeStep({ array: [...arr], message: `查找结束，没有找到目标值 ${target}。` }));
+        return steps;
+      }
+
+      if (kind === "stack") {
+        const arr = initial.slice(0, 6);
+        const stack = [];
+        steps.push(makeStep({ array: [...stack], message: "空栈：准备演示栈的 push 和 pop 操作。", pointers: { top: -1 } }));
+        for (const val of arr.slice(0, 4)) {
+          stack.push(val);
+          steps.push(makeStep({ array: [...stack], message: `Push ${val} 入栈，栈顶指针指向位置 ${stack.length - 1}。`, pointers: { top: stack.length - 1, op: "push" } }));
+        }
+        steps.push(makeStep({ array: [...stack], message: `当前栈中有 ${stack.length} 个元素。下面演示弹出。`, pointers: { top: stack.length - 1 } }));
+        for (let i = 0; i < 2; i++) {
+          const popped = stack.pop();
+          steps.push(makeStep({ array: [...stack], message: `Pop：弹出栈顶元素 ${popped}。`, pointers: { top: stack.length - 1, op: "pop", removed: popped } }));
+        }
+        steps.push(makeStep({ array: [...stack], message: `栈操作演示完成：Push 增加元素，Pop 删除栈顶元素。`, pointers: { top: stack.length - 1 } }));
+        return steps;
+      }
+
+      if (kind === "queue") {
+        const arr = initial.slice(0, 6);
+        const queue = [];
+        steps.push(makeStep({ array: [...queue], message: "空队列：准备演示队列的入队(enqueue)和出队(dequeue)操作。", pointers: { front: -1, rear: -1 } }));
+        for (const val of arr.slice(0, 4)) {
+          queue.push(val);
+          steps.push(makeStep({ array: [...queue], message: `Enqueue ${val} 入队，队尾指针指向位置 ${queue.length - 1}。`, pointers: { front: 0, rear: queue.length - 1, op: "enqueue" } }));
+        }
+        steps.push(makeStep({ array: [...queue], message: `当前队列有 ${queue.length} 个元素。队头: ${queue[0]}，队尾: ${queue[queue.length - 1]}。`, pointers: { front: 0, rear: queue.length - 1 } }));
+        for (let i = 0; i < 2; i++) {
+          const dequeued = queue.shift();
+          steps.push(makeStep({ array: [...queue], message: `Dequeue：出队元素 ${dequeued}，队头指针前移。`, pointers: { front: queue.length > 0 ? 0 : -1, rear: queue.length - 1, op: "dequeue", removed: dequeued } }));
+        }
+        steps.push(makeStep({ array: [...queue], message: `队列操作演示完成：入队在队尾添加，出队在队头移除，先进先出(FIFO)。`, pointers: { front: queue.length > 0 ? 0 : -1, rear: queue.length - 1 } }));
+        return steps;
+      }
+
+      if (kind === "hashtable") {
+        const arr = initial.slice(0, 5);
+        const capacity = 7;
+        const table = Array.from({ length: capacity }, () => []);
+        const hashFn = (v) => v % capacity;
+        steps.push(makeStep({ array: [], message: `哈希表演示（容量 ${capacity}）：使用 hash(key) = key % ${capacity}。` }));
+        for (const val of arr) {
+          const idx = hashFn(val);
+          table[idx].push(val);
+          const flat = table.flat();
+          steps.push(makeStep({ array: [...flat], message: `插入 ${val}：hash(${val}) = ${idx}${table[idx].length > 1 ? '（产生冲突，链到后面）' : ''}。`, pointers: { bucket: idx, value: val, chain: [...table[idx]] } }));
+        }
+        steps.push(makeStep({ array: [...table.flat()], message: `哈希表构建完成，共 ${table.flat().length} 个元素分布在 ${capacity} 个桶中。` }));
+        return steps;
+      }
+
+      if (kind === "bst") {
+        const arr = initial.slice(0, 6);
+        const tree = { values: [], edges: [] };
+        function insertBST(val, depth = 0, index = 0) {
+          if (tree.values.length === 0) {
+            tree.values = [{ val, depth, index: 0 }];
+            return 0;
+          }
+          let nodeIdx = 0;
+          while (true) {
+            const node = tree.values[nodeIdx];
+            if (val <= node.val) {
+              const leftIdx = 2 * nodeIdx + 1;
+              if (!tree.values[leftIdx]) { tree.values[leftIdx] = { val, depth: depth + 1, index: leftIdx, parentIdx: nodeIdx }; tree.edges.push({ from: nodeIdx, to: leftIdx }); return leftIdx; }
+              nodeIdx = leftIdx;
+            } else {
+              const rightIdx = 2 * nodeIdx + 2;
+              if (!tree.values[rightIdx]) { tree.values[rightIdx] = { val, depth: depth + 1, index: rightIdx, parentIdx: nodeIdx }; tree.edges.push({ from: nodeIdx, to: rightIdx }); return rightIdx; }
+              nodeIdx = rightIdx;
+            }
+          }
+        }
+        steps.push(makeStep({ array: [], message: "二叉搜索树演示：按顺序插入数字构建 BST。" }));
+        for (const val of arr) {
+          const beforeCount = tree.values.filter(Boolean).length;
+          insertBST(val);
+          const displayArr = tree.values.filter(Boolean).map(n => n.val);
+          steps.push(makeStep({ array: [...displayArr], message: `插入 ${val}，当前树有 ${tree.values.filter(Boolean).length} 个节点。`, pointers: { inserted: val } }));
+        }
+        const targetVal = arr[arr.length - 1];
+        steps.push(makeStep({ array: [...tree.values.filter(Boolean).map(n => n.val)], message: `构建完成！现在在 BST 中查找 ${targetVal}。` }));
+        let nodeIdx = 0;
+        while (nodeIdx < tree.values.length && tree.values[nodeIdx]) {
+          const node = tree.values[nodeIdx];
+          if (node.val === targetVal) {
+            steps.push(makeStep({ array: [...tree.values.filter(Boolean).map(n => n.val)], message: `🎉 找到 ${targetVal}！路径正确，BST 查找效率为 O(log n)。`, pointers: { found: node.val } }));
+            break;
+          }
+          steps.push(makeStep({ array: [...tree.values.filter(Boolean).map(n => n.val)], message: `比较 ${node.val} 和 ${targetVal}，${targetVal > node.val ? '向右子树走' : '向左子树走'}。`, pointers: { current: node.val } }));
+          nodeIdx = targetVal > node.val ? 2 * nodeIdx + 2 : 2 * nodeIdx + 1;
+        }
+        return steps;
+      }
+
+      if (kind === "dfs") {
+        const graph = { 0: [1, 2], 1: [0, 3, 4], 2: [0, 5], 3: [1], 4: [1], 5: [2] };
+        const visited = new Set();
+        const traversal = [];
+        function dfs(node) {
+          visited.add(node);
+          traversal.push(node);
+          steps.push(makeStep({ array: [...traversal], message: `访问节点 ${node}。已访问: [${traversal.join(', ')}]`, pointers: { current: node, visited: [...traversal] } }));
+          for (const neighbor of graph[node]) {
+            if (!visited.has(neighbor)) {
+              dfs(neighbor);
+            }
+          }
+        }
+        steps.push(makeStep({ array: [], message: "深度优先搜索（DFS）：从节点 0 开始，沿着一条路径尽可能深入。" }));
+        dfs(0);
+        steps.push(makeStep({ array: [...traversal], message: `🎉 DFS 完成！遍历顺序: [${traversal.join(' → ')}]` }));
+        return steps;
+      }
+
+      return steps;
+    }
+
+    function renderEnhancedAlgoScene(step, kind, target) {
+      if (!step || !step.array) return `<div class="algo-scene-empty">选择算法并开始演示</div>`;
+
+      switch (kind) {
+        case "stack":
+          return renderStackScene(step);
+        case "queue":
+          return renderQueueScene(step);
+        case "hashtable":
+          return renderHashTableScene(step, step.pointers);
+        case "bst":
+          return renderTreeScene(step);
+        case "dfs":
+          return renderGraphScene(step);
+        case "binary":
+        case "linear":
+          return renderSearchScene(step, kind, target);
+        default:
+          return renderSortScene(step, kind);
+      }
+    }
+
+    function renderSortScene(step, kind) {
+      const arr = step.array;
+      const max = Math.max(...arr, 1);
+      const unitHeight = 140;
+      return `<div class="algo-bar-stage">
+        ${arr.map((val, i) => {
+          const isActive = step.active.includes(i);
+          const isSorted = step.sorted.includes(i);
+          const height = Math.max(30, Math.round((val / max) * unitHeight));
+          return `<div class="algo-bar-col ${isActive ? 'active' : ''} ${isSorted ? 'sorted' : ''}" data-index="${i}" style="height:${height}px">
+            <div class="algo-bar-value">${val}</div>
+            <span class="algo-bar-index">${i}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    function renderSearchScene(step, kind, target) {
+      const arr = step.array;
+      const pointers = step.pointers || {};
+      return `<div class="algo-bar-stage">
+        ${arr.map((val, i) => {
+          const isActive = step.active.includes(i);
+          const isFound = step.sorted.includes(i);
+          const isOutOfRange = kind === "binary" && pointers.left !== undefined && (i < pointers.left || i > pointers.right) && !isFound;
+          let cls = '';
+          if (isActive) cls = 'comparing';
+          if (isFound) cls = 'correct-target';
+          if (isOutOfRange) cls = 'muted';
+          return `<div class="algo-bar-col ${cls}" data-index="${i}">
+            <div class="algo-bar-value">${val}</div>
+            <span class="algo-bar-index">${i}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    function renderStackScene(step) {
+      const arr = step.array;
+      return `<div class="algo-stack-container">
+        ${arr.length === 0 ? '<div style="color:#475569;font-size:14px">空栈</div>' : arr.map((val, i) => {
+          const isNew = step.pointers && step.pointers.op === 'push' && i === arr.length - 1;
+          return `<div class="algo-stack-item ${isNew ? 'new' : ''}">
+            ${val}
+            ${i === arr.length - 1 ? '<span style="position:absolute;right:-70px;top:50%;transform:translateY(-50%);color:#38bdf8;font-size:11px;">← Top</span>' : ''}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    function renderQueueScene(step) {
+      const arr = step.array;
+      const pointers = step.pointers || {};
+      return `<div class="algo-queue-container">
+        <div class="algo-queue-label" style="color:#f59e0b;font-size:12px;margin-bottom:4px">← Front (队头)</div>
+        <div class="algo-queue-track">
+          ${arr.length === 0 ? '<div style="color:#475569;font-size:14px;padding:20px 0">空队列</div>' : arr.map((val, i) => {
+            const isNew = pointers.op === 'enqueue' && i === arr.length - 1;
+            const isRemoved = pointers.op === 'dequeue' && i === 0;
+            const isFront = i === 0;
+            const isRear = i === arr.length - 1;
+            return `<div class="algo-queue-item ${isNew ? 'new' : ''} ${isRemoved ? 'removed' : ''}">
+              ${val}
+              ${isFront ? '<span style="position:absolute;left:-52px;top:50%;transform:translateY(-50%);color:#f59e0b;font-size:10px;">Front</span>' : ''}
+              ${isRear ? '<span style="position:absolute;right:-52px;top:50%;transform:translateY(-50%);color:#10b981;font-size:10px;">Rear</span>' : ''}
+            </div>`;
+          }).join("")}
+        </div>
+        <div class="algo-queue-label" style="color:#10b981;font-size:12px;margin-top:4px">Rear (队尾) →</div>
+      </div>`;
+    }
+
+    function renderHashTableScene(step, pointers) {
+      const values = step.array || [];
+      const capacity = 7;
+      const hashFn = (v) => v % capacity;
+      const table = Array.from({ length: capacity }, () => []);
+      for (const v of values) table[hashFn(v)].push(v);
+      return `<div class="algo-hash-container">
+        ${table.map((chain, idx) => `
+          <div class="algo-hash-row">
+            <div class="algo-hash-index">${idx}</div>
+            <div class="algo-hash-chain">
+              ${chain.length === 0 ? '<span style="color:#334155;font-size:11px">空</span>' :
+                chain.map((v, i) => `
+                  <span class="algo-hash-node">${v}</span>
+                  ${i < chain.length - 1 ? '<span class="algo-hash-arrow">→</span>' : ''}
+                `).join("")
+              }
+            </div>
+          </div>
+        `).join("")}
+      </div>`;
+    }
+
+    function renderTreeScene(step) {
+      const values = step.array || [];
+      const levels = [];
+      const nodes = values.map((val, i) => ({ val, idx: i, left: 2 * i + 1, right: 2 * i + 2 }));
+      let currentLevel = [0];
+      let level = 0;
+      while (currentLevel.length > 0 && level < 5) {
+        levels.push(currentLevel);
+        const nextLevel = [];
+        for (const idx of currentLevel) {
+          if (2 * idx + 1 < values.length) nextLevel.push(2 * idx + 1);
+          if (2 * idx + 2 < values.length) nextLevel.push(2 * idx + 2);
+        }
+        currentLevel = nextLevel;
+        level++;
+      }
+      return `<div class="algo-tree-container">
+        ${levels.map((lvl, li) => `
+          <div class="algo-tree-level" style="margin-bottom:${li < levels.length - 1 ? 20 + (levels.length - li) * 8 : 0}px">
+            ${lvl.map(idx => values[idx] !== undefined ? `<div class="algo-tree-node">${values[idx]}</div>` : `<div class="algo-tree-node empty">·</div>`).join("")}
+          </div>
+        `).join("")}
+      </div>`;
+    }
+
+    function renderGraphScene(step) {
+      const visited = step.pointers?.visited || step.array || [];
+      const graph = { 0: [1, 2], 1: [0, 3, 4], 2: [0, 5], 3: [1], 4: [1], 5: [2] };
+      const positions = { 0: { x: 150, y: 180 }, 1: { x: 50, y: 80 }, 2: { x: 250, y: 80 }, 3: { x: 20, y: 0 }, 4: { x: 80, y: 0 }, 5: { x: 250, y: 0 } };
+      const allNodes = [0, 1, 2, 3, 4, 5];
+      const allEdges = [[0,1],[0,2],[1,3],[1,4],[2,5]];
+      const scale = 1.2;
+      return `<svg viewBox="-20 -30 340 240" width="340" height="240">
+        ${allEdges.map(([a, b]) => {
+          const pa = positions[a], pb = positions[b];
+          const active = visited.includes(a) && visited.includes(b);
+          return `<line x1="${pa.x * scale}" y1="${pa.y * scale}" x2="${pb.x * scale}" y2="${pb.y * scale}" stroke="${active ? '#10b981' : '#475569'}" stroke-width="${active ? 3 : 1.5}" stroke-opacity="${active ? 1 : 0.4}"/>`;
+        }).join("")}
+        ${allNodes.map(n => {
+          const pos = positions[n];
+          const isVisited = visited.includes(n);
+          return `<circle cx="${pos.x * scale}" cy="${pos.y * scale}" r="18" fill="${isVisited ? '#10b981' : '#6366f1'}" opacity="${isVisited ? 1 : 0.6}"/>
+            <text x="${pos.x * scale}" y="${pos.y * scale + 5}" text-anchor="middle" fill="white" font-size="13" font-weight="600">${n}</text>`;
+        }).join("")}
+      </svg>`;
+    }
+
+    function algoModalView() {
+      const modal = state.data.algoModal || {
+        visible: false,
+        kind: "bubble",
+        values: "8,3,5,1,9,2",
+        target: 7,
+        steps: [],
+        index: 0,
+        playing: false,
+        speed: 1000,
+        mode: "demo",
+        practice: null,
+      };
+
+      if (!modal.visible) return "";
+
+      const registry = ENHANCED_ALGO_REGISTRY;
+      const activeAlgo = registry[modal.kind] || registry.bubble;
+      let viz = modal;
+
+      if (!viz.steps || !viz.steps.length) {
+        viz.steps = buildEnhancedAlgoSteps(viz.kind, viz.values, { target: viz.target });
+        viz.index = 0;
+      }
+
+      const step = viz.steps[Math.max(0, Math.min(viz.index, viz.steps.length - 1))] || { array: [], active: [], sorted: [], message: "等待演示", pointers: {} };
+      const progress = viz.steps.length > 1 ? Math.round((viz.index / (viz.steps.length - 1)) * 100) : 0;
+      const pointers = step.pointers || {};
+
+      let pointerText = "";
+      if (pointers.target !== undefined) pointerText = `目标: ${pointers.target}`;
+      else if (pointers.i !== undefined) pointerText = `i=${pointers.i}${pointers.j !== undefined ? `, j=${pointers.j}` : ''}${pointers.min !== undefined ? `, min=${pointers.min}` : ''}`;
+      else if (pointers.left !== undefined) pointerText = `区间 [${pointers.left}, ${pointers.right}]`;
+      else if (pointers.top !== undefined) pointerText = `栈顶: ${pointers.top}`;
+      else if (pointers.current !== undefined) pointerText = `当前: ${pointers.current}`;
+      else pointerText = "等待演示";
+
+      const practiceStep = viz.mode === "practice" ? (() => { window.__algoPracticeIdx = viz.index; return getPracticeQuestion(step, viz.kind); })() : null;
+
+      return `<div class="algo-modal-overlay" data-algo-modal-close>
+        <div class="algo-modal pop-in">
+          <div class="algo-modal-header">
+            <div class="algo-modal-title">
+              <h2>🧠 算法可视化实验室</h2>
+              <span class="badge" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3)">${registry[viz.kind]?.category || '算法'}</span>
+              <span class="badge" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)">${viz.mode === 'practice' ? '练习模式' : '演示模式'}</span>
+            </div>
+            <button class="algo-modal-close" data-algo-modal-close>✕</button>
+          </div>
+          <div class="algo-modal-body">
+            <aside class="algo-modal-sidebar">
+              <div class="algo-sidebar-section-title">选择算法</div>
+              <div class="algo-algo-list">
+                ${Object.entries(registry).map(([key, info]) => `
+                  <button class="algo-item ${key === viz.kind ? 'active' : ''}" data-algo-select="${key}">
+                    <div class="algo-icon" style="background:rgba(56,189,248,0.12)">${info.icon}</div>
+                    <div class="algo-meta">
+                      <b>${info.name}</b>
+                      <small>${info.category}</small>
+                    </div>
+                  </button>
+                `).join("")}
+              </div>
+              <div class="algo-sidebar-divider"></div>
+              <div class="algo-sidebar-section-title">输入数据</div>
+              <div class="algo-input-group">
+                <label>数组值 (逗号分隔)</label>
+                <input data-algo-input-values value="${viz.values}" placeholder="8,3,5,1,9,2">
+              </div>
+              ${['binary', 'linear'].includes(viz.kind) ? `
+                <div class="algo-input-group">
+                  <label>查找目标值</label>
+                  <input data-algo-input-target type="number" value="${viz.target}">
+                </div>` : ''}
+              <div class="algo-sidebar-actions">
+                <button class="algo-btn primary" data-algo-regenerate>🎲 生成演示</button>
+                <button class="algo-btn ${viz.mode === 'practice' ? 'success' : ''}" data-algo-toggle-mode>${viz.mode === 'practice' ? '✓ 练习模式' : '🎯 切换练习'}</button>
+              </div>
+            </aside>
+            <div class="algo-modal-main">
+              <div class="algo-modal-stage">
+                <div class="algo-stage-header">
+                  <div class="algo-stage-info">
+                    <span class="algo-label">算法</span>
+                    <span class="algo-value">${activeAlgo.icon} ${activeAlgo.name}</span>
+                  </div>
+                  <div class="algo-stage-info">
+                    <span class="algo-label">进度</span>
+                    <span class="algo-progress">${progress}%</span>
+                  </div>
+                  <div class="algo-stage-info">
+                    <span class="algo-label">步骤</span>
+                    <span class="algo-value">${viz.index + 1} / ${viz.steps.length}</span>
+                  </div>
+                </div>
+                <div class="algo-stage-canvas">
+                  ${renderEnhancedAlgoScene(step, viz.kind, viz.target)}
+                </div>
+                <div class="algo-progress-bar"><i style="width:${progress}%"></i></div>
+                ${viz.mode === 'practice' && practiceStep ? renderPracticePanel(practiceStep, step, viz) : ''}
+              </div>
+              </div>
+              <div class="algo-modal-footer">
+                <div class="algo-step-info">
+                  <div class="algo-step-message">${step.message || '准备开始...'}</div>
+                  <div class="algo-step-counter">${viz.index + 1}/${viz.steps.length}</div>
+                </div>
+                <div class="algo-controls">
+                  <button class="algo-btn" data-algo-reset>↺ 重置</button>
+                  <button class="algo-btn" data-algo-prev>← 上一步</button>
+                  <button class="algo-btn primary" data-algo-play>${viz.playing ? '⏸ 暂停' : '▶ 播放'}</button>
+                  <button class="algo-btn" data-algo-next>下一步 →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function getPracticeQuestion(step, kind) {
+      const pointers = step?.pointers || {};
+      const currentIdx = window.__algoPracticeIdx || 0;
+      const questionTypes = {
+        bubble: [
+          { q: `当前正在比较位置 ${pointers.i ?? '?'} 和 ${pointers.j ?? '?'} 的元素，接下来应该做什么？`, options: ['交换它们', '比较大小', '插入元素'], answer: 1 },
+          { q: `左边元素比右边大时，正确的操作是？`, options: ['保持不动', '交换两个元素', '删除元素'], answer: 1 },
+          { q: `冒泡排序每一轮后，哪个元素会到达正确位置？`, options: ['最小值', '最大值', '第一个元素'], answer: 1 },
+        ],
+        selection: [
+          { q: `选择排序中，每轮开始前要先假设哪个位置是最小值？`, options: ['数组开头位置', '未排序区的第一个位置', '数组中间位置'], answer: 1 },
+          { q: `找到更小的值后，需要更新什么？`, options: ['当前位置', '最小值位置', '数组长度'], answer: 1 },
+        ],
+        insertion: [
+          { q: `插入排序中，取出当前元素后要做什么？`, options: ['立即放到末尾', '与已排序部分从右到左比较', '与未排序部分比较'], answer: 1 },
+          { q: `已排序部分的元素比当前元素大时，应该怎样做？`, options: ['交换位置', '将已排序元素后移', '删除当前元素'], answer: 1 },
+        ],
+        quicksort: [
+          { q: `快速排序首先选择什么作为基准？`, options: ['数组第一个元素', '数组最后一个元素', '数组中间元素'], answer: 1 },
+          { q: `分区完成后，基准元素应该在什么位置？`, options: ['它的最终位置', '数组开头', '数组末尾'], answer: 0 },
+        ],
+        binary: [
+          { q: `二分查找要求数组必须是？`, options: ['有序的', '无序的', '循环的'], answer: 0 },
+          { q: `计算中点 mid 后，若 arr[mid] < target，应该？`, options: ['搜索左半区', '搜索右半区', '结束查找'], answer: 1 },
+        ],
+        stack: [
+          { q: `栈的特点是？`, options: ['先进先出', '后进先出', '随机存取'], answer: 1 },
+          { q: `push 操作会把元素放到哪里？`, options: ['栈底', '栈顶', '中间位置'], answer: 1 },
+        ],
+        hashtable: [
+          { q: `哈希表的平均查找时间复杂度是？`, options: ['O(1)', 'O(n)', 'O(log n)'], answer: 0 },
+          { q: `多个键映射到同一桶的现象称为？`, options: ['溢出', '冲突', '碰撞'], answer: 2 },
+        ],
+        bst: [
+          { q: `二叉搜索树的左子树节点值都？`, options: ['大于根节点', '小于根节点', '等于根节点'], answer: 1 },
+          { q: `在 BST 中查找一个值的平均时间复杂度是？`, options: ['O(1)', 'O(log n)', 'O(n)'], answer: 1 },
+        ],
+        dfs: [
+          { q: `DFS 使用什么数据结构来实现？`, options: ['队列', '栈', '数组'], answer: 1 },
+          { q: `DFS 的遍历顺序是？`, options: ['层序遍历', '沿一条路径深入再回溯', '随机顺序'], answer: 1 },
+        ],
+        linear: [
+          { q: `顺序查找的时间复杂度是？`, options: ['O(1)', 'O(n)', 'O(log n)'], answer: 1 },
+        ],
+        queue: [
+          { q: `队列的特点是？`, options: ['后进先出', '先进先出', '随机存取'], answer: 1 },
+        ],
+      };
+      const bank = questionTypes[kind] || questionTypes.bubble;
+      const idx = currentIdx % bank.length;
+      return bank[idx];
+    }
+
+    function renderPracticePanel(question, step, viz) {
+      if (!question) return '';
+      const state = window.__algoPracticeState || { answered: {}, correct: 0, wrong: 0 };
+      const qId = `${viz.kind}-${window.__algoPracticeIdx || 0}`;
+      const answered = state.answered[qId];
+      return `<div class="algo-practice-panel">
+        <div class="algo-practice-header">
+          <h4>🎯 练习任务</h4>
+          <div style="display:flex;gap:8px;font-size:12px">
+            <span style="color:#10b981">✓ 正确: ${state.correct}</span>
+            <span style="color:#ef4444">✗ 错误: ${state.wrong}</span>
+          </div>
+        </div>
+        <div style="color:#e2e8f0;font-size:13px;margin-bottom:8px">${question.q}</div>
+        <div class="algo-choice-grid">
+          ${question.options.map((opt, i) => {
+            let cls = '';
+            if (answered) {
+              if (answered.selected === i && i === question.answer) cls = 'correct';
+              else if (answered.selected === i) cls = 'wrong';
+              else if (i === question.answer) cls = 'correct';
+            }
+            return `<div class="algo-choice-option ${cls}" data-practice-option="${i}" data-practice-qid="${qId}" ${answered ? 'style="pointer-events:none"' : ''}>${opt}</div>`;
+          }).join("")}
+        </div>
+        <div class="algo-practice-feedback ${answered ? (answered.correct ? 'show success' : 'show error') : ''}">
+          ${answered ? (answered.correct ? '🎉 回答正确！继续保持！' : '❌ 回答错误。正确答案已标出，继续加油！') : ''}
+        </div>
+      </div>`;
+    }
+
+    /* ==================== 增强版算法可视化引擎结束 ==================== */
+
     function reportAiLearningView(result) {
         const dashboard = result.dashboard?.data || result.dashboard || {};
         const test = result.adaptiveTest?.data || {};
@@ -11014,6 +11660,9 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                                 )
                                 .join("")}
                         </div>
+                        <div style="margin-bottom:16px">
+                            <button class="btn primary" data-algo-open-modal>🧠 打开算法可视化实验室（增强版）</button>
+                        </div>
                         ${renderAlgorithmVisualizer()}
                     </div>
                     <div class="problem-detail-right">
@@ -11038,6 +11687,9 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         return `<main class="page">
             <section class="problem-hero">
                 <div class="hero"><h1>${icon("code", 24)} 编程题库</h1><p>按知识点提供编程练习，学生完成后获得反馈，教师可据此判断算法与语法掌握情况。</p></div>
+            <button class="btn primary algo-modal-launch" data-algo-open-modal style="margin-top:12px">
+                🧠 算法可视化实验室
+            </button>
             </section>
             <section class="problem-toolbar">
                 <div class="problem-search">
@@ -12196,22 +12848,12 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
                     <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
                     <div class="future-auth-panel active" data-auth-panel="account">
-                        <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                        <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="admin" autocomplete="username" placeholder="请输入账号"></label>
                         <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
-                        <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
-                    </div>
-                    <div class="future-auth-panel" data-auth-panel="code">
-                        <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
-                        <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+                        <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label></div>
                     </div>
                     <button class="future-login-submit" type="submit">登录</button>
                     <div class="message" id="login-message-modal"></div>
-                    <div class="future-divider"><span>其他登录方式</span></div>
-                    <div class="future-socials">
-                        <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
-                        <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
-                        <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
-                    </div>
                     <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
                 </form>
             </section>
@@ -12237,24 +12879,13 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         return `<form class="future-auth-dialog auth-form login-modal-card" id="login-form" data-mode="account">
             <div class="login-card-glow"></div>
             <div class="future-login-head"><span class="login-status"><i></i> AI 服务在线</span><b>欢迎回来</b><p>登录后继续你的个性化学习旅程</p></div>
-            <div class="future-login-tabs"><button class="active" type="button" data-auth-tab="account">账号登录</button><button type="button" data-auth-tab="code">验证码登录</button></div>
             <div class="future-auth-panel active" data-auth-panel="account">
-                <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="zhangsan" autocomplete="username" placeholder="请输入手机号 / 邮箱"></label>
+                <label class="future-input-row"><span>${icon("user", 16)}</span><input name="username" value="admin" autocomplete="username" placeholder="请输入账号"></label>
                 <label class="future-input-row"><span>${icon("lock", 16)}</span><input name="password" type="password" value="123456" autocomplete="current-password" placeholder="请输入密码"><button type="button" class="future-password-eye" aria-label="显示密码">${icon("eye", 15)}</button></label>
-                <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label><a href="#register-panel">忘记密码？</a></div>
-            </div>
-            <div class="future-auth-panel" data-auth-panel="code">
-                <label class="future-input-row"><span>${icon("user", 16)}</span><input type="tel" data-code-phone placeholder="请输入手机号"></label>
-                <label class="future-input-row"><span>${icon("shield", 16)}</span><div class="future-code-row"><input data-code-value inputmode="numeric" placeholder="6 位验证码"><button type="button" data-send-code>获取验证码</button></div></label>
+                <div class="future-login-options"><label><input type="checkbox" checked> 记住我</label></div>
             </div>
             <button class="future-login-submit" type="submit">登录</button>
             <div class="message" id="login-message"></div>
-            <div class="future-divider"><span>其他登录方式</span></div>
-            <div class="future-socials">
-                <button type="button"><i class="social-wechat">${icon("message", 17)}</i><span>微信登录</span></button>
-                <button type="button"><i class="social-qq">Q</i><span>QQ 登录</span></button>
-                <button type="button"><i class="social-apple">●</i><span>Apple 登录</span></button>
-            </div>
             <p class="future-policy">没有账号？ <a href="#register-panel">立即注册</a></p>
         </form>`;
     }
@@ -18525,6 +19156,230 @@ zhaoliu,赵六"></textarea>
                 render();
             })
         );
+        /* ============ 增强版算法可视化弹窗事件绑定 ============ */
+        const modal = state.data.algoModal;
+
+        document.querySelectorAll('[data-algo-open-modal]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const m = state.data.algoModal;
+                m.visible = true;
+                m.steps = [];
+                m.index = 0;
+                m.playing = false;
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-modal-close]').forEach(el => {
+            el.addEventListener('click', (e) => {
+                if (e.target !== el) return;
+                const m = state.data.algoModal;
+                m.visible = false;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-select]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const kind = btn.getAttribute('data-algo-select');
+                const m = state.data.algoModal;
+                m.kind = kind;
+                m.steps = buildEnhancedAlgoSteps(kind, m.values, { target: m.target });
+                m.index = 0;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                window.__algoPracticeState = { answered: {}, correct: 0, wrong: 0 };
+                render();
+            });
+        });
+
+        const valuesInput = document.querySelector('[data-algo-input-values]');
+        if (valuesInput) {
+            valuesInput.addEventListener('input', (e) => {
+                const m = state.data.algoModal;
+                m.values = e.target.value;
+            });
+            valuesInput.addEventListener('change', () => {
+                const m = state.data.algoModal;
+                m.steps = buildEnhancedAlgoSteps(m.kind, m.values, { target: m.target });
+                m.index = 0;
+                m.playing = false;
+                render();
+            });
+        }
+
+        const targetInput = document.querySelector('[data-algo-input-target]');
+        if (targetInput) {
+            targetInput.addEventListener('input', (e) => {
+                const m = state.data.algoModal;
+                m.target = parseInt(e.target.value) || 0;
+            });
+            targetInput.addEventListener('change', () => {
+                const m = state.data.algoModal;
+                m.steps = buildEnhancedAlgoSteps(m.kind, m.values, { target: m.target });
+                m.index = 0;
+                render();
+            });
+        }
+
+        document.querySelectorAll('[data-algo-regenerate]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                m.steps = buildEnhancedAlgoSteps(m.kind, m.values, { target: m.target });
+                m.index = 0;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-play]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                if (m.playing) {
+                    m.playing = false;
+                    if (algoVizHandle) {
+                        clearInterval(algoVizHandle);
+                        algoVizHandle = null;
+                    }
+                } else {
+                    m.playing = true;
+                    if (algoVizHandle) {
+                        clearInterval(algoVizHandle);
+                    }
+                    algoVizHandle = setInterval(() => {
+                        const modal = state.data.algoModal;
+                        if (!modal.visible) {
+                            clearInterval(algoVizHandle);
+                            algoVizHandle = null;
+                            return;
+                        }
+                        if (modal.index < modal.steps.length - 1) {
+                            modal.index++;
+                            render();
+                        } else {
+                            modal.playing = false;
+                            clearInterval(algoVizHandle);
+                            algoVizHandle = null;
+                            render();
+                        }
+                    }, modal.speed || 1000);
+                }
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-prev]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                if (m.index > 0) m.index--;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-next]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                if (m.index < m.steps.length - 1) m.index++;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-reset]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                m.steps = buildEnhancedAlgoSteps(m.kind, m.values, { target: m.target });
+                m.index = 0;
+                m.playing = false;
+                if (algoVizHandle) {
+                    clearInterval(algoVizHandle);
+                    algoVizHandle = null;
+                }
+                window.__algoPracticeState = { answered: {}, correct: 0, wrong: 0 };
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-algo-toggle-mode]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const m = state.data.algoModal;
+                m.mode = m.mode === 'practice' ? 'demo' : 'practice';
+                if (m.mode === 'practice') {
+                    window.__algoPracticeState = { answered: {}, correct: 0, wrong: 0 };
+                    window.__algoPracticeIdx = 0;
+                }
+                m.steps = buildEnhancedAlgoSteps(m.kind, m.values, { target: m.target });
+                m.index = 0;
+                m.playing = false;
+                render();
+            });
+        });
+
+        document.querySelectorAll('[data-practice-option]').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(opt.getAttribute('data-practice-option'));
+                const qid = opt.getAttribute('data-practice-qid');
+                const m = state.data.algoModal;
+                const step = m.steps[m.index];
+                const question = getPracticeQuestion(step, m.kind);
+                if (!question || window.__algoPracticeState?.answered[qid]) return;
+
+                if (!window.__algoPracticeState) {
+                    window.__algoPracticeState = { answered: {}, correct: 0, wrong: 0 };
+                }
+
+                const correct = idx === question.answer;
+                window.__algoPracticeState.answered[qid] = { selected: idx, correct };
+                if (correct) window.__algoPracticeState.correct++;
+                else window.__algoPracticeState.wrong++;
+
+                render();
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const m = state.data.algoModal;
+                if (m && m.visible) {
+                    m.visible = false;
+                    m.playing = false;
+                    if (algoVizHandle) {
+                        clearInterval(algoVizHandle);
+                        algoVizHandle = null;
+                    }
+                    render();
+                }
+            }
+        });
         /* 在线教程 - 事件绑定 */
         document.querySelectorAll("[data-tutorial-url]").forEach(el =>
             el.addEventListener("click", () => {
@@ -20535,8 +21390,8 @@ zhaoliu,赵六"></textarea>
             const isFocusMode = state.view === "studyRoom" && room.focusMode && (room.running || room.paused);
             const focusOverlayHtml = isFocusMode ? renderFocusOverlay(room, studyRoomElapsed(room), room.targetMinutes * 60, studyRoomScore(room), room.effect) : "";
             app.innerHTML = focusAssessment
-                ? `<div class="exam-shell">${guideHtml}${pageHtml}</div>${focusOverlayHtml}`
-                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}</div>${focusOverlayHtml}`;
+                ? `<div class="exam-shell">${guideHtml}${pageHtml}</div>${focusOverlayHtml}${algoModalView()}`
+                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}</div>${focusOverlayHtml}${algoModalView()}`;
             bindEvents();
             syncMembershipFunTimer();
             syncAssessmentClock();

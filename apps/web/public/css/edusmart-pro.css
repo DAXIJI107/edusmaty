@@ -33405,3 +33405,1136 @@ body.focus-mode-locked .shell > .topbar {
   line-height: 1.8;
   color: #1e293b;
 }
+/* ==================== 算法可视化弹窗系统 ==================== */
+
+.algo-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(10, 15, 30, 0.65);
+    backdrop-filter: blur(6px);
+    animation: algoFadeIn 0.25s ease;
+}
+
+@keyframes algoFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes algoSlideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.algo-modal {
+    width: min(1200px, 96vw);
+    max-height: 92vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    box-shadow:
+        0 25px 60px rgba(2, 8, 23, 0.5),
+        0 0 80px rgba(56, 189, 248, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    animation: algoSlideUp 0.3s ease;
+    overflow: hidden;
+}
+
+.algo-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.08), transparent);
+}
+
+.algo-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #f1f5f9;
+}
+
+.algo-modal-title h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.algo-modal-title .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.algo-modal-close {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 10px;
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.1);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.algo-modal-close:hover {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+}
+
+.algo-modal-body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 0;
+    overflow: hidden;
+}
+
+.algo-modal-sidebar {
+    padding: 20px 16px;
+    border-right: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.5);
+    overflow-y: auto;
+}
+
+.algo-modal-sidebar h3 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+}
+
+.algo-algo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 18px;
+}
+
+.algo-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 10px;
+    color: #cbd5e1;
+    background: rgba(30, 41, 59, 0.4);
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.algo-item:hover {
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #f1f5f9;
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.algo-item.active {
+    border-color: #38bdf8;
+    color: #fff;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.15));
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+.algo-item .algo-icon {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.algo-item .algo-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.algo-item .algo-meta small {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.algo-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.algo-input-group label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.algo-input-group input,
+.algo-input-group select {
+    padding: 8px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.6);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.algo-input-group input:focus,
+.algo-input-group select:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.algo-input-group input::placeholder {
+    color: #475569;
+}
+
+.algo-modal-main {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 12px;
+    padding: 20px;
+    overflow: hidden;
+}
+
+.algo-modal-stage {
+    position: relative;
+    min-height: 380px;
+    max-height: 48vh;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 14px;
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.12), transparent 60%),
+        linear-gradient(180deg, #0c1322 0%, #111c32 100%);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.algo-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.algo-stage-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.algo-stage-info .algo-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.algo-stage-info .algo-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.algo-stage-info .algo-progress {
+    color: #38bdf8;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.algo-stage-canvas {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+    position: relative;
+}
+
+/* 数组柱状图样式 */
+.algo-bar-stage {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 20px;
+    min-height: 260px;
+    position: relative;
+}
+
+.algo-bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.6), rgba(56, 189, 248, 0.4));
+    border-radius: 8px 8px 4px 4px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    min-width: 36px;
+    position: relative;
+    justify-content: flex-start;
+}
+
+.algo-bar-col::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(180deg, transparent, rgba(99, 102, 241, 0.2));
+    border-radius: 0 0 4px 4px;
+    pointer-events: none;
+}
+
+.algo-bar-col .algo-bar-index {
+    position: absolute;
+    bottom: -22px;
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.algo-bar-col.swapping {
+    animation: algoBarSwap 0.5s ease;
+}
+
+@keyframes algoBarSwap {
+    0% { transform: translateY(0); }
+    25% { transform: translateY(-30px); }
+    50% { transform: translateY(-30px) scale(1.05); }
+    75% { transform: translateY(0); }
+    100% { transform: translateY(0); }
+}
+
+.algo-bar-value {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    min-width: 36px;
+    text-align: center;
+    color: #e2e8f0;
+    background: rgba(51, 65, 85, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    transition: all 0.3s ease;
+}
+
+.algo-bar-col.active {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.7), rgba(249, 115, 22, 0.5));
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+}
+
+.algo-bar-col.active .algo-bar-value {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    border-color: rgba(251, 191, 36, 0.5);
+    color: #fff;
+}
+
+.algo-bar-col.comparing {
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.7), rgba(99, 102, 241, 0.5));
+    border-color: rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+}
+
+.algo-bar-col.comparing .algo-bar-value {
+    background: linear-gradient(135deg, #38bdf8, #6366f1);
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #fff;
+}
+
+.algo-bar-col.sorted {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.7), rgba(5, 150, 105, 0.5));
+    border-color: rgba(52, 211, 153, 0.5);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.algo-bar-col.sorted .algo-bar-value {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-color: rgba(52, 211, 153, 0.5);
+    color: #fff;
+}
+
+.algo-bar-col.correct-target {
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.7), rgba(22, 163, 74, 0.5));
+    border-color: rgba(34, 197, 94, 0.5);
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);
+}
+
+.algo-bar-col.muted {
+    background: linear-gradient(180deg, rgba(71, 85, 105, 0.4), rgba(51, 65, 85, 0.3));
+    border-color: rgba(71, 85, 105, 0.3);
+    opacity: 0.4;
+    filter: grayscale(0.5);
+}
+
+.algo-bar-col.selected .algo-bar-value {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    border-color: rgba(139, 92, 246, 0.5);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+.algo-bar-col.correct-target .algo-bar-value {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: rgba(34, 197, 94, 0.6);
+    color: #fff;
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);
+    animation: algoFoundPulse 0.8s ease;
+}
+
+@keyframes algoFoundPulse {
+    0%, 100% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.5); }
+    50% { box-shadow: 0 0 45px rgba(34, 197, 94, 0.8); }
+}
+
+.algo-bar-col.wrong-target .algo-bar-value {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fff;
+    animation: algoShake 0.4s ease;
+}
+
+@keyframes algoShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+
+.algo-bar-col input {
+    width: 60px;
+    padding: 8px 4px;
+    border: 2px solid rgba(148, 163, 184, 0.3);
+    border-radius: 8px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.8);
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.algo-bar-col input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+
+.algo-bar-col .algo-bar-index {
+    font-size: 11px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+
+.algo-bar-pointer {
+    position: absolute;
+    bottom: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+/* 栈可视化 */
+.algo-stack-container {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 6px;
+    padding: 20px;
+    align-items: center;
+    min-height: 280px;
+}
+
+.algo-stack-item {
+    width: 180px;
+    padding: 12px 20px;
+    border: 2px solid rgba(56, 189, 248, 0.4);
+    border-radius: 10px;
+    text-align: center;
+    color: #e2e8f0;
+    font-weight: 600;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(99, 102, 241, 0.1));
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.algo-stack-item.new {
+    animation: algoStackPush 0.4s ease;
+    border-color: #38bdf8;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(99, 102, 241, 0.2));
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+}
+
+@keyframes algoStackPush {
+    from { transform: translateY(-40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.algo-stack-item.removed {
+    animation: algoStackPop 0.3s ease forwards;
+}
+
+@keyframes algoStackPop {
+    to { transform: translateY(-30px); opacity: 0; }
+}
+
+/* 队列可视化 */
+.algo-queue-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 20px;
+    min-height: 200px;
+}
+
+.algo-queue-track {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    min-height: 80px;
+    align-items: center;
+}
+
+.algo-queue-item {
+    width: 60px;
+    height: 60px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    text-align: center;
+    color: #e2e8f0;
+    font-weight: 700;
+    font-size: 18px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.15));
+    border: 2px solid rgba(16, 185, 129, 0.4);
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.algo-queue-item.new {
+    animation: algoQueueEnqueue 0.4s ease;
+    border-color: #10b981;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(56, 189, 248, 0.3));
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+@keyframes algoQueueEnqueue {
+    from { transform: translateX(-30px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.algo-queue-item.removed {
+    animation: algoQueueDequeue 0.3s ease forwards;
+}
+
+@keyframes algoQueueDequeue {
+    to { transform: translateX(40px); opacity: 0; }
+}
+
+.algo-queue-label {
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+/* 哈希表可视化 */
+.algo-hash-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px;
+}
+
+.algo-hash-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.algo-hash-index {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    background: rgba(51, 65, 85, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.algo-hash-chain {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 40px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.algo-hash-node {
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 12px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.algo-hash-arrow {
+    color: #475569;
+    font-size: 12px;
+}
+
+/* 二叉树可视化 */
+.algo-tree-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px;
+    gap: 12px;
+}
+
+.algo-tree-level {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+}
+
+.algo-tree-node {
+    width: 50px;
+    height: 50px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.algo-tree-node.visited {
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+.algo-tree-node.target {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    box-shadow: 0 0 25px rgba(245, 158, 11, 0.6);
+    animation: algoTreePulse 1s infinite;
+}
+
+@keyframes algoTreePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+}
+
+.algo-tree-node.empty {
+    visibility: hidden;
+}
+
+.algo-tree-edges {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* 弹窗底部控制栏 */
+.algo-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.6);
+}
+
+.algo-step-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.algo-step-message {
+    flex: 1;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #cbd5e1;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.algo-step-counter {
+    font-size: 13px;
+    font-weight: 700;
+    color: #38bdf8;
+    font-variant-numeric: tabular-nums;
+}
+
+.algo-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.algo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+    background: rgba(30, 41, 59, 0.5);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.algo-btn:hover:not(:disabled) {
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #f1f5f9;
+    background: rgba(56, 189, 248, 0.1);
+}
+
+.algo-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.algo-btn.primary {
+    border-color: #38bdf8;
+    color: #0f172a;
+    background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    font-weight: 600;
+}
+
+.algo-btn.primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+}
+
+.algo-btn.success {
+    border-color: #10b981;
+    color: #0f172a;
+    background: linear-gradient(135deg, #10b981, #059669);
+    font-weight: 600;
+}
+
+.algo-btn.success:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669, #047857);
+}
+
+.algo-btn.danger {
+    border-color: #ef4444;
+    color: #fff;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* 练习模式 */
+.algo-practice-panel {
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    padding: 14px 20px;
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.algo-practice-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.algo-practice-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.algo-practice-steps {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.algo-practice-step {
+    padding: 6px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+    background: rgba(30, 41, 59, 0.4);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.algo-practice-step:hover {
+    color: #e2e8f0;
+    border-color: rgba(56, 189, 248, 0.4);
+}
+
+.algo-practice-step.correct {
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.algo-practice-step.wrong {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.algo-practice-step.pending {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.algo-practice-feedback {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+}
+
+.algo-practice-feedback.show {
+    display: block;
+}
+
+.algo-practice-feedback.success {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.algo-practice-feedback.error {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* 进度条 */
+.algo-progress-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.15);
+}
+
+.algo-progress-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #38bdf8, #6366f1);
+    transition: width 0.3s ease;
+}
+
+/* 侧边栏按钮 */
+.algo-sidebar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.algo-sidebar-actions .algo-btn {
+    width: 100%;
+    justify-content: center;
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+    .algo-modal-body {
+        grid-template-columns: 1fr;
+    }
+    .algo-modal-sidebar {
+        border-right: none;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }
+}
+
+/* 题库页面入口按钮 */
+.problem-demo-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: #0284c7;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(99, 102, 241, 0.08));
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.problem-demo-entry:hover {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.12));
+    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.2);
+    transform: translateY(-1px);
+}
+
+.problem-demo-entry:active {
+    transform: translateY(0);
+}
+
+.problem-demo-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: #0c4a6e;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(99, 102, 241, 0.06));
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 12px 0;
+    text-decoration: none;
+}
+
+.problem-demo-card:hover {
+    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.2);
+    transform: translateX(4px);
+}
+
+.problem-demo-card .demo-icon {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #38bdf8, #6366f1);
+    color: #fff;
+    font-size: 20px;
+}
+
+.problem-demo-card .demo-info {
+    flex: 1;
+}
+
+.problem-demo-card .demo-info h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0c4a6e;
+}
+
+.problem-demo-card .demo-info p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* 弹窗动画类 */
+.algo-modal.pop-in {
+    animation: algoModalPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes algoModalPop {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* 算法场景容器通用样式 */
+.algo-scene {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    min-height: 240px;
+    width: 100%;
+}
+
+.algo-scene-empty {
+    display: grid;
+    place-items: center;
+    color: #475569;
+    font-size: 14px;
+    padding: 40px;
+}
+
+/* 时间线步骤指示 */
+.algo-timeline {
+    display: flex;
+    gap: 4px;
+    padding: 8px 0;
+    overflow-x: auto;
+}
+
+.algo-timeline-dot {
+    width: 24px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(148, 163, 184, 0.2);
+    transition: background 0.2s ease;
+}
+
+.algo-timeline-dot.active {
+    background: #38bdf8;
+}
+
+.algo-timeline-dot.done {
+    background: #10b981;
+}
+
+/* 练习模式选择面板 */
+.algo-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.algo-choice-option {
+    padding: 12px 8px;
+    border: 2px solid rgba(148, 163, 184, 0.25);
+    border-radius: 10px;
+    color: #cbd5e1;
+    background: rgba(30, 41, 59, 0.5);
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+    font-size: 16px;
+    transition: all 0.2s ease;
+}
+
+.algo-choice-option:hover {
+    border-color: rgba(56, 189, 248, 0.5);
+    background: rgba(56, 189, 248, 0.12);
+    color: #f1f5f9;
+}
+
+.algo-choice-option.correct {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    animation: algoCorrectPulse 0.5s ease;
+}
+
+.algo-choice-option.wrong {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    animation: algoShake 0.4s ease;
+}
+
+@keyframes algoCorrectPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* 侧边栏分隔线 */
+.algo-sidebar-divider {
+    height: 1px;
+    margin: 12px 0;
+    background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent);
+}
+
+.algo-sidebar-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #64748b;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+/* 标签色 */
+.algo-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.algo-tag.easy { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.algo-tag.medium { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.algo-tag.hard { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+/* 算法可视化实验室启动按钮 */
+.algo-modal-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+    margin-top: 16px;
+}
+
+.algo-modal-launch:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
