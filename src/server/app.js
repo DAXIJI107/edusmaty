@@ -26,7 +26,7 @@ const path = require('path');
 const config = require('../config');
 
 // 中间件（新路径：src/middleware/）
-const { requestLogger, errorHandler } = require('../middleware');
+const { requestLogger, errorHandler, attachUserBinding } = require('../middleware');
 
 // 路由清单
 const routeManifest = require('./route-manifest');
@@ -103,6 +103,7 @@ function createApp() {
   );
 
   // ---- API 路由 ----
+  app.use('/api', attachUserBinding); // 注入用户绑定的模型配置（AI 功能自动使用）
   mountApiRoutes(app);
   registerHealthRoutes(app);
   registerLegacyApiRoutes(app);

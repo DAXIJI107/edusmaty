@@ -1,5 +1,6 @@
-const express = require("express");
+﻿const express = require("express");
 const zlib = require("zlib");
+const axios = require("axios");
 const router = express.Router();
 const pool = require("../db");
 const { authenticateJWT } = require("../middleware");
@@ -233,6 +234,55 @@ async function ensureTables() {
             INDEX idx_run_type (run_type)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS team_project_briefs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            user_id INT NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            description LONGTEXT,
+            optimized LONGTEXT,
+            status VARCHAR(32) DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE,
+            INDEX idx_project (project_id, updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS team_project_bots (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            name VARCHAR(120) DEFAULT 'CodeBot',
+            enabled TINYINT(1) DEFAULT 0,
+            github_repo VARCHAR(260) DEFAULT '',
+            github_branch VARCHAR(120) DEFAULT 'main',
+            github_token VARCHAR(260) DEFAULT '',
+            database_name VARCHAR(120) DEFAULT '',
+            last_pull_at DATETIME NULL,
+            last_push_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE,
+            UNIQUE KEY uniq_project (project_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS team_project_bot_members (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bot_id INT NOT NULL,
+            project_id INT NOT NULL,
+            user_id INT NOT NULL,
+            username VARCHAR(80) DEFAULT '',
+            can_pull TINYINT(1) DEFAULT 0,
+            can_push TINYINT(1) DEFAULT 0,
+            can_bind TINYINT(1) DEFAULT 0,
+            can_toggle TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (bot_id) REFERENCES team_project_bots(id) ON DELETE CASCADE,
+            UNIQUE KEY uniq_bot_user (bot_id, user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
 }
 
 let _tablesReady = false;
@@ -253,6 +303,21 @@ async function assertProjectAccess(projectId, userId) {
         [projectId, userId]
     );
     return member ? project : null;
+}
+
+// 机器人接口的访问判定：项目创建者 / 项目成员 / 机器人被授权者 均可进入
+async function assertBotProjectAccess(projectId, userId) {
+    const project = await assertProjectAccess(projectId, userId);
+    if (project) return project;
+    const [[bot]] = await pool.query("SELECT * FROM team_project_bots WHERE project_id = ? LIMIT 1", [projectId]);
+    if (!bot) return null;
+    const [[botMember]] = await pool.query(
+        "SELECT id FROM team_project_bot_members WHERE bot_id = ? AND user_id = ? LIMIT 1",
+        [bot.id, userId]
+    );
+    if (!botMember) return null;
+    const [[p]] = await pool.query("SELECT * FROM team_projects WHERE id = ?", [projectId]);
+    return p || null;
 }
 
 async function listProjectIds(userId) {
@@ -742,6 +807,514 @@ router.post("/projects/:id/files/save", authenticateJWT, async (req, res) => {
     } catch (error) {
         console.error("团队代码保存失败:", error);
         res.status(500).json({ success: false, message: "团队代码保存失败" });
+    }
+});
+
+// ==================== 代码机器人 ====================
+
+const KNOWN_DATABASES = [{ name: "edu_smart", label: "EduSmart 主库" }];
+const GITHUB_API = "https://api.github.com";
+const BOT_ROLE_NAMES = { frontend: "页面与交互", backend: "业务逻辑", testing: "测试与验收", deployment: "展示与发布" };
+
+function teamRoleName(key) {
+    return BOT_ROLE_NAMES[key] || key || "未知模块";
+}
+
+function githubHeaders(token) {
+    const headers = { "User-Agent": "EduSmart-CodeBot", Accept: "application/vnd.github+json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+}
+
+function inferModuleKey(path) {
+    const p = String(path).toLowerCase();
+    if (/^(tests?|spec)\//.test(p) || /\.(test|spec)\./.test(p)) return "testing";
+    if (/^(deploy|docs|ops)\//.test(p)) return "deployment";
+    if (/^(backend|server|api)\//.test(p)) return "backend";
+    return "frontend";
+}
+
+function pathForApi(path) {
+    return String(path)
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/");
+}
+
+async function getOrCreateBot(projectId) {
+    const [[bot]] = await pool.query("SELECT * FROM team_project_bots WHERE project_id = ? LIMIT 1", [projectId]);
+    if (bot) return bot;
+    await pool.query("INSERT INTO team_project_bots (project_id, name) VALUES (?, 'CodeBot')", [projectId]);
+    const [[created]] = await pool.query("SELECT * FROM team_project_bots WHERE project_id = ? LIMIT 1", [projectId]);
+    return created;
+}
+
+async function getBotAccess(bot, userId) {
+    const [[project]] = await pool.query("SELECT * FROM team_projects WHERE id = ?", [bot.project_id]);
+    const isOwner = Number(project.owner_id) === Number(userId);
+    const [[member]] = await pool.query(
+        "SELECT * FROM team_project_bot_members WHERE bot_id = ? AND user_id = ? LIMIT 1",
+        [bot.id, userId]
+    );
+    return {
+        bot,
+        project,
+        isOwner,
+        member: member || null,
+        canConfig: isOwner,
+        canManage: isOwner,
+        canToggle: isOwner || Number(member?.can_toggle) === 1,
+        canPull: isOwner || Number(member?.can_pull) === 1,
+        canPush: isOwner || Number(member?.can_push) === 1,
+        canBind: isOwner || Number(member?.can_bind) === 1
+    };
+}
+
+function botActionGuard(bot) {
+    return bot.enabled ? null : "机器人开关已关闭，请先打开开关";
+}
+
+// 机器人接口统一解析真实身份（需在 authenticateJWT 之后挂载）：
+// 按 username 从 users 表取真实 id（防止演示模式 token id 与真实用户 id 撞车导致权限误判），
+// 演示账号（users 表中不存在）直接拒绝使用机器人。
+async function requireBotActor(req, res, next) {
+    try {
+        const [[row]] = await pool.query("SELECT id, username, role FROM users WHERE username = ? LIMIT 1", [req.user?.username]);
+        if (!row) return res.status(403).json({ success: false, message: "演示账号无法使用代码机器人，请使用正式账号登录" });
+        req.user.id = row.id;
+        next();
+    } catch (error) {
+        console.error("机器人身份解析失败:", error);
+        res.status(500).json({ success: false, message: "机器人身份解析失败" });
+    }
+}
+
+router.get("/projects/:id/bot", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const [members] = await pool.query("SELECT * FROM team_project_bot_members WHERE bot_id = ? ORDER BY id", [bot.id]);
+        const access = await getBotAccess(bot, userId);
+        res.json({
+            success: true,
+            data: {
+                bot: { ...bot, github_token: bot.github_token ? "******" : "" },
+                members,
+                access: {
+                    isOwner: access.isOwner,
+                    member: Boolean(access.member),
+                    canConfig: access.canConfig,
+                    canManage: access.canManage,
+                    canToggle: access.canToggle,
+                    canPull: access.canPull,
+                    canPush: access.canPush,
+                    canBind: access.canBind
+                }
+            }
+        });
+    } catch (error) {
+        console.error("读取机器人配置失败:", error);
+        res.status(500).json({ success: false, message: "机器人配置加载失败" });
+    }
+});
+
+router.post("/projects/:id/bot", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canConfig) return res.status(403).json({ success: false, message: "只有项目创建者可以修改机器人配置" });
+        const { name, github_repo, github_branch, github_token, database_name } = req.body || {};
+        const updates = [];
+        const params = [];
+        if (name !== undefined) { updates.push("name = ?"); params.push(String(name).trim().slice(0, 120) || "CodeBot"); }
+        if (github_repo !== undefined) { updates.push("github_repo = ?"); params.push(String(github_repo).trim().slice(0, 260)); }
+        if (github_branch !== undefined) { updates.push("github_branch = ?"); params.push(String(github_branch).trim().slice(0, 120) || "main"); }
+        if (github_token !== undefined && github_token !== "******") { updates.push("github_token = ?"); params.push(String(github_token).trim().slice(0, 260)); }
+        if (database_name !== undefined) { updates.push("database_name = ?"); params.push(String(database_name).trim().slice(0, 120)); }
+        if (updates.length) {
+            params.push(bot.id);
+            await pool.query(`UPDATE team_project_bots SET ${updates.join(", ")} WHERE id = ?`, params);
+        }
+        const [[updated]] = await pool.query("SELECT * FROM team_project_bots WHERE id = ?", [bot.id]);
+        res.json({ success: true, message: "机器人配置已保存", data: { bot: { ...updated, github_token: updated.github_token ? "******" : "" } } });
+    } catch (error) {
+        console.error("保存机器人配置失败:", error);
+        res.status(500).json({ success: false, message: "机器人配置保存失败" });
+    }
+});
+
+router.post("/projects/:id/bot/toggle", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canToggle) return res.status(403).json({ success: false, message: "没有机器人开关的权限" });
+        const next = bot.enabled ? 0 : 1;
+        await pool.query("UPDATE team_project_bots SET enabled = ? WHERE id = ?", [next, bot.id]);
+        await pool.query(
+            "INSERT INTO team_project_events (project_id, user_id, event_type, title, detail) VALUES (?, ?, 'bot_toggle', ?, ?)",
+            [projectId, userId, next ? "代码机器人已开启" : "代码机器人已关闭", `操作人: ${req.user.username || userId}`]
+        );
+        res.json({ success: true, message: next ? "机器人已开启" : "机器人已关闭", data: { enabled: next } });
+    } catch (error) {
+        console.error("机器人开关失败:", error);
+        res.status(500).json({ success: false, message: "机器人开关操作失败" });
+    }
+});
+
+router.post("/projects/:id/bot/members", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canManage) return res.status(403).json({ success: false, message: "只有项目创建者可以分配机器人权限" });
+        const { username, can_pull, can_push, can_bind, can_toggle } = req.body || {};
+        if (!String(username || "").trim()) return res.status(400).json({ success: false, message: "请填写要授权的用户名" });
+        const [[user]] = await pool.query("SELECT id, username FROM users WHERE username = ? LIMIT 1", [String(username).trim()]);
+        if (!user) return res.status(404).json({ success: false, message: `用户 ${username} 不存在` });
+        await pool.query(
+            `INSERT INTO team_project_bot_members (bot_id, project_id, user_id, username, can_pull, can_push, can_bind, can_toggle)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE can_pull = VALUES(can_pull), can_push = VALUES(can_push), can_bind = VALUES(can_bind), can_toggle = VALUES(can_toggle)`,
+            [bot.id, projectId, user.id, user.username, Number(can_pull) ? 1 : 0, Number(can_push) ? 1 : 0, Number(can_bind) ? 1 : 0, Number(can_toggle) ? 1 : 0]
+        );
+        res.json({ success: true, message: `已为 ${user.username} 更新机器人权限` });
+    } catch (error) {
+        console.error("机器人权限分配失败:", error);
+        res.status(500).json({ success: false, message: "机器人权限分配失败" });
+    }
+});
+
+router.delete("/projects/:id/bot/members/:memberId", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canManage) return res.status(403).json({ success: false, message: "只有项目创建者可以移除机器人权限" });
+        await pool.query("DELETE FROM team_project_bot_members WHERE id = ? AND bot_id = ?", [Number(req.params.memberId), bot.id]);
+        res.json({ success: true, message: "已移除该人员的机器人权限" });
+    } catch (error) {
+        console.error("移除机器人权限失败:", error);
+        res.status(500).json({ success: false, message: "移除机器人权限失败" });
+    }
+});
+
+router.post("/projects/:id/bot/pull", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canPull && !access.isOwner) return res.status(403).json({ success: false, message: "没有拉取代码的权限，请联系项目创建者分配" });
+        const guard = botActionGuard(bot);
+        if (guard) return res.status(400).json({ success: false, message: guard });
+        if (!bot.github_repo) return res.status(400).json({ success: false, message: "请先绑定 GitHub 仓库（格式：owner/repo）" });
+
+        const branch = bot.github_branch || "main";
+        const treeRes = await axios.get(
+            `${GITHUB_API}/repos/${bot.github_repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+            { headers: githubHeaders(bot.github_token), timeout: 30000 }
+        );
+        const blobs = (treeRes.data?.tree || []).filter(item => item.type === "blob");
+        const skipExt = /\.(png|jpe?g|gif|svg|ico|woff2?|ttf|eot|mp4|mp3|zip|gz|pdf|exe|dll|so|dylib|class|jar|lock)$/i;
+        const targets = blobs.filter(b => Number(b.size || 0) <= 512 * 1024 && !skipExt.test(b.path)).slice(0, 200);
+        let saved = 0;
+        const failed = [];
+        for (const blob of targets) {
+            try {
+                const raw = await axios.get(
+                    `https://raw.githubusercontent.com/${bot.github_repo}/${encodeURIComponent(branch)}/${pathForApi(blob.path)}`,
+                    { headers: githubHeaders(bot.github_token), timeout: 30000, responseType: "text" }
+                );
+                const content = typeof raw.data === "string" ? raw.data : String(raw.data ?? "");
+                const fileName = blob.path.split("/").pop() || "file.txt";
+                const ext = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "txt";
+                const lang = ext === "js" ? "javascript" : ext === "md" ? "markdown" : ext === "py" ? "python" : ext;
+                await pool.query(
+                    `INSERT INTO team_project_files (project_id, module_key, path, language, content, size_bytes, version)
+                     VALUES (?, ?, ?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE content = VALUES(content), size_bytes = VALUES(size_bytes), version = version + 1, updated_at = NOW()`,
+                    [projectId, inferModuleKey(blob.path), blob.path, lang, content, Buffer.byteLength(content, "utf8")]
+                );
+                saved++;
+            } catch (e) {
+                failed.push(`${blob.path}: ${e.message}`);
+            }
+        }
+        await pool.query("UPDATE team_project_bots SET last_pull_at = NOW() WHERE id = ?", [bot.id]);
+        await pool.query(
+            "INSERT INTO team_project_events (project_id, user_id, event_type, title, detail) VALUES (?, ?, 'bot_pull', '机器人拉取代码完成', ?)",
+            [projectId, userId, `${bot.github_repo}@${branch} · 更新 ${saved} 个文件${failed.length ? ` · 失败 ${failed.length}` : ""}`]
+        );
+        res.json({
+            success: true,
+            message: `拉取完成：更新 ${saved} 个文件${failed.length ? `，失败 ${failed.length} 个` : ""}`,
+            data: { saved, total: targets.length, failed: failed.slice(0, 10) }
+        });
+    } catch (error) {
+        const status = error.response?.status;
+        console.error("机器人拉取代码失败:", error.message);
+        res.status(500).json({
+            success: false,
+            message: status === 404 ? "仓库或分支不存在（私有仓库需要在绑定中配置 Token）" : `拉取失败: ${error.message}`
+        });
+    }
+});
+
+router.post("/projects/:id/bot/push", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canPush && !access.isOwner) return res.status(403).json({ success: false, message: "没有推送代码的权限，请联系项目创建者分配" });
+        const guard = botActionGuard(bot);
+        if (guard) return res.status(400).json({ success: false, message: guard });
+        if (!bot.github_repo) return res.status(400).json({ success: false, message: "请先绑定 GitHub 仓库（格式：owner/repo）" });
+        if (!bot.github_token) return res.status(400).json({ success: false, message: "推送到 GitHub 需要配置 Token（需 repo 写权限）" });
+
+        const branch = bot.github_branch || "main";
+        const [files] = await pool.query(
+            "SELECT path, content FROM team_project_files WHERE project_id = ? ORDER BY path ASC LIMIT 100",
+            [projectId]
+        );
+        if (!files.length) return res.status(400).json({ success: false, message: "仓库中暂无代码文件可推送" });
+        let pushed = 0;
+        const failed = [];
+        for (const file of files) {
+            try {
+                let sha = null;
+                try {
+                    const head = await axios.get(
+                        `${GITHUB_API}/repos/${bot.github_repo}/contents/${pathForApi(file.path)}?ref=${encodeURIComponent(branch)}`,
+                        { headers: githubHeaders(bot.github_token), timeout: 30000 }
+                    );
+                    sha = head.data?.sha || null;
+                } catch (e) {
+                    sha = null;
+                }
+                await axios.put(
+                    `${GITHUB_API}/repos/${bot.github_repo}/contents/${pathForApi(file.path)}`,
+                    {
+                        message: `CodeBot sync: ${file.path}`,
+                        content: Buffer.from(String(file.content || ""), "utf8").toString("base64"),
+                        branch,
+                        ...(sha ? { sha } : {})
+                    },
+                    { headers: githubHeaders(bot.github_token), timeout: 30000 }
+                );
+                pushed++;
+            } catch (e) {
+                failed.push(`${file.path}: ${e.response?.status || ""} ${e.message}`.trim());
+            }
+        }
+        await pool.query("UPDATE team_project_bots SET last_push_at = NOW() WHERE id = ?", [bot.id]);
+        await pool.query(
+            "INSERT INTO team_project_events (project_id, user_id, event_type, title, detail) VALUES (?, ?, 'bot_push', '机器人推送代码完成', ?)",
+            [projectId, userId, `${bot.github_repo}@${branch} · 推送 ${pushed} 个文件${failed.length ? ` · 失败 ${failed.length}` : ""}`]
+        );
+        res.json({
+            success: true,
+            message: `推送完成：${pushed} 个文件${failed.length ? `，失败 ${failed.length} 个` : ""}`,
+            data: { pushed, total: files.length, failed: failed.slice(0, 10) }
+        });
+    } catch (error) {
+        console.error("机器人推送代码失败:", error.message);
+        res.status(500).json({ success: false, message: `推送失败: ${error.message}` });
+    }
+});
+
+router.post("/projects/:id/bot/bind-db", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        if (!access.canBind && !access.isOwner) return res.status(403).json({ success: false, message: "没有绑定数据库的权限，请联系项目创建者分配" });
+        const guard = botActionGuard(bot);
+        if (guard) return res.status(400).json({ success: false, message: guard });
+        const { databaseName } = req.body || {};
+        const known = KNOWN_DATABASES.find(db => db.name === String(databaseName || "").trim());
+        if (!known) return res.status(400).json({ success: false, message: "未知的数据库，请从列表中选择" });
+        const [tables] = await pool.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+        await pool.query("UPDATE team_project_bots SET database_name = ? WHERE id = ?", [known.name, bot.id]);
+        await pool.query(
+            "INSERT INTO team_project_events (project_id, user_id, event_type, title, detail) VALUES (?, ?, 'bot_bind_db', '机器人绑定数据库成功', ?)",
+            [projectId, userId, `${known.label}（${known.name}）· ${tables.length} 张表`]
+        );
+        res.json({
+            success: true,
+            message: `已绑定数据库 ${known.label}（${tables.length} 张表）`,
+            data: { databaseName: known.name, label: known.label, tables: tables.map(t => t.name) }
+        });
+    } catch (error) {
+        console.error("机器人绑定数据库失败:", error);
+        res.status(500).json({ success: false, message: "绑定数据库失败" });
+    }
+});
+
+router.post("/projects/:id/bot/analyze", authenticateJWT, requireBotActor, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertBotProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const bot = await getOrCreateBot(projectId);
+        const access = await getBotAccess(bot, userId);
+        const assigned = access.isOwner || access.member;
+        if (!assigned) return res.status(403).json({ success: false, message: "只有项目创建者或被分配的人员可以使用机器人读取代码与需求" });
+        if (!bot.enabled) return res.status(400).json({ success: false, message: "机器人开关已关闭，请先打开开关" });
+
+        const [files] = await pool.query(
+            "SELECT module_key, path, size_bytes, updated_at FROM team_project_files WHERE project_id = ? ORDER BY updated_at DESC",
+            [projectId]
+        );
+        const [briefs] = await pool.query(
+            "SELECT title, optimized, updated_at FROM team_project_briefs WHERE project_id = ? ORDER BY updated_at DESC",
+            [projectId]
+        );
+        const moduleStats = {};
+        let totalSize = 0;
+        files.forEach(f => {
+            moduleStats[f.module_key] = moduleStats[f.module_key] || { count: 0, size: 0 };
+            moduleStats[f.module_key].count++;
+            moduleStats[f.module_key].size += Number(f.size_bytes || 0);
+            totalSize += Number(f.size_bytes || 0);
+        });
+        const lines = [];
+        lines.push(`# 代码机器人巡检报告`);
+        lines.push(``);
+        lines.push(`- 项目：${project.name}`);
+        lines.push(`- 机器人：${bot.name}（${bot.enabled ? "已开启" : "已关闭"}）`);
+        lines.push(`- GitHub：${bot.github_repo ? `${bot.github_repo}@${bot.github_branch || "main"}` : "未绑定"}`);
+        lines.push(`- 数据库：${bot.database_name ? `已绑定 ${bot.database_name}` : "未绑定"}`);
+        lines.push(``);
+        lines.push(`## 代码资产`);
+        lines.push(`共 ${files.length} 个文件，约 ${(totalSize / 1024).toFixed(1)} KB。`);
+        Object.entries(moduleStats).forEach(([key, stat]) => {
+            lines.push(`- ${teamRoleName(key)}：${stat.count} 个文件 / ${(stat.size / 1024).toFixed(1)} KB`);
+        });
+        lines.push(``);
+        lines.push(`## 最近更新的文件`);
+        files.slice(0, 8).forEach(f => lines.push(`- ${f.path}（${teamRoleName(f.module_key)} · ${f.updated_at}）`));
+        if (!files.length) lines.push("- 暂无代码文件，可通过一键拉取或上传代码补充");
+        lines.push(``);
+        lines.push(`## 需求清单`);
+        if (briefs.length) {
+            briefs.forEach(b => lines.push(`- ${b.title}（${b.optimized ? "已优化" : "草稿"} · ${b.updated_at}）`));
+        } else {
+            lines.push("- 暂无需求描述，可在「需求描述」页面新增");
+        }
+        lines.push(``);
+        lines.push(`## 机器人建议`);
+        if (!bot.github_repo) lines.push("- 尚未绑定 GitHub，绑定后可一键拉取/推送代码");
+        if (!bot.database_name) lines.push("- 尚未绑定数据库，绑定后机器人可读取库表结构");
+        if (!briefs.length) lines.push("- 建议先在「需求描述」中沉淀需求，再用 AI 优化");
+        if (!files.some(f => f.module_key === "testing")) lines.push("- 测试模块暂无文件，建议补充测试用例");
+
+        await pool.query(
+            "INSERT INTO team_project_events (project_id, user_id, event_type, title, detail) VALUES (?, ?, 'bot_analyze', '机器人读取代码与需求完成', ?)",
+            [projectId, userId, `代码 ${files.length} 个文件 · 需求 ${briefs.length} 条`]
+        );
+        res.json({ success: true, data: { report: lines.join("\n"), stats: { files: files.length, briefs: briefs.length, modules: moduleStats } } });
+    } catch (error) {
+        console.error("机器人读取失败:", error);
+        res.status(500).json({ success: false, message: "机器人读取失败" });
+    }
+});
+
+// ==================== 需求描述（需求简报） ====================
+
+router.get("/projects/:id/briefs", authenticateJWT, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const project = await assertProjectAccess(projectId, getUserId(req));
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const [rows] = await pool.query(
+            "SELECT * FROM team_project_briefs WHERE project_id = ? ORDER BY updated_at DESC, id DESC",
+            [projectId]
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error("需求描述列表失败:", error);
+        res.status(500).json({ success: false, message: "需求描述加载失败" });
+    }
+});
+
+router.post("/projects/:id/briefs", authenticateJWT, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const userId = getUserId(req);
+        const project = await assertProjectAccess(projectId, userId);
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const { title, description, optimized } = req.body || {};
+        if (!String(title || "").trim()) return res.status(400).json({ success: false, message: "请填写需求标题" });
+        if (!String(description || "").trim()) return res.status(400).json({ success: false, message: "请填写需求描述" });
+        const [result] = await pool.query(
+            "INSERT INTO team_project_briefs (project_id, user_id, title, description, optimized, status) VALUES (?, ?, ?, ?, ?, 'draft')",
+            [projectId, userId, String(title).trim().slice(0, 200), String(description), optimized ? String(optimized) : null]
+        );
+        res.json({ success: true, data: { id: result.insertId }, message: "需求已保存" });
+    } catch (error) {
+        console.error("需求描述保存失败:", error);
+        res.status(500).json({ success: false, message: "需求描述保存失败" });
+    }
+});
+
+router.put("/projects/:id/briefs/:briefId", authenticateJWT, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const briefId = Number(req.params.briefId);
+        const project = await assertProjectAccess(projectId, getUserId(req));
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        const { title, description, optimized } = req.body || {};
+        if (!String(title || "").trim()) return res.status(400).json({ success: false, message: "请填写需求标题" });
+        if (!String(description || "").trim()) return res.status(400).json({ success: false, message: "请填写需求描述" });
+        const [result] = await pool.query(
+            "UPDATE team_project_briefs SET title = ?, description = ?, optimized = ? WHERE id = ? AND project_id = ?",
+            [String(title).trim().slice(0, 200), String(description), optimized ? String(optimized) : null, briefId, projectId]
+        );
+        if (!result.affectedRows) return res.status(404).json({ success: false, message: "需求不存在" });
+        res.json({ success: true, message: "需求已更新" });
+    } catch (error) {
+        console.error("需求描述更新失败:", error);
+        res.status(500).json({ success: false, message: "需求描述更新失败" });
+    }
+});
+
+router.delete("/projects/:id/briefs/:briefId", authenticateJWT, async (req, res) => {
+    try {
+        const projectId = Number(req.params.id);
+        const briefId = Number(req.params.briefId);
+        const project = await assertProjectAccess(projectId, getUserId(req));
+        if (!project) return res.status(404).json({ success: false, message: "项目不存在或无权限访问" });
+        await pool.query("DELETE FROM team_project_briefs WHERE id = ? AND project_id = ?", [briefId, projectId]);
+        res.json({ success: true, message: "需求已删除" });
+    } catch (error) {
+        console.error("需求描述删除失败:", error);
+        res.status(500).json({ success: false, message: "需求描述删除失败" });
     }
 });
 

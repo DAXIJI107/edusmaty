@@ -100,6 +100,12 @@ function convertMySQLToSQLite(sql) {
 
   // ========== 在最开始处理跨行问题 ==========
 
+  // 移除 ON UPDATE CURRENT_TIMESTAMP（必须先于 CURRENT_TIMESTAMP 函数替换，
+  // 否则会残留 "ON UPDATE DATETIME('now')" 导致建表失败）
+  // 注意：query() 的 convertQuery 会先把 CURRENT_TIMESTAMP 转成 DATETIME('now')，
+  // 因此这里需要同时匹配两种形态
+  converted = converted.replace(/ON\s+UPDATE\s+(CURRENT_TIMESTAMP|DATETIME\s*\(\s*['"]now['"]\s*\))/gi, '');
+
   // 移除所有 COMMENT（跨行匹配）
   converted = converted.replace(/\s+COMMENT\s+['"].*?['"]/gis, '');
 
@@ -107,8 +113,22 @@ function convertMySQLToSQLite(sql) {
   converted = converted.replace(/SET\s+\w+.*?(?=;)/gi, '');
   converted = converted.replace(/SET\s+\w+.*?;/gi, '');
 
-  // 将 SQL 中的换行符替换为空格（保留语句间的换行）
-  converted = converted.replace(/(\S)\s*\n\s*(\S)/g, '$1 $2');
+  // 合并无意义的换行（保留语句间的换行）。
+  // 必须保证注释行独占一行：若把 "-- 注释" 与后续 SQL 合并，注释会吞掉其后的语句。
+  const mergedLines = [];
+  for (const rawLine of converted.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const isComment = line.startsWith('--') || line.startsWith('/*');
+    const prev = mergedLines[mergedLines.length - 1];
+    const prevIsComment = prev !== undefined && (prev.startsWith('--') || prev.startsWith('/*'));
+    if (!isComment && !prevIsComment && prev !== undefined && !prev.endsWith(';')) {
+      mergedLines[mergedLines.length - 1] = prev + ' ' + line;
+    } else {
+      mergedLines.push(line);
+    }
+  }
+  converted = mergedLines.join('\n');
 
   // 移除 DROP PROCEDURE / CREATE PROCEDURE / delimiter
   converted = converted.replace(/DROP\s+PROCEDURE\s+IF\s+EXISTS\s+`\w+`\s*;/gi, '');
@@ -128,27 +148,22 @@ function convertMySQLToSQLite(sql) {
   converted = converted.replace(/\bCURRENT_DATE\b/gi, "DATE('now')");
   // CURRENT_TIMESTAMP → DATETIME('now')
   converted = converted.replace(/\bCURRENT_TIMESTAMP\b/gi, "DATETIME('now')");
-  // DATE_ADD(date, INTERVAL 1 DAY) → date + 1
-  converted = converted.replace(
-    /DATE_ADD\s*\(\s*(\w+)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
-    '$1 + $2'
-  );
-  // DATE_SUB(date, INTERVAL 1 DAY) → date - 1
-  converted = converted.replace(
-    /DATE_SUB\s*\(\s*(\w+)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
-    '$1 - $2'
-  );
+  // DATE_ADD/DATE_SUB(expr, INTERVAL n UNIT) → datetime()/date() 修饰符
+  converted = convertDateIntervalArithmetic(converted);
 
   // ========== 移除 SQLite 不支持的语法 ==========
-  // ON UPDATE CURRENT_TIMESTAMP
-  converted = converted.replace(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/gi, '');
-  // ENGINE=... 和 CHARSET=...
-  converted = converted.replace(/ENGINE\s*=\s*\w+\s*/gi, '');
-  converted = converted.replace(/CHARSET\s*=\s*\w+\s*/gi, '');
+  // （ON UPDATE CURRENT_TIMESTAMP 已在最开始移除）
+  // ALTER TABLE ... ADD COLUMN ... AFTER <col>：SQLite 不支持 AFTER，直接去掉
+  converted = converted.replace(
+    /(\bADD\s+COLUMN\b[^;]*?)\s+AFTER\s+(`[^`]+`|["\[][^"\]]+["\]]|\w+)/gi,
+    '$1'
+  );
 
   // ========== 处理 CREATE TABLE 语句：提取内联 INDEX 为独立 CREATE INDEX ==========
   // 匹配每个完整的 CREATE TABLE ... ) 块（支持带或不带反引号、ENGINE等）
-  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|"|)(\w+)(?:`|"|)\s*\(([\s\S]*?)\)\s*(?:ENGINE\s*=\s*\w+[^;]*)?;/gi;
+  // 注意：ENGINE 的移除必须放在建表提取之后，否则 "…) ENGINE = …;" 的结尾锚点
+  // 会失效，导致语句体越过真实表尾、吞掉后续 INSERT 数据
+  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|"|)(\w+)(?:`|"|)\s*\(([\s\S]*?)\)\s*(?:ENGINE\s*=\s*\w+[^;]*)?(?=;|$)/gi;
   const extractedIndexes = [];
 
   converted = converted.replace(createTableRegex, (match, tableName, body) => {
@@ -156,7 +171,7 @@ function convertMySQLToSQLite(sql) {
   });
 
   // 处理不带ENGINE的CREATE TABLE（动态DDL可能没有ENGINE）
-  const createTableRegex2 = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|"|)(\w+)(?:`|"|)\s*\(([\s\S]*?)\);/gi;
+  const createTableRegex2 = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|"|)(\w+)(?:`|"|)\s*\(([\s\S]*?)\)\s*(?=;|$)/gi;
   converted = converted.replace(createTableRegex2, (match, tableName, body) => {
     // 如果已经有处理过的痕迹，跳过
     if (match.includes('ENGINE')) return match;
@@ -168,6 +183,10 @@ function convertMySQLToSQLite(sql) {
     converted += '\n-- ===== Extracted Indexes =====\n';
     converted += extractedIndexes.join('\n') + '\n';
   }
+
+  // ENGINE=... 和 CHARSET=...（建表提取完成后清理残余）
+  converted = converted.replace(/ENGINE\s*=\s*\w+\s*/gi, '');
+  converted = converted.replace(/CHARSET\s*=\s*\w+\s*/gi, '');
 
   // 替换剩余的反引号为双引号
   converted = converted.replace(/`(\w+)`/g, '"$1"');
@@ -214,10 +233,15 @@ function processCreateTableBlock(tableName, body, extractedIndexes) {
     if (indexMatch) {
       const isUnique = !!indexMatch[1];
       const idxName = indexMatch[2];
-      const cols = indexMatch[3].split(',').map(c => c.trim().replace(/`/g, ''));
+      // 去掉反引号与 ASC/DESC 修饰（SQLite 建索引列名不能带引号内修饰词）
+      const cols = indexMatch[3]
+        .split(',')
+        .map(c => c.trim().replace(/`/g, '').replace(/\s+(ASC|DESC)\s*$/i, ''))
+        .filter(Boolean);
       const uniquePrefix = isUnique ? 'UNIQUE ' : '';
+      // 语句必须以分号结尾，否则相邻索引语句会被拆分器并成一条
       extractedIndexes.push(
-        `CREATE ${uniquePrefix}INDEX "${idxName}" ON "${tableName}" (${cols.map(c => `"${c}"`).join(', ')})`
+        `CREATE ${uniquePrefix}INDEX IF NOT EXISTS "${idxName}" ON "${tableName}" (${cols.map(c => `"${c}"`).join(', ')});`
       );
       continue;
     }
@@ -290,6 +314,9 @@ function convertColumnDef(colDef) {
   def = def.replace(/\bJSON\b/gi, 'TEXT');
 
   // DATETIME/TIMESTAMP/DATE → TEXT
+  // 注意：先还原时间默认值。CURRENT_TIMESTAMP 经全局替换变成 DATETIME('now')/DATE('now')，
+  // 若再被映射为 TEXT('now') 会成为非法 DDL；DEFAULT CURRENT_TIMESTAMP 是 SQLite 合法的列默认值
+  def = def.replace(/DEFAULT\s+(?:DATETIME|DATE)\(\s*'now'\s*\)/gi, 'DEFAULT CURRENT_TIMESTAMP');
   def = def.replace(/\bDATETIME\b/gi, 'TEXT');
   def = def.replace(/\bTIMESTAMP\b/gi, 'TEXT');
   def = def.replace(/\bDATE\b(?!\s*FORMAT)/gi, 'TEXT');
@@ -324,6 +351,123 @@ function convertColumnDef(colDef) {
 }
 
 /**
+ * 按语句分割 SQL（字符串/注释感知）
+ *
+ * 普通 split(';') 会被字符串字面量中的分号破坏，
+ * 且建表语句前的 -- 注释会导致 startsWith('--') 过滤误删整条 DDL。
+ * 此拆分器只在字符串字面量与注释之外的 ';' 处分割。
+ */
+function splitSqlStatements(sql) {
+  const statements = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      current += ch;
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      current += ch;
+      if (ch === '*' && next === '/') {
+        current += next;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (inSingle) {
+      current += ch;
+      // MySQL 反斜杠转义（\' 与 \"）：转义的引号不改变字符串状态
+      if (ch === '\\' && next !== undefined) {
+        current += next;
+        i++;
+        continue;
+      }
+      if (ch === "'") {
+        if (next === "'") { current += next; i++; } // 转义 ''
+        else inSingle = false;
+      }
+      continue;
+    }
+    if (inDouble) {
+      current += ch;
+      if (ch === '\\' && next !== undefined) {
+        current += next;
+        i++;
+        continue;
+      }
+      if (ch === '"') {
+        if (next === '"') { current += next; i++; }
+        else inDouble = false;
+      }
+      continue;
+    }
+
+    if (ch === '-' && next === '-') { inLineComment = true; current += ch; continue; }
+    if (ch === '/' && next === '*') { inBlockComment = true; current += ch; continue; }
+    if (ch === "'") { inSingle = true; current += ch; continue; }
+    if (ch === '"') { inDouble = true; current += ch; continue; }
+    if (ch === ';') {
+      const s = current.trim();
+      if (s) statements.push(s);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+
+  return statements;
+}
+
+/**
+ * 预处理单条语句：去掉前导注释行；全为注释则返回空串
+ */
+function stripLeadingComments(stmt) {
+  return stmt
+    .replace(/^(?:\s*--[^\n]*\n|\s*\/\*[\s\S]*?\*\/\s*)+/, '')
+    .trim();
+}
+
+/**
+ * DATE_ADD/DATE_SUB(expr, INTERVAL n UNIT) → SQLite datetime()/date() 修饰符
+ *
+ * 支持：
+ * - expr：NOW()/CURDATE() 已先被转换为 DATETIME('now')/DATE('now')，也兼容列名
+ * - n：数字字面量或 ? 占位符（占位符转为 '+' || ? || ' unit' 修饰符拼接）
+ * - UNIT：SECOND/MINUTE/HOUR/DAY/WEEK/MONTH/YEAR（含复数形式）
+ *
+ * 时间类单位（HOUR/MINUTE/SECOND）一律用 datetime()；
+ * 日期类单位（DAY/WEEK/MONTH/YEAR）在 expr 为 DATE('now') 时用 date()
+ * 以保持 YYYY-MM-DD 格式（如 plan_date 等纯日期列的比较与展示），其余用 datetime()。
+ */
+function convertDateIntervalArithmetic(sql) {
+  return sql.replace(
+    /\b(DATE_ADD|DATE_SUB)\s*\(\s*([\s\S]+?)\s*,\s*INTERVAL\s+(\?|\d+)\s+(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH|YEAR)S?\s*\)/gi,
+    (match, fn, expr, amount, unit) => {
+      const sign = /^DATE_SUB$/i.test(fn) ? '-' : '+';
+      const unitLower = unit.toLowerCase();
+      const isTimeUnit = ['second', 'minute', 'hour'].includes(unitLower);
+      const func = !isTimeUnit && /DATE\(\s*'now'\s*\)/i.test(expr) ? 'date' : 'datetime';
+      const modifier = amount === '?'
+        ? `'${sign}' || ? || ' ${unitLower}'`
+        : `'${sign}${amount} ${unitLower}'`;
+      return `${func}(${expr}, ${modifier})`;
+    }
+  );
+}
+
+/**
  * 转换 MySQL 参数化查询为 SQLite 格式
  *
  * 主要处理：
@@ -344,15 +488,48 @@ function convertQuery(sql, params) {
   converted = converted.replace(/\bNOW\s*\(\s*\)/gi, "DATETIME('now')");
   converted = converted.replace(/\bCURRENT_DATE\b/gi, "DATE('now')");
   converted = converted.replace(/\bCURRENT_TIMESTAMP\b/gi, "DATETIME('now')");
-  converted = converted.replace(
-    /DATE_ADD\s*\(\s*(\w+)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
-    '$1 + $2'
-  );
-  converted = converted.replace(
-    /DATE_SUB\s*\(\s*(\w+)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
-    '$1 - $2'
-  );
+  // CHAR_LENGTH → LENGTH（SQLite 的 LENGTH 对文本返回字符数，语义与 MySQL CHAR_LENGTH 一致）
+  converted = converted.replace(/\bCHAR_LENGTH\s*\(/gi, 'LENGTH(');
+  // FIELD(expr, v1, v2, ..., vN) → CASE expr WHEN v1 THEN 1 ... WHEN vN THEN N ELSE N+1 END
+  // （MySQL 自定义排序函数，SQLite 无对应函数；参数按顶层逗号切分，兼容引号内逗号）
+  converted = converted.replace(/\bFIELD\s*\(([^()]*)\)/gi, (match, args) => {
+    const parts = [];
+    let cur = '', inQuote = null;
+    for (let i = 0; i < args.length; i++) {
+      const ch = args[i];
+      if ((ch === "'" || ch === '"' || ch === '`') && args[i - 1] !== '\\') {
+        if (inQuote === ch) inQuote = null;
+        else if (!inQuote) inQuote = ch;
+        cur += ch;
+      } else if (ch === ',' && !inQuote) {
+        parts.push(cur.trim());
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    if (parts.length < 2) return match;
+    const expr = parts[0];
+    const whens = parts.slice(1).map((v, i) => `WHEN ${v} THEN ${i + 1}`).join(' ');
+    return `(CASE ${expr} ${whens} ELSE ${parts.length} END)`;
+  });
+  converted = convertDateIntervalArithmetic(converted);
   converted = converted.replace(/\bRAND\s*\(\s*\)/gi, 'RANDOM()');
+
+  // ========== MySQL upsert → SQLite upsert ==========
+  // INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)
+  //   → INSERT ... ON CONFLICT DO UPDATE SET col = excluded.col
+  if (/\bON\s+DUPLICATE\s+KEY\s+UPDATE\b/i.test(converted)) {
+    converted = converted.replace(/\bON\s+DUPLICATE\s+KEY\s+UPDATE\b/gi, 'ON CONFLICT DO UPDATE SET');
+    // VALUES(col) → excluded.col（仅匹配标识符参数，不影响 INSERT 的 VALUES (?, ?) 占位符）
+    converted = converted.replace(/\bVALUES\s*\(\s*([a-zA-Z_]\w*)\s*\)/g, 'excluded.$1');
+  }
+
+  // ========== MySQL LEAST/GREATEST → SQLite min/max（任意语句通用）==========
+  // SQLite 多参数 min/max 即 LEAST/GREATEST 语义
+  converted = converted.replace(/\bGREATEST\s*\(/gi, 'max(');
+  converted = converted.replace(/\bLEAST\s*\(/gi, 'min(');
 
   // 处理 INSERT INTO table SET ? 格式（MySQL 特有）
   const setMatch = converted.match(/INSERT\s+INTO\s+`?(\w+)`?\s+SET\s+\?/i);
@@ -398,6 +575,27 @@ function convertQuery(sql, params) {
 
   // 替换表名和列名中的反引号为双引号
   converted = converted.replace(/`(\w+)`/g, '"$1"');
+
+  // 展开 SELECT 中的 IN (?) 数组参数（mysql2 兼容：数组参数自动展开为 IN (?, ?, ...)）
+  if (Array.isArray(convertedParams) && convertedParams.some(p => Array.isArray(p))) {
+    const tokens = converted.split('?');
+    let out = tokens[0];
+    const flatParams = [];
+    let paramIdx = 0;
+    for (let i = 1; i < tokens.length; i++) {
+      const param = convertedParams[paramIdx++];
+      const prevToken = tokens[i - 1];
+      if (Array.isArray(param) && /\bIN\s*\(\s*$/i.test(prevToken) && /^\s*\)/.test(tokens[i])) {
+        out += param.map(() => '?').join(', ') + tokens[i];
+        flatParams.push(...param);
+      } else {
+        out += '?' + tokens[i];
+        flatParams.push(param);
+      }
+    }
+    converted = out;
+    convertedParams = flatParams;
+  }
 
   return { sql: converted, params: convertedParams };
 }
@@ -446,7 +644,14 @@ async function initialize() {
         if (!tables.length || !tables[0].values.length) {
           console.log('[SQLite] 数据库为空，执行schema初始化');
           await loadSchema();
+        } else {
+          // 非空库也需要增量同步：schema 可能随代码更新新增表/列
+          console.log('[SQLite] 已加载现有数据库，执行 schema 增量同步');
+          await syncSchema();
         }
+
+        // 补充应用代码直接查询、但 edu_smart.sql 未定义的表
+        await ensureAppTables();
       } else {
         db = new SQL.Database();
         console.log(`[SQLite] 已创建新数据库: ${DB_PATH}`);
@@ -491,10 +696,9 @@ async function loadSchema() {
   const mysqlSQL = fs.readFileSync(schemaPath, 'utf8');
   const sqliteSQL = convertMySQLToSQLite(mysqlSQL);
 
-  const statements = sqliteSQL
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'));
+  const statements = splitSqlStatements(sqliteSQL)
+    .map(stripLeadingComments)
+    .filter(s => s.length > 0);
 
   let executed = 0;
   let errors = 0;
@@ -540,8 +744,181 @@ async function loadSchema() {
 
   // 确保 admin 用户存在
   await ensureAdminUser();
-  
+
   saveToDisk();
+}
+
+/**
+ * 对非空数据库执行 schema 增量同步（幂等）
+ *
+ * 1. 重新执行全部转换后的 DDL（CREATE TABLE IF NOT EXISTS，已存在的表自动跳过）
+ * 2. 为已存在的表补齐 schema 中新增的列（ALTER TABLE ADD COLUMN）
+ *
+ * 与 loadSchema 的区别：不执行 bootstrap/ensureAdmin，可安全地在每次启动时调用
+ */
+async function syncSchema() {
+  const schemaPath = path.join(PROJECT_ROOT, 'ops', 'database', 'sql', 'edu_smart.sql');
+
+  if (!fs.existsSync(schemaPath)) {
+    console.warn('[SQLite] Schema 文件不存在，跳过增量同步');
+    return;
+  }
+
+  const mysqlSQL = fs.readFileSync(schemaPath, 'utf8');
+  const sqliteSQL = convertMySQLToSQLite(mysqlSQL);
+
+  const statements = splitSqlStatements(sqliteSQL)
+    .map(stripLeadingComments)
+    .filter(s => s.length > 0);
+
+  let executed = 0;
+  let errors = 0;
+  let columnsAdded = 0;
+
+  for (let stmt of statements) {
+    // 增量同步绝不执行 DROP，防止清空现有表数据
+    if (/^DROP\b/i.test(stmt)) {
+      continue;
+    }
+    // 增量同步绝不执行 INSERT/REPLACE/UPDATE/DELETE，防止覆盖运行时数据
+    if (/^(INSERT|REPLACE|UPDATE|DELETE)\b/i.test(stmt)) {
+      continue;
+    }
+    // 索引语句改为幂等形式，避免重复创建报错
+    stmt = stmt.replace(/^CREATE\s+(UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS)/i, 'CREATE $1INDEX IF NOT EXISTS ');
+    try {
+      db.run(stmt + ';');
+      executed++;
+    } catch (err) {
+      if (errors < 3) {
+        console.warn(`[SQLite] Schema 同步警告: ${err.message.substring(0, 80)}`);
+      }
+      errors++;
+    }
+  }
+
+  // 为已存在的表补齐缺失列
+  for (const stmt of statements) {
+    columnsAdded += await addMissingColumnsFromDDL(stmt);
+  }
+
+  console.log(`[SQLite] Schema 增量同步完成: ${executed} 条语句执行, 新增列 ${columnsAdded} 个, 跳过 ${errors} 条`);
+  saveToDisk();
+}
+
+/**
+ * 从 CREATE TABLE DDL 语句中为已存在的表补齐缺失列
+ *
+ * @param {string} stmt - 形如 CREATE TABLE IF NOT EXISTS "name" (...) 的语句
+ * @returns {Promise<number>} 实际新增的列数
+ */
+async function addMissingColumnsFromDDL(stmt) {
+  const tableMatch = stmt.match(/^CREATE TABLE IF NOT EXISTS\s+"(\w+)"\s*\(/i);
+  if (!tableMatch) return 0;
+  const tableName = tableMatch[1];
+
+  let colsRes;
+  try {
+    colsRes = db.exec(`PRAGMA table_info("${tableName}")`);
+  } catch (err) {
+    return 0;
+  }
+  // 表不存在则跳过（新建表已包含全部列）
+  if (!colsRes.length || !colsRes[0].values.length) return 0;
+
+  const existingCols = new Set(colsRes[0].values.map(v => String(v[1]).toLowerCase()));
+
+  const body = stmt.slice(stmt.indexOf('(') + 1, stmt.lastIndexOf(')'));
+  let columnsAdded = 0;
+  for (const rawDef of splitColumns(body)) {
+    const def = rawDef.trim();
+    if (!def) continue;
+
+    const colMatch = def.match(/^"?(\w+)"?\s*([\s\S]*)$/);
+    if (!colMatch) continue;
+    const colName = colMatch[1];
+    const rest = colMatch[2].trim();
+
+    // 跳过表级约束（PRIMARY KEY(...)、CONSTRAINT ... 等）
+    if (/^(PRIMARY|UNIQUE|CHECK|FOREIGN|CONSTRAINT|INDEX|KEY)\b/i.test(colName)) continue;
+    if (existingCols.has(colName.toLowerCase())) continue;
+
+    // SQLite ADD COLUMN 不允许 PRIMARY KEY/UNIQUE/NOT NULL(无默认)/表达式默认值
+    // 因此只保留类型与常量 DEFAULT
+    const typeMatch = rest.match(/^(\w+)/);
+    const colType = typeMatch ? typeMatch[1] : 'TEXT';
+    let ddl = `ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${colType}`;
+
+    const defaultMatch = rest.match(/DEFAULT\s+('(?:[^']|'')*'|[\w.+-]+)/i);
+    if (defaultMatch) {
+      const dv = defaultMatch[1];
+      const isDynamicDefault = /^(CURRENT_TIME|CURRENT_DATE|CURRENT_TIMESTAMP)$/i.test(dv);
+      if (!isDynamicDefault && !dv.startsWith('(')) {
+        ddl += ` DEFAULT ${dv}`;
+      }
+    }
+
+    try {
+      db.run(ddl);
+      columnsAdded++;
+    } catch (err) {
+      console.warn(`[SQLite] 补列失败 ${tableName}.${colName}: ${err.message.substring(0, 60)}`);
+    }
+  }
+  return columnsAdded;
+}
+
+/**
+ * 应用层补充表
+ *
+ * 这些表由应用代码直接读写，但 ops/database/sql/edu_smart.sql 中没有定义，
+ * 其 DDL 仅存在于 scripts/rebuild-database.js（破坏性重建脚本，不能在启动时执行）。
+ * 此处运行时提取该脚本中的 CREATE TABLE 语句，以幂等方式补齐缺失的表。
+ */
+async function ensureAppTables() {
+  const rebuildScriptPath = path.join(PROJECT_ROOT, 'scripts', 'rebuild-database.js');
+  if (!fs.existsSync(rebuildScriptPath)) return;
+
+  const scriptText = fs.readFileSync(rebuildScriptPath, 'utf8');
+  const blocks = [...scriptText.matchAll(/CREATE TABLE\s+(\w+)\s*\(([\s\S]*?)\n\s*\);/g)];
+  if (!blocks.length) return;
+
+  let created = 0;
+  const names = [];
+  for (const [, name, rawBody] of blocks) {
+    try {
+      const exists = db.exec(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`
+      );
+      const tableExists = exists.length && exists[0].values.length > 0;
+
+      // 去掉外键约束：SQLite 外键开启后，缺少父表数据会导致应用写入失败
+      const body = rawBody
+        .split('\n')
+        .filter(line => !/^\s*(FOREIGN KEY|CONSTRAINT)\b/i.test(line))
+        .join('\n')
+        .replace(/,(\s*)$/, '$1');
+
+      // 结尾必须有分号，否则 convertMySQLToSQLite 的建表正则匹配不到、
+      // MySQL 语法会原样透传给 SQLite
+      const converted = convertMySQLToSQLite(`CREATE TABLE IF NOT EXISTS ${name} (${body});`);
+
+      if (tableExists) {
+        // 表已存在（可能来自旧版 edu_smart.sql，结构较旧）：补齐应用需要的缺失列
+        await addMissingColumnsFromDDL(converted.replace(/;$/, ''));
+      } else {
+        db.run(converted);
+        created++;
+        names.push(name);
+      }
+    } catch (err) {
+      console.warn(`[SQLite] 应用表 ${name} 创建失败: ${err.message.substring(0, 80)}`);
+    }
+  }
+  if (created > 0) {
+    console.log(`[SQLite] 应用补充表创建完成: ${created} 张 (${names.join(', ')})`);
+    saveToDisk();
+  }
 }
 
 /**
@@ -727,20 +1104,43 @@ async function query(sql, params) {
     ) {
       // UPDATE/DELETE 查询
       return executeUpdate(convertedSql, convertedParams);
+    } else if (trimmed.startsWith('PRAGMA')) {
+      // PRAGMA：有结果集的（如 table_info / table_list）必须返回行，set/get 类执行即可
+      try {
+        const pragmaRes = db.exec(convertedSql);
+        if (pragmaRes && pragmaRes.length && pragmaRes[0].columns && pragmaRes[0].columns.length) {
+          const pragmaRows = pragmaRes[0].values.map(vals => {
+            const obj = {};
+            pragmaRes[0].columns.forEach((c, i) => { obj[c] = vals[i]; });
+            return obj;
+          });
+          return [pragmaRows, pragmaRes[0].columns.map(c => ({ name: c }))];
+        }
+      } catch (pragmaErr) {
+        // exec 失败时退回 run
+      }
+      db.run(convertedSql, convertedParams);
+      return [[], []];
     } else if (
       trimmed.startsWith('CREATE') ||
       trimmed.startsWith('ALTER') ||
-      trimmed.startsWith('DROP') ||
-      trimmed.startsWith('PRAGMA')
+      trimmed.startsWith('DROP')
     ) {
       // DDL 查询 - 需要额外转换MySQL语法
       const ddlConverted = convertMySQLToSQLite(convertedSql);
-      db.run(ddlConverted, convertedParams);
+      // 转换可能产出多条语句（如 MySQL 内联 INDEX 被拆成独立 CREATE INDEX），
+      // 而 db.run 只执行第一条，必须拆分后逐条执行
+      const ddlStatements = splitSqlStatements(ddlConverted)
+        .map(stripLeadingComments)
+        .filter(s => s.trim().length > 0 && !s.trim().startsWith('--'));
+      for (const stmt of ddlStatements) {
+        db.run(stmt + ';', convertedParams);
+      }
       saveToDisk();
       return [[], []];
     } else if (trimmed.startsWith('SHOW')) {
       // SHOW 语句需要特殊处理
-      return handleShowStatement(convertedSql);
+      return handleShowStatement(convertedSql, convertedParams);
     } else {
       // 其他（如 SET、BEGIN、COMMIT 等）
       try {
@@ -770,7 +1170,7 @@ async function query(sql, params) {
 function executeSelect(sql, params) {
   // 处理 SHOW 语句
   if (sql.trim().toUpperCase().startsWith('SHOW')) {
-    return handleShowStatement(sql);
+    return handleShowStatement(sql, params);
   }
 
   // 处理 DESCRIBE 语句
@@ -864,14 +1264,30 @@ function executeUpdate(sql, params) {
  * @param {string} sql
  * @returns {[Array, Array]}
  */
-function handleShowStatement(sql) {
+function handleShowStatement(sql, params) {
   const upper = sql.trim().toUpperCase();
 
   if (upper.includes('SHOW TABLES')) {
     const result = db.exec(
       "SELECT name AS Tables_in_db FROM sqlite_master WHERE type='table' ORDER BY name"
     );
-    const rows = resultToRows(result);
+    let rows = resultToRows(result);
+
+    // 支持 MySQL 的 LIKE 过滤（SHOW TABLES LIKE 'name' / LIKE ?）
+    // 业务代码（tableExists 等）依赖此语义判断表是否存在
+    const likeMatch = sql.match(/\bLIKE\s+(?:\?|'((?:[^']|'')*)')/i);
+    if (likeMatch) {
+      const pattern = likeMatch[1] !== undefined ? likeMatch[1] : String(params?.[0] ?? '');
+      if (pattern) {
+        const regexStr = pattern
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/%/g, '.*')
+          .replace(/_/g, '.');
+        const re = new RegExp(`^${regexStr}$`, 'i');
+        rows = rows.filter(r => re.test(r.Tables_in_db));
+      }
+    }
+
     return [rows, [{ name: 'Tables_in_db' }]];
   }
 
@@ -882,7 +1298,7 @@ function handleShowStatement(sql) {
       const tableName = match[1];
       const result = db.exec(`PRAGMA table_info("${tableName}")`);
       const raw = resultToRows(result);
-      const rows = raw.map(r => ({
+      let rows = raw.map(r => ({
         Field: r.name,
         Type: r.type,
         Null: r.notnull === 0 ? 'YES' : 'NO',
@@ -890,6 +1306,22 @@ function handleShowStatement(sql) {
         Default: r.dflt_value,
         Extra: '',
       }));
+
+      // 支持 MySQL 的 LIKE 过滤（SHOW COLUMNS FROM t LIKE 'col' / LIKE ?）
+      // 业务代码（ensureSchema/addColumn 等）依赖此语义判断列是否存在
+      const likeMatch = sql.match(/\bLIKE\s+(?:\?|'((?:[^']|'')*)')/i);
+      if (likeMatch) {
+        const pattern = likeMatch[1] !== undefined ? likeMatch[1] : String(params?.[0] ?? '');
+        if (pattern) {
+          const regexStr = pattern
+            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            .replace(/%/g, '.*')
+            .replace(/_/g, '.');
+          const re = new RegExp(`^${regexStr}$`, 'i');
+          rows = rows.filter(r => re.test(r.Field));
+        }
+      }
+
       return [rows, [{ name: 'Field' }, { name: 'Type' }]];
     }
   }
@@ -1058,3 +1490,12 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = pool;
+
+// 内部工具导出（仅供诊断/脚本复用，不参与运行时查询）
+module.exports._internals = {
+  convertMySQLToSQLite,
+  splitSqlStatements,
+  stripLeadingComments,
+  splitColumns,
+  convertColumnDef
+};

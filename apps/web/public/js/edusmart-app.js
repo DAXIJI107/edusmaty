@@ -67,6 +67,8 @@
             '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
         edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
         eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+        "eye-off":
+            '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
         flag: '<path d="M4 22V4"/><path d="M4 4h12l-1 4 1 4H4"/>',
         history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/><path d="M12 7v5l3 2"/>',
         star: '<path d="m12 2 3 6 6.5.9-4.7 4.6 1.1 6.5L12 17l-5.9 3 1.1-6.5L2.5 8.9 9 8z"/>',
@@ -112,6 +114,10 @@
             metrics: [],
             tasks: [],
             taskSummary: { total: 0, done: 0, minutes: 0, percent: 0 },
+            // 练习上下文（任务闭环）：从任务/冲刺页带过来的 taskId + 学科，提交练习后自动完成任务
+            practiceContext: null,
+            // 真实周历（overview.weekTasks）
+            weekTasks: [],
             // all data loaded from backend API at runtime
             studyPlan: null,
             studyPlanTasks: [],
@@ -481,6 +487,7 @@
         if (p.includes("obsidian") || p.includes("vault")) return "obsidian";
         if (p.includes("knowledge-base") || p.includes("rag-knowledge")) return "knowledgeBase";
         if (p.includes("rag-search") || p.includes("ragsearch")) return "aiAssistant";
+        if (p.includes("database") || p.includes("db-admin")) return "database";
         if (p.includes("agent-center") || p.includes("agentcenter")) return "agentCenter";
         if (p.includes("ai-assistant") || p.includes("rag")) return "aiAssistant";
         if (p.includes("intelligence") || p.includes("ai-learning")) return "intelligence";
@@ -548,6 +555,7 @@
                 achievements: json.achievements || [],
                 weakPoints: json.weakPoints || [],
                 recommendations: json.recommendations || [],
+                weekTasks: json.weekTasks || [],
                 dailyQuestion: json.dailyQuestion || null,
                 intelligence: state.data.intelligence
             };
@@ -583,8 +591,8 @@
             status: task.status,
             completed: task.status === "done",
             icon: task.icon || "route",
-            actionUrl: "/path",
-            actionLabel: "查看路径",
+            actionUrl: "/practice",
+            actionLabel: "去练习巩固",
             source: task.source,
             mastery: task.mastery
         }));
@@ -1238,7 +1246,126 @@
         const json = await request(`/api/team-code/projects/${projectId}`);
         state.data.teamCodeProject = json.data;
         state.data.teamCodeActiveProjectId = projectId;
+        state.data.teamBriefs = null;
+        state.data.teamBriefActive = null;
+        state.data.teamBriefDraft = null;
         return json.data;
+    }
+
+    async function loadTeamBriefs() {
+        const projectId = state.data.teamCodeActiveProjectId;
+        if (!projectId) return;
+        try {
+            const json = await request(`/api/team-code/projects/${projectId}/briefs`);
+            state.data.teamBriefs = json.data || [];
+        } catch (e) {
+            state.data.teamBriefs = [];
+        }
+    }
+
+    async function loadTeamBot() {
+        const projectId = state.data.teamCodeActiveProjectId;
+        if (!projectId) return;
+        try {
+            const json = await request(`/api/team-code/projects/${projectId}/bot`);
+            state.data.teamBot = json.data || null;
+        } catch (e) {
+            state.data.teamBot = null;
+        }
+    }
+
+    async function runBotAction(path, body, options = {}) {
+        const projectId = state.data.teamCodeActiveProjectId;
+        if (!projectId) return;
+        state.data.teamBotLoading = true;
+        render();
+        try {
+            const json = await request(
+                path ? `/api/team-code/projects/${projectId}/bot/${path}` : `/api/team-code/projects/${projectId}/bot`,
+                {
+                    method: options.method || "POST",
+                    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+                }
+            );
+            toast(json.message || "操作成功");
+            await loadTeamBot();
+            return json;
+        } catch (e) {
+            toast(e.message || "机器人操作失败");
+            return null;
+        } finally {
+            state.data.teamBotLoading = false;
+            render();
+        }
+    }
+
+    // ========== 代码机器人悬浮助手（全站右下角） ==========
+    function botWidgetSay(role, text, kind = "") {
+        state.data.botWidgetMsgs = state.data.botWidgetMsgs || [];
+        state.data.botWidgetMsgs.push({
+            role,
+            text,
+            kind,
+            time: new Date().toLocaleTimeString("sv-SE").slice(0, 5)
+        });
+    }
+
+    async function loadBotWidget() {
+        const pid = state.data.botWidgetProjectId;
+        if (!pid) return;
+        state.data.botWidgetLoading = true;
+        render();
+        try {
+            const json = await request(`/api/team-code/projects/${pid}/bot`);
+            state.data.botWidget = json.data || null;
+            try {
+                const detail = await request(`/api/team-code/projects/${pid}`);
+                state.data.botWidgetDetail = detail.data || null;
+            } catch (e) {
+                state.data.botWidgetDetail = null;
+            }
+            if (!state.data.botWidgetGreeted) {
+                state.data.botWidgetGreeted = true;
+                botWidgetSay(
+                    "bot",
+                    `你好，我是 ${json.data?.bot?.name || "CodeBot"}。我可以帮你：读取代码与需求、一键拉取/推送 GitHub 代码、一键绑定数据库。`
+                );
+            }
+        } catch (e) {
+            state.data.botWidget = null;
+            botWidgetSay("bot", e.message || "机器人配置加载失败");
+        } finally {
+            state.data.botWidgetLoading = false;
+            render();
+        }
+    }
+
+    async function runBotWidgetAction(path, body, label, options = {}) {
+        const pid = state.data.botWidgetProjectId;
+        if (!pid) return;
+        if (label) botWidgetSay("user", label);
+        state.data.botWidgetLoading = true;
+        render();
+        try {
+            const json = await request(
+                path ? `/api/team-code/projects/${pid}/bot/${path}` : `/api/team-code/projects/${pid}/bot`,
+                {
+                    method: options.method || "POST",
+                    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+                }
+            );
+            const extra = options.describe ? options.describe(json) : "";
+            botWidgetSay("bot", `${json.message || options.fallbackText || "操作成功"}${extra}`);
+            if (json.data?.report) botWidgetSay("bot", json.data.report, "report");
+            await loadBotWidget();
+            return json;
+        } catch (e) {
+            botWidgetSay("bot", e.message || "操作失败");
+            return null;
+        } finally {
+            state.data.botWidgetLoading = false;
+            render();
+        }
     }
 
     async function loadTeamCodeFile(projectId, fileId) {
@@ -1825,8 +1952,8 @@
             {
                 view: "agentCenter",
                 icon: "robot",
-                title: "AI学习Agent陪伴",
-                desc: "按目标拆任务、跟进执行、自动调整下一步",
+                title: "15分钟学习计划",
+                desc: "按画像领一个小任务，15 分钟冲刺并打卡",
                 tag: "效率核心",
                 prompt: "请作为免费学习陪伴Agent，根据我的画像生成本周陪伴计划，并给出今天最该完成的3个动作。"
             },
@@ -1969,7 +2096,7 @@
                     <button class="icon-btn" title="搜索" data-open-panel="search">${icon("search", 20)}</button>
                     <button class="icon-btn" title="通知" data-open-panel="notifications">${icon("bell", 20)}${state.data.unreadCount > 0 ? `<span class="badge">${state.data.unreadCount}</span>` : ""}</button>
                     <button class="user-chip" data-view="account" title="个人中心">
-                        <span class="avatar">${escapeHtml((state.user?.username || "U").slice(0, 1).toUpperCase())}</span>
+                        ${avatarEl(state.user, "avatar")}
                         <span>${escapeHtml(state.user?.username || "未登录")}</span><span>⌄</span>
                     </button>
                 </div>
@@ -2039,7 +2166,7 @@
                 items: [
                     { view: "aiAssistant", icon: "robot", label: "AI智能问答", desc: "RAG、错题、笔记与20轮记忆" },
                     { view: "obsidian", icon: "database", label: "知识库", desc: "笔记、双向链接与资料管理" },
-                    { view: "agentCenter", icon: "brain", label: "Agent学习中心", desc: "个性化学习路径与执行" },
+                    { view: "agentCenter", icon: "brain", label: "15分钟学习计划", desc: "领取小任务，15分钟冲刺" },
                     { view: "agentResearch", icon: "layers", label: "Agent研究中心", desc: "开源能力在项目内落地" }
                 ]
             },
@@ -2052,13 +2179,15 @@
                 items: [{ view: "membership", icon: "heart", label: "学习陪伴中心", desc: "免费学习照顾与主动复习" }]
             },
             {
-                label: "教师工作台",
+                label: "管理中心",
                 icon: "chart",
                 desc: "",
-                items: [{ view: "teacherWorkbench", icon: "chart", label: "教师工作台", desc: "班级管理与学情" }]
+                items: [
+                    { view: "teacherWorkbench", icon: "chart", label: "教师工作台", desc: "班级管理与学情" }
+                ]
             }
         ];
-        return role === "teacher" || role === "admin" ? groups : groups.filter(group => group.label !== "教师工作台");
+        return role === "teacher" || role === "admin" ? groups : groups.filter(g => g.label !== "管理中心");
     }
 
     function metricCards(items = state.data.metrics) {
@@ -2077,46 +2206,25 @@
 
     function planCard() {
         const summary = state.data.taskSummary;
-        const tasks = state.data.tasks.length
-            ? state.data.tasks
-            : [
-                  {
-                      icon: "play",
-                      title: "完成今日推荐课程学习",
-                      meta: "数据结构 · 哈希表",
-                      time: "预计 45 分钟",
-                      done: true,
-                      color: "#635bff",
-                      soft: "rgba(99,91,255,.12)"
-                  },
-                  {
-                      icon: "file",
-                      title: "完成 5 道课后练习题",
-                      meta: "操作系统 · 内存管理",
-                      time: "预计 20 分钟",
-                      done: true,
-                      color: "#18b87a",
-                      soft: "rgba(24,184,122,.12)"
-                  },
-                  {
-                      icon: "robot",
-                      title: "与 AI 助手进行专题复盘",
-                      meta: "计算机网络 · DNS",
-                      time: "预计 15 分钟",
-                      done: false,
-                      color: "#ff9500",
-                      soft: "rgba(255,149,0,.12)"
-                  },
-                  {
-                      icon: "book",
-                      title: "查看本周学习报告",
-                      meta: "学习分析与建议",
-                      time: "预计 10 分钟",
-                      done: false,
-                      color: "#2f6bff",
-                      soft: "rgba(47,107,255,.12)"
-                  }
-              ];
+        const tasks = state.data.tasks;
+        if (!tasks.length) {
+            // 真实空态：不放假任务，引导用户一键生成今日计划
+            return `
+            <article class="card">
+                <div class="card-head">
+                    <h2 class="section-title">${icon("list", 18)}今日学习计划</h2>
+                    <button class="btn tiny ghost" data-view="studyPlan">${icon("calendar", 15)}查看闭环</button>
+                </div>
+                <div class="empty-state">
+                    <h3>今天还没有学习任务</h3>
+                    <p>调用 Agent 个性化学习，按你的画像和薄弱点生成今日计划；也可以先去完成一次练习或冲刺。</p>
+                    <div class="hero-actions">
+                        <button class="btn primary glow" data-study-plan-agent-generate>${icon("robot", 16)}调用 Agent 生成今日计划</button>
+                        <button class="btn ghost" data-view="studyPlan">${icon("calendar", 16)}进入学习中心</button>
+                    </div>
+                </div>
+            </article>`;
+        }
         return `
             <article class="card">
                 <div class="card-head">
@@ -2139,34 +2247,17 @@
     }
 
     function activityCard() {
-        const items = state.data.activities.length
-            ? state.data.activities
-            : [
-                  {
-                      icon: "check",
-                      text: "完成了“数据结构”的学习",
-                      time: "10 分钟前",
-                      color: "#18b87a",
-                      soft: "rgba(24,184,122,.12)",
-                      badge: "学习完成"
-                  },
-                  {
-                      icon: "trophy",
-                      text: "连续学习第 13 天达成",
-                      time: "30 分钟前",
-                      color: "#ff9500",
-                      soft: "rgba(255,149,0,.12)",
-                      badge: "连续记录"
-                  }
-              ];
-        return `<article class="card"><div class="card-head"><h2 class="section-title">${icon("clock", 18)}最近动态</h2><button class="link-button" data-open-panel="activities">全部动态</button></div>
-            <div class="activity">${items
-                .map(
-                    item => `<div class="activity-item" style="--color:${item.color};--soft-color:${item.soft}">
+        const items = state.data.activities;
+        const rows = items
+            .map(
+                item => `<div class="activity-item" style="--color:${item.color};--soft-color:${item.soft}">
                 <span class="round-icon">${icon(item.icon, 17)}</span><div><div class="activity-text">${escapeHtml(item.text)}</div><div class="activity-time">${escapeHtml(item.time)}</div></div><span class="pill">${escapeHtml(item.badge)}</span>
             </div>`
-                )
-                .join("")}</div></article>`;
+            )
+            .join("");
+        const empty = `<div class="empty-state"><h3>还没有学习动态</h3><p>完成任务、练习或冲刺后，系统会自动把学习行为记录在这里。</p></div>`;
+        return `<article class="card"><div class="card-head"><h2 class="section-title">${icon("clock", 18)}最近动态</h2><button class="link-button" data-open-panel="activities">全部动态</button></div>
+            <div class="activity">${rows || empty}</div></article>`;
     }
 
     function quickTiles() {
@@ -2200,9 +2291,22 @@
         </article>`;
     }
 
+    // 画像数据的安全空对象：画像未生成时首页/画像页用它兜底，不再使用假画像
+    function emptyProfileInsight() {
+        return {
+            persona: "",
+            summary: { mastery: 0, continuousDays: 0, weakCount: 0 },
+            dimensions: [],
+            subjectScores: [],
+            weakPoints: [],
+            strongPoints: [],
+            recommendations: []
+        };
+    }
+
     function homeView() {
-        const profile = state.data.profileInsight || getMockProfileInsight();
-        const focus = state.data.weakPoints?.[0]?.title || "动态规划";
+        const profile = state.data.profileInsight || emptyProfileInsight();
+        const focus = state.data.weakPoints?.[0]?.title || "薄弱知识点";
         const courses = (state.data.courses || []).slice(0, 3);
         const courseCards =
             courses
@@ -2211,20 +2315,15 @@
                 <span>${icon("book", 18)}</span>
                 <b>${escapeHtml(course.title || course.name || "项目化课程")}</b>
                 <small>${escapeHtml(course.provider || course.subject || "EduSmart Academy")} · ${Number(course.progress || 0)}%</small>
-                <div class="bar"><span style="width:${Number(course.progress || 42)}%"></span></div>
+                <div class="bar"><span style="width:${Number(course.progress || 0)}%"></span></div>
             </article>`
                 )
                 .join("") ||
-            ["AI Python 入门", "数据结构可视化", "Web 项目实践"]
-                .map(
-                    (title, index) => `<article class="edu-mini-course">
-                <span>${icon(index === 2 ? "code" : "book", 18)}</span>
-                <b>${title}</b>
-                <small>${["基础巩固", "能力进阶", "项目实战"][index]} · ${[72, 48, 31][index]}%</small>
-                <div class="bar"><span style="width:${[72, 48, 31][index]}%"></span></div>
-            </article>`
-                )
-                .join("");
+            `<div class="empty-state"><h3>暂无课程推荐</h3><p>完成一次诊断或练习后，系统会按你的画像推荐课程。</p><button class="btn tiny ghost" data-view="course">${icon("book", 14)}去课程中心看看</button></div>`;
+        // KPI 全部取真实 overview 数据：metrics 数组 [label, value, ...] 结构
+        const masteryValue = state.data.metrics?.[1]?.[2] ?? profile.summary?.mastery ?? 0;
+        const streakValue = state.data.metrics?.[3]?.[2] ?? profile.summary?.continuousDays ?? 0;
+        const weakCount = (state.data.weakPoints || []).length;
         return `<main class="page home-page edu-modern-page">
             <section class="edu-home-hero">
                 <div class="edu-hero-copy">
@@ -2233,9 +2332,9 @@
                     <p>从诊断、路径、练习、编程实践到复盘反馈，EduSmart 把学习动作串成一个可追踪、可解释、可持续优化的智能闭环。</p>
                     <div class="hero-actions"><button class="btn primary glow" data-view="studyPlan">${icon("play", 17)}进入学习中心</button><button class="btn ghost" data-run-closed-loop="${escapeHtml(focus)}">${icon("robot", 17)}AI 生成学习闭环</button><button class="btn ghost" data-view="codeLab">${icon("code", 17)}在线编程实践</button></div>
                     <div class="edu-hero-kpis">
-                        <div><b>${profile.summary?.mastery || 78}%</b><span>综合掌握</span></div>
-                        <div><b>${profile.summary?.continuousDays || 14}</b><span>连续学习</span></div>
-                        <div><b>${profile.summary?.weakCount || 5}</b><span>待攻克薄弱点</span></div>
+                        <div><b>${Number(masteryValue) || 0}%</b><span>综合掌握</span></div>
+                        <div><b>${Number(streakValue) || 0}</b><span>连续学习</span></div>
+                        <div><b>${weakCount}</b><span>待攻克薄弱点</span></div>
                     </div>
                 </div>
                 <div class="edu-hero-visual" aria-hidden="true">
@@ -2365,7 +2464,7 @@
                         <p style="margin:0;color:var(--muted)">${escapeHtml(task.reason || "完成后记录学习产出，便于闭环追踪")}</p>
                     </div>
                 </div>
-                <button class="btn tiny primary" data-plan-action="${escapeHtml(task.actionUrl || "/practice")}">${escapeHtml(task.actionLabel || "开始学习")}</button>
+                <button class="btn tiny primary" data-plan-action="${escapeHtml(task.actionUrl || "/practice")}" data-plan-task-id="${escapeHtml(String(task.id || ""))}" data-plan-subject="${escapeHtml(task.subject || "")}" data-plan-title="${escapeHtml(task.title || task.task || task.name || "")}" data-plan-knowledge="${escapeHtml(task.knowledgeTitle || task.knowledge_title || task.reason || "")}">${escapeHtml(task.actionLabel || "开始学习")}</button>
             </div>
             <div class="grid-2" style="gap:12px;margin-top:16px;grid-template-columns:1fr 1fr">
                 <div class="card" style="box-shadow:none;padding:14px;background:rgba(47,107,255,.05)">
@@ -3602,7 +3701,7 @@
                 <div class="ai-toolbar" data-ai-toolbar>
                     <div class="ai-toolbar-brand">
                         ${icon("xfyun", 22)}
-                        <span class="ai-brand-name">讯飞星火</span>
+                        <span class="ai-brand-name">${escapeHtml(boundAiProviderName())}</span>
                         <span class="ai-brand-tag">AI智能助手</span>
                     </div>
                     <div class="ai-toolbar-divider"></div>
@@ -3745,6 +3844,14 @@
             const profile = plan.profileContext || {};
             const recommendedCourses = (state.data.courses || []).slice(0, 4);
             const reviewItems = state.data.recommendations?.slice(0, 4) || [];
+            const weakReviewItems = (state.data.weakPoints || []).slice(0, 4).map(wp => ({
+                title: wp.title || wp.name || "薄弱知识点",
+                reason: wp.reason || "画像标记的薄弱知识点，建议针对性练习",
+                action_label: "巩固"
+            }));
+            const pathNodes = (state.data.pathCenter?.pathNodes || []).slice(0, 4);
+            const weekTasks = state.data.weekTasks || [];
+            const pathStatusLabels = { priority: "优先修复", learning: "学习中", review: "复习迁移", done: "已完成" };
             return `<main class="page edu-modern-page learning-center-page">
                 <section class="edu-learning-hero">
                     <div>
@@ -3766,24 +3873,28 @@
                 <section class="edu-learning-grid">
                     <article class="card edu-course-reco">
                         <div class="card-head"><div><h2 class="section-title">${icon("book", 18)}课程推荐</h2><p class="muted-line">根据画像和薄弱点动态排序。</p></div><button class="btn tiny ghost" data-view="course">课程库</button></div>
-                        ${(recommendedCourses.length ? recommendedCourses : [{ title: "Python 基础到项目", provider: "EduSmart", progress: 64 }, { title: "数据结构图解课", provider: "AI Tutor", progress: 42 }, { title: "Web 全栈入门", provider: "Project Lab", progress: 28 }])
-                            .map(course => `<div class="learning-course-row"><span>${icon("book", 16)}</span><div><b>${escapeHtml(course.title || course.name)}</b><small>${escapeHtml(course.provider || course.subject || "智能推荐")} · ${Number(course.progress || 0)}%</small><div class="bar"><span style="width:${Number(course.progress || 36)}%"></span></div></div></div>`)
-                            .join("")}
+                        ${recommendedCourses.length
+                            ? recommendedCourses.map(course => `<div class="learning-course-row"><span>${icon("book", 16)}</span><div><b>${escapeHtml(course.title || course.name)}</b><small>${escapeHtml(course.provider || course.subject || "智能推荐")} · ${Number(course.progress || 0)}%</small><div class="bar"><span style="width:${Number(course.progress || 0)}%"></span></div></div></div>`).join("")
+                            : `<div class="empty-state compact"><p>暂无推荐课程，先完成一次诊断或练习，生成画像后会有针对性推荐。</p><button class="btn tiny ghost" data-view="course">${icon("book", 14)}浏览课程库</button></div>`}
                     </article>
                     <article class="card edu-path-map">
                         <div class="card-head"><h2 class="section-title">${icon("route", 18)}学习路径</h2><button class="btn tiny ghost" data-view="path">生成路径</button></div>
-                        ${["诊断薄弱点", "补齐核心概念", "完成迁移练习", "项目化输出"].map((step, index) => `<div class="path-node ${index === 1 ? "active" : ""}"><span>${index + 1}</span><b>${step}</b><small>${["已完成", "进行中", "待开始", "待开始"][index]}</small></div>`).join("")}
+                        ${pathNodes.length
+                            ? pathNodes.map((node, index) => `<div class="path-node ${node.status === "done" ? "done" : node.status === "learning" || node.status === "priority" ? "active" : ""}"><span>${index + 1}</span><b>${escapeHtml(node.title || node.name || "路径节点")}</b><small>${escapeHtml(pathStatusLabels[node.status] || "待开始")} · ${Number(node.estimateMinutes || 0)}分钟</small></div>`).join("")
+                            : `<div class="empty-state compact"><p>还没有学习路径，调用 Agent 按画像和目标生成一条。</p></div>`}
                     </article>
                     <div class="edu-task-board">${planCard()}</div>
                     <article class="card edu-review-board">
                         <div class="card-head"><h2 class="section-title">${icon("refresh", 18)}错题复盘</h2><button class="btn tiny ghost" data-view="practice">去练习</button></div>
-                        ${(reviewItems.length ? reviewItems : [{ title: "数组边界条件", reason: "最近练习错误率偏高", action_label: "复盘" }, { title: "Promise 链式调用", reason: "异步顺序容易混淆", action_label: "巩固" }, { title: "SQL 聚合查询", reason: "分组条件掌握不稳", action_label: "补题" }])
-                            .map(item => `<button class="list-row action-row" data-view="practice"><span>${escapeHtml(item.title)}<small>${escapeHtml(item.reason || "建议继续巩固")}</small></span><span class="pill warn">${escapeHtml(item.action_label || item.action || "复盘")}</span></button>`)
-                            .join("")}
+                        ${(reviewItems.length ? reviewItems : weakReviewItems).length
+                            ? (reviewItems.length ? reviewItems : weakReviewItems).map(item => `<button class="list-row action-row" data-view="practice"><span>${escapeHtml(item.title)}<small>${escapeHtml(item.reason || "建议继续巩固")}</small></span><span class="pill warn">${escapeHtml(item.action_label || item.action || "复盘")}</span></button>`).join("")
+                            : `<div class="empty-state compact"><p>完成练习后会自动汇总错题和薄弱点，这里会给出复盘建议。</p></div>`}
                     </article>
                     <article class="card edu-calendar-board">
                         <div class="card-head"><h2 class="section-title">${icon("calendar", 18)}学习日历</h2><span class="pill good">本周</span></div>
-                        <div class="edu-week-calendar">${["一", "二", "三", "四", "五", "六", "日"].map((day, index) => `<div class="${index === 2 ? "today" : index < 2 ? "done" : ""}"><b>${day}</b><span>${index < 2 ? icon("check", 14) : index === 2 ? "今" : index + 1}</span><small>${[3, 4, 5, 2, 3, 1, 2][index]}项</small></div>`).join("")}</div>
+                        ${weekTasks.length
+                            ? `<div class="edu-week-calendar">${weekTasks.map(d => `<div class="${d.isToday ? "today" : Number(d.done) > 0 ? "done" : ""}"><b>${escapeHtml(String(d.weekday || ""))}</b><span>${d.isToday ? "今" : Number(d.done) > 0 ? icon("check", 14) : Number(d.total) > 0 ? d.total : "·"}</span><small>${Number(d.total) > 0 ? `${d.done}/${d.total}项` : "无任务"}</small></div>`).join("")}</div>`
+                            : `<div class="empty-state compact"><p>生成今日计划后，这里会显示本周任务完成情况。</p></div>`}
                     </article>
                 </section>
                 <section class="path-control card agent-only-control">
@@ -3810,7 +3921,7 @@
                     <h1>今日学习计划</h1>
                     <p>今日计划只来自 Agent 个性化学习写入的路径任务，可重新生成，也可自定义追加路径任务。</p>
                     <div class="hero-actions">
-                        <button class="btn primary glow" data-plan-action="${escapeHtml(activeTask?.actionUrl || "/path")}">${icon("play", 17)}开始当前任务</button>
+                        <button class="btn primary glow" data-plan-action="${escapeHtml(activeTask?.actionUrl || "/path")}" data-plan-task-id="${escapeHtml(String(activeTask?.id || ""))}" data-plan-subject="${escapeHtml(activeTask?.subject || activeTask?.subjectName || "")}" data-plan-title="${escapeHtml(activeTask?.title || "")}" data-plan-knowledge="${escapeHtml(activeTask?.knowledgeTitle || activeTask?.knowledge_title || activeTask?.reason || "")}">${icon("play", 17)}开始当前任务</button>
                         <button class="btn ghost" data-study-plan-agent-generate>${icon("robot", 17)}重新生成 Agent 计划</button>
                         <button class="btn ghost" data-open-custom-agent-task>${icon("plus", 17)}自定义添加路径任务</button>
                     </div>
@@ -6208,22 +6319,15 @@
 
     function profileView() {
         const activeTab = state.data.profileTab || "overview";
-        const profile = state.data.profileInsight || getMockProfileInsight();
+        const profile = state.data.profileInsight || emptyProfileInsight();
         const summary = profile.summary || {};
         const diagnostic = state.data.diagnosticResult;
         const diagnosticAnalysis = diagnostic?.analysis || {};
-        const profileTrust = Math.min(
-            96,
-            Math.max(
-                58,
-                Math.round(
-                    ((summary.accuracy || 82) +
-                        (summary.efficiency || 78) +
-                        (diagnosticAnalysis.masteryEstimate || summary.mastery || 75)) /
-                        3
-                )
-            )
-        );
+        // 可信度只基于真实数据计算；画像未生成时如实显示待校准
+        const trustParts = [Number(summary.accuracy || 0), Number(summary.efficiency || 0), Number(diagnosticAnalysis.masteryEstimate || summary.mastery || 0)].filter(v => v > 0);
+        const profileTrust = trustParts.length
+            ? Math.min(96, Math.max(58, Math.round(trustParts.reduce((a, b) => a + b, 0) / trustParts.length)))
+            : 0;
         const persona = diagnosticAnalysis.persona || profile.persona || "稳步成长型";
 
         return `<main class="page profile-page ios-profile-page">
@@ -6239,13 +6343,13 @@
                     </div>
                 </div>
                 <div class="ios-profile-orb" aria-hidden="true">
-                    <div class="ios-orb-ring" style="--score:${summary.mastery || 75}">
-                        <b>${summary.mastery || 75}</b>
+                    <div class="ios-orb-ring" style="--score:${summary.mastery || 0}">
+                        <b>${summary.mastery || 0}</b>
                         <span>综合掌握</span>
                     </div>
                     <div class="ios-orb-meta">
-                        <span>可信度 ${profileTrust}%</span>
-                        <small>正确率 ${summary.accuracy || 82}% · 效率 ${summary.efficiency || 78}%</small>
+                        <span>${profileTrust ? `可信度 ${profileTrust}%` : "画像待校准"}</span>
+                        <small>${trustParts.length ? `正确率 ${summary.accuracy || 0}% · 效率 ${summary.efficiency || 0}%` : "完成诊断或练习后生成"}</small>
                     </div>
                 </div>
             </section>
@@ -8008,7 +8112,23 @@
     }
 
     function assessmentSubject(mode) {
+        if (mode === "onlineExam") return "all";
+        // 任务闭环：带练习上下文时按任务学科组卷；test 模式保留手动选科
+        if (state.data.practiceContext?.subject) return state.data.practiceContext.subject;
         return mode === "test" ? state.data.selectedSubject : "all";
+    }
+
+    // 练习上下文横幅：告知用户正在完成哪条任务，可取消
+    function practiceContextBanner() {
+        const ctx = state.data.practiceContext;
+        if (!ctx) return "";
+        const label = ctx.title || ctx.knowledgeTitle || "今日任务";
+        return `
+            <div class="practice-context-banner">
+                <span class="pcb-dot"></span>
+                <span class="pcb-text">正在完成今日任务：<b>${escapeHtml(label)}</b>，达标提交后自动打卡</span>
+                <button class="pcb-cancel" type="button" data-clear-practice-context>取消关联</button>
+            </div>`;
     }
 
     function assessmentKey(mode) {
@@ -8092,6 +8212,7 @@
             ? Math.max(0, Math.min(100, Math.round((remaining / durationSeconds) * 100)))
             : 0;
         return `<main class="exam-focus-page">
+            ${practiceContextBanner()}
             <header class="exam-focus-header">
                 <div>
                     <span class="pill">${escapeHtml(meta.label)}进行中</span>
@@ -8136,6 +8257,7 @@
             ["pen", "笔记闭环", "一键整理错题笔记并推送复习任务"]
         ];
         return `<main class="page assessment-start-page">
+            ${practiceContextBanner()}
             <section class="test-hero">
                 <div><span class="pill">${escapeHtml(meta.label)}</span><h1>${escapeHtml(meta.title)}</h1><p>${escapeHtml(meta.desc)}</p>
                     <div class="hero-actions"><button class="btn primary glow" data-start-assessment="${mode}">${icon("play", 17)}开始${escapeHtml(meta.label)}</button><button class="btn ghost" data-load-question-set="${mode}">${icon("refresh", 17)}换一套题</button></div>
@@ -8226,10 +8348,10 @@
     }
 
     function subjectTestSelector() {
-        const subjects = state.data.subjects.length
-            ? state.data.subjects
-            : [{ subject: state.data.selectedSubject, questionCount: 0, avgMastery: 0 }];
-        return `<section class="subject-strip">${subjects
+        if (!state.data.subjects.length) {
+            return `<section class="subject-strip"><div class="empty-state compact"><p>题库暂无可用学科，完成诊断或等待题库导入后即可分科测试。</p></div></section>`;
+        }
+        return `<section class="subject-strip">${state.data.subjects
             .map(
                 item => `
             <button class="subject-card ${item.subject === state.data.selectedSubject ? "active" : ""}" data-select-subject="${escapeHtml(item.subject)}">
@@ -8412,6 +8534,569 @@
         </main>`;
     }
 
+    // ==================== 数据库管理视图 ====================
+
+    /**
+     * 数据库管理页面状态
+     */
+    const dbState = {
+        tables: [],
+        currentTable: null,
+        schema: null,
+        querySql: '',
+        queryResult: null,
+        queryError: null,
+        previewPage: 1,
+        previewPageSize: 50,
+        previewData: null,
+        activeTab: 'query',  // 'query' | 'change' | 'browse' | 'schema'
+        selectedDb: '',      // 所选库
+        changeSql: '',       // 变更 SQL
+        changeRemark: '',    // 变更备注（必填）
+        orders: [],          // 变更工单列表
+        ordersLoaded: false,
+        orderToast: null     // { type: 'ok'|'err', text }
+    };
+
+    /** 是否已选齐库和表（输入 SQL 的前置条件） */
+    function dbSelectionReady() {
+        return !!(dbState.selectedDb && dbState.currentTable);
+    }
+
+    /** 加载数据库表列表 */
+    async function loadDbTables() {
+        try {
+            const json = await request('/api/database/tables');
+            dbState.tables = json.data || [];
+        } catch (e) {
+            console.error('加载表列表失败', e);
+        }
+    }
+
+    /** 加载表结构 */
+    async function loadDbSchema(table) {
+        try {
+            const json = await request(`/api/database/schema/${table}`);
+            dbState.schema = json.data;
+            dbState.currentTable = table;
+        } catch (e) {
+            dbState.schema = null;
+            console.error('加载表结构失败', e);
+        }
+    }
+
+    /** 加载表数据预览 */
+    async function loadDbPreview(table, page = 1) {
+        try {
+            const json = await request(`/api/database/preview/${table}?page=${page}&pageSize=${dbState.previewPageSize}`);
+            dbState.previewData = json.data;
+            dbState.previewPage = page;
+        } catch (e) {
+            dbState.previewData = null;
+            console.error('加载数据失败', e);
+        }
+    }
+
+    /** 执行 SQL 查询 */
+    async function execDbQuery() {
+        const sql = dbState.querySql.trim();
+        if (!sql) { dbState.queryError = '请输入 SQL 语句'; return; }
+        dbState.queryError = null;
+        dbState.queryResult = null;
+        try {
+            const json = await request('/api/database/query', {
+                method: 'POST',
+                body: JSON.stringify({ sql })
+            });
+            dbState.queryResult = json.data;
+        } catch (e) {
+            dbState.queryError = e.message;
+        }
+    }
+
+    /** 渲染数据库管理页面（左侧：选库选表 + 功能导航；右侧：当前功能内容） */
+    function databaseView() {
+        const tabs = [
+            { key: 'query',   label: '数据查询',  icon: 'search' },
+            { key: 'change',  label: '数据变更',  icon: 'edit' },
+            { key: 'browse',  label: '数据浏览',  icon: 'list' },
+            { key: 'schema',  label: '表结构',    icon: 'layers' }
+        ];
+        return `
+        <main class="db-admin">
+            <aside class="db-side">
+                <div class="db-side-brand">${icon('database', 18)} 数据库管理中心</div>
+                <div class="db-side-section">
+                    <label>数据库</label>
+                    <select id="dbDbSelect">
+                        <option value="">请选择数据库</option>
+                        <option value="edu_smart" ${dbState.selectedDb === 'edu_smart' ? 'selected' : ''}>EduSmart 主库</option>
+                    </select>
+                </div>
+                <div class="db-side-section">
+                    <label>数据表</label>
+                    <select id="dbTableSelect">
+                        <option value="">请选择数据表</option>
+                        ${dbState.tables.map(t => `<option value="${escapeAttr(t.name)}" ${dbState.currentTable === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="db-selector-status ${dbSelectionReady() ? 'ok' : ''}">
+                    ${dbSelectionReady() ? `${icon('check', 14)} 已匹配：${escapeHtml(dbState.selectedDb)} / ${escapeHtml(dbState.currentTable)}` : `${icon('lock', 14)} 请先选择库和表`}
+                </div>
+                <div class="db-side-divider"></div>
+                <nav class="db-side-nav">
+                    ${tabs.map(t => `
+                        <button class="db-side-item ${dbState.activeTab === t.key ? 'active' : ''}" data-db-tab="${t.key}">
+                            ${icon(t.icon, 15)}<span>${t.label}</span>
+                        </button>
+                    `).join('')}
+                </nav>
+                <div class="db-side-tip">数据查询仅支持 SELECT；数据变更以工单形式提交，需管理员审批后才会执行。</div>
+            </aside>
+            <section class="db-main" id="dbMain">${renderDbMain()}</section>
+        </main>`;
+    }
+
+    /** 渲染主区域（仅当前功能内容 + 标题） */
+    function renderDbMain() {
+        const tab = dbState.activeTab;
+        const ready = dbSelectionReady();
+        const meta = {
+            query:  { title: '数据查询', desc: '仅支持 SELECT / WITH / PRAGMA / EXPLAIN，结果只读。' },
+            change: { title: '数据变更', desc: '变更以工单形式提交，备注必填，管理员审批后执行。' },
+            browse: { title: '数据浏览', desc: '分页浏览当前表中的数据。' },
+            schema: { title: '表结构',   desc: '查看字段、类型、主键与默认值信息。' }
+        };
+        const m = meta[tab] || meta.query;
+
+        const body = !ready
+            ? `<div class="db-locked">${icon('lock', 28)}<p>请先在左侧选择数据库和数据表，匹配成功后才能进行操作</p></div>`
+            : (tab === 'query' ? renderDbQueryTab() : '')
+              + (tab === 'change' ? renderDbChangeTab() : '')
+              + (tab === 'browse' ? renderDbBrowseTab() : '')
+              + (tab === 'schema' ? renderDbSchemaTab() : '');
+
+        return `
+        <header class="db-main-head">
+            <h2>${m.title}</h2>
+            <p>${m.desc}</p>
+            ${ready ? `<span class="db-main-target">${icon('database', 13)} ${escapeHtml(dbState.selectedDb)} / ${escapeHtml(dbState.currentTable)}</span>` : ''}
+        </header>
+        <div class="db-main-body">${body}</div>`;
+    }
+
+    /** SQL 查询 Tab（仅 SELECT） */
+    function renderDbQueryTab() {
+        const r = dbState.queryResult;
+        const err = dbState.queryError;
+        const t = dbState.currentTable;
+        const quickQueries = [
+            { label: '前 100 行', sql: `SELECT * FROM ${t} LIMIT 100` },
+            { label: '行数统计', sql: `SELECT COUNT(*) AS total FROM ${t}` },
+            { label: '前 10 行', sql: `SELECT * FROM ${t} LIMIT 10` }
+        ];
+
+        return `
+        <div class="db-query-panel">
+            <div class="db-query-toolbar">
+                ${quickQueries.map(q => `
+                    <button class="db-quick-btn" data-db-quick="${escapeAttr(q.sql)}">${escapeHtml(q.label)}</button>
+                `).join('')}
+            </div>
+            <textarea class="db-sql-input" id="dbSqlInput" placeholder="输入 SELECT 查询语句（仅支持 SELECT / WITH / PRAGMA / EXPLAIN）" spellcheck="false">${escapeHtml(dbState.querySql)}</textarea>
+            <div class="db-query-actions">
+                <button class="db-btn db-btn-primary" data-db-action="execute">${icon('play', 14)} 执行查询</button>
+                <button class="db-btn db-btn-ghost" data-db-action="clear">清空</button>
+            </div>
+            ${err ? `<div class="db-error">${escapeHtml(err)}</div>` : ''}
+            ${r ? renderDbQueryResult(r) : ''}
+        </div>`;
+    }
+
+    /** 渲染查询结果 */
+    function renderDbQueryResult(r) {
+        const rows = r.rows || [];
+        if (!rows.length) return '<div class="db-result-empty">查询结果为空</div>';
+
+        const keys = Object.keys(rows[0]);
+        return `
+        <div class="db-result">
+            <div class="db-result-meta">
+                返回 ${r.totalRows} 行${r.truncated ? `（仅显示前 1000 行）` : ''}
+            </div>
+            <div class="db-table-wrap">
+                <table class="db-data-table">
+                    <thead><tr>${keys.map(k => `<th>${escapeHtml(k)}</th>`).join('')}</tr></thead>
+                    <tbody>
+                        ${rows.map(row => `<tr>${keys.map(k => `<td>${escapeHtml(String(row[k] ?? ''))}</td>`).join('')}</tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+    }
+
+    /** 工单状态徽章 */
+    function renderDbOrderBadge(status) {
+        const map = {
+            pending:  { cls: 'pending',  text: '待审批' },
+            executed: { cls: 'executed', text: '已执行' },
+            approved: { cls: 'executed', text: '已批准' },
+            rejected: { cls: 'rejected', text: '已驳回' },
+            failed:   { cls: 'failed',   text: '执行失败' }
+        };
+        const m = map[status] || { cls: 'pending', text: status };
+        return `<span class="db-order-badge db-order-${m.cls}">${m.text}</span>`;
+    }
+
+    /** 数据变更 Tab（工单制：提交 → 管理员审批 → 系统执行） */
+    function renderDbChangeTab() {
+        const role = state.user?.role || readUser()?.role || 'student';
+        const isAdmin = role === 'admin';
+        const toast = dbState.orderToast;
+
+        return `
+        <div class="db-change-panel">
+            <div class="db-change-form">
+                <div class="db-change-target">
+                    <span>${icon('database', 13)} ${escapeHtml(dbState.selectedDb)}</span>
+                    <span>${icon('db', 13)} ${escapeHtml(dbState.currentTable)}</span>
+                    <small>变更语句仅支持 INSERT / UPDATE / DELETE，一次一条，必须与上方所选表一致</small>
+                </div>
+                <textarea class="db-sql-input" id="dbChangeSqlInput" placeholder="例如：UPDATE users SET nickname = '张同学' WHERE id = 3" spellcheck="false">${escapeHtml(dbState.changeSql)}</textarea>
+                <label class="db-change-remark-label">变更备注（必填：请说明修改原因与影响范围）</label>
+                <textarea class="db-remark-input" id="dbChangeRemarkInput" placeholder="例如：修正学生昵称录入了错别字，影响 1 行数据">${escapeHtml(dbState.changeRemark)}</textarea>
+                <div class="db-query-actions">
+                    <button class="db-btn db-btn-warn" data-db-action="submitOrder">${icon('send', 14)} 提交变更工单</button>
+                    <button class="db-btn db-btn-ghost" data-db-action="clearChange">清空</button>
+                </div>
+                ${toast ? `<div class="${toast.type === 'ok' ? 'db-ok' : 'db-error'}">${escapeHtml(toast.text)}</div>` : ''}
+            </div>
+
+            <div class="db-orders">
+                <div class="db-orders-header">
+                    <span>${icon('layers', 14)} 变更工单${isAdmin ? '（全部用户）' : '（我提交的）'}</span>
+                    <button class="db-refresh" data-db-action="refreshOrders" title="刷新工单列表">${icon('refresh', 14)}</button>
+                </div>
+                ${dbState.orders.length ? dbState.orders.map(o => `
+                    <div class="db-order-item">
+                        <div class="db-order-head">
+                            <span class="db-order-id">#${o.id}</span>
+                            ${renderDbOrderBadge(o.status)}
+                            <span class="db-order-submitter" title="提交人">${icon('users', 12)} ${escapeHtml(o.submitter_name || o.submitter_username || ('用户' + o.user_id))}</span>
+                            <span class="db-order-time">${escapeHtml(o.created_at || '')}</span>
+                        </div>
+                        <div class="db-order-meta">
+                            <span>${escapeHtml(o.database_name)} / ${escapeHtml(o.table_name)}</span>
+                            <span>提交人角色：${escapeHtml(o.submitter_role || '-')}</span>
+                        </div>
+                        <pre class="db-order-sql">${escapeHtml(o.sql_text)}</pre>
+                        <div class="db-order-remark">备注：${escapeHtml(o.remark)}</div>
+                        ${o.review_remark ? `<div class="db-order-review">审批意见：${escapeHtml(o.review_remark)}${o.reviewer_name ? `（${escapeHtml(o.reviewer_name)}）` : ''}</div>` : ''}
+                        ${o.exec_error ? `<div class="db-order-review err">执行错误：${escapeHtml(o.exec_error)}</div>` : ''}
+                        ${isAdmin && o.status === 'pending' ? `
+                        <div class="db-order-actions">
+                            <input class="db-review-input" data-db-review-input="${o.id}" placeholder="审批意见（驳回时填写，可空）">
+                            <button class="db-btn db-btn-primary" data-db-approve="${o.id}">${icon('check', 13)} 批准并执行</button>
+                            <button class="db-btn db-btn-ghost" data-db-reject="${o.id}">${icon('x', 13)} 驳回</button>
+                        </div>` : ''}
+                    </div>
+                `).join('') : '<div class="db-empty">暂无变更工单</div>'}
+            </div>
+        </div>`;
+    }
+
+    /** 数据浏览 Tab */
+    function renderDbBrowseTab() {
+        if (!dbState.currentTable) return '<div class="db-empty">请从左侧选择一张表</div>';
+        const d = dbState.previewData;
+        if (!d) return '<div class="db-empty">加载中...</div>';
+
+        const cols = d.columns || [];
+        const rows = d.rows || [];
+        return `
+        <div class="db-browse">
+            <div class="db-browse-header">
+                <span class="db-browse-table">${icon('table', 14)} ${escapeHtml(d.table)}</span>
+                <span class="db-browse-count">共 ${d.total} 行，第 ${d.page}/${d.totalPages} 页</span>
+            </div>
+            <div class="db-table-wrap">
+                <table class="db-data-table">
+                    <thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+                    <tbody>
+                        ${rows.length ? rows.map(row => `<tr>${cols.map(c => `<td>${escapeHtml(String(row[c] ?? ''))}</td>`).join('')}</tr>`).join('') : '<tr><td class="db-empty-cell">无数据</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+            <div class="db-pager">
+                <button class="db-btn db-btn-ghost" data-db-action="prevPage" ${d.page <= 1 ? 'disabled' : ''}>上一页</button>
+                <span class="db-pager-info">${d.page} / ${d.totalPages}</span>
+                <button class="db-btn db-btn-ghost" data-db-action="nextPage" ${d.page >= d.totalPages ? 'disabled' : ''}>下一页</button>
+            </div>
+        </div>`;
+    }
+
+    /** 表结构 Tab */
+    function renderDbSchemaTab() {
+        if (!dbState.currentTable) return '<div class="db-empty">请从左侧选择一张表</div>';
+        const s = dbState.schema;
+        if (!s) return '<div class="db-empty">加载中...</div>';
+
+        return `
+        <div class="db-schema">
+            <div class="db-schema-header">
+                <span>${icon('table', 14)} ${escapeHtml(s.table)}</span>
+                <span class="db-schema-count">${s.rowCount} 行</span>
+            </div>
+            <table class="db-data-table db-schema-table">
+                <thead><tr><th>#</th><th>列名</th><th>类型</th><th>非空</th><th>默认值</th><th>主键</th></tr></thead>
+                <tbody>
+                    ${s.columns.map(c => `<tr>
+                        <td>${c.cid}</td>
+                        <td><b>${escapeHtml(c.name)}</b></td>
+                        <td>${escapeHtml(c.type || '')}</td>
+                        <td>${c.notnull ? '✓' : ''}</td>
+                        <td>${c.dflt_value ? escapeHtml(String(c.dflt_value)) : '<span class="db-muted">—</span>'}</td>
+                        <td>${c.pk ? '🔑' : ''}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
+
+    /** 数据库页面事件绑定 */
+    function bindDatabaseEvents() {
+        const main = document.querySelector('.db-admin');
+        if (!main) return;
+
+        // 点击类事件（委托）
+        main.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-db-action]');
+            const tabBtn = e.target.closest('[data-db-tab]');
+            const quickBtn = e.target.closest('[data-db-quick]');
+            const approveBtn = e.target.closest('[data-db-approve]');
+            const rejectBtn = e.target.closest('[data-db-reject]');
+
+            if (approveBtn || rejectBtn) {
+                const id = (approveBtn || rejectBtn).dataset.dbApprove || (approveBtn || rejectBtn).dataset.dbReject;
+                const input = main.querySelector(`[data-db-review-input="${id}"]`);
+                await reviewDbOrder(id, !!approveBtn, input ? input.value : '');
+                return;
+            }
+
+            if (btn) {
+                const action = btn.dataset.dbAction;
+                if (action === 'execute') {
+                    const input = document.getElementById('dbSqlInput');
+                    if (input) dbState.querySql = input.value;
+                    await execDbQuery();
+                    render();
+                } else if (action === 'clear') {
+                    dbState.querySql = '';
+                    dbState.queryResult = null;
+                    dbState.queryError = null;
+                    render();
+                } else if (action === 'submitOrder') {
+                    const sqlInput = document.getElementById('dbChangeSqlInput');
+                    const remarkInput = document.getElementById('dbChangeRemarkInput');
+                    if (sqlInput) dbState.changeSql = sqlInput.value;
+                    if (remarkInput) dbState.changeRemark = remarkInput.value;
+                    await submitDbChangeOrder();
+                    render();
+                } else if (action === 'clearChange') {
+                    dbState.changeSql = '';
+                    dbState.changeRemark = '';
+                    dbState.orderToast = null;
+                    render();
+                } else if (action === 'refreshOrders') {
+                    await loadDbOrders();
+                    render();
+                }
+            }
+
+            // 切换 Tab
+            if (tabBtn) {
+                dbState.activeTab = tabBtn.dataset.dbTab;
+                if (dbState.activeTab === 'change' && !dbState.ordersLoaded) await loadDbOrders();
+                render();
+            }
+
+            // 快速查询
+            if (quickBtn) {
+                dbState.querySql = quickBtn.dataset.dbQuick;
+                dbState.activeTab = 'query';
+                await execDbQuery();
+                render();
+            }
+        });
+
+        // 下拉选择（库 / 表）
+        main.addEventListener('change', async (e) => {
+            if (e.target.id === 'dbDbSelect') {
+                dbState.selectedDb = e.target.value;
+                render();
+            } else if (e.target.id === 'dbTableSelect') {
+                const table = e.target.value;
+                dbState.currentTable = table;
+                dbState.previewPage = 1;
+                dbState.queryResult = null;
+                dbState.queryError = null;
+                if (table) {
+                    await loadDbSchema(table);
+                    await loadDbPreview(table, 1);
+                }
+                render();
+            }
+        });
+
+        // Ctrl+Enter 执行查询 / 提交工单，输入同步
+        const sqlInput = document.getElementById('dbSqlInput');
+        if (sqlInput && !sqlInput.dataset.bound) {
+            sqlInput.dataset.bound = '1';
+            sqlInput.addEventListener('keydown', async (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    dbState.querySql = sqlInput.value;
+                    await execDbQuery();
+                    render();
+                }
+            });
+            sqlInput.addEventListener('input', () => {
+                dbState.querySql = sqlInput.value;
+            });
+        }
+        const changeInput = document.getElementById('dbChangeSqlInput');
+        if (changeInput && !changeInput.dataset.bound) {
+            changeInput.dataset.bound = '1';
+            changeInput.addEventListener('keydown', async (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    dbState.changeSql = changeInput.value;
+                    await submitDbChangeOrder();
+                    render();
+                }
+            });
+            changeInput.addEventListener('input', () => {
+                dbState.changeSql = changeInput.value;
+            });
+        }
+        const remarkInput = document.getElementById('dbChangeRemarkInput');
+        if (remarkInput && !remarkInput.dataset.bound) {
+            remarkInput.dataset.bound = '1';
+            remarkInput.addEventListener('input', () => {
+                dbState.changeRemark = remarkInput.value;
+            });
+        }
+    }
+
+    /** 加载变更工单列表 */
+    async function loadDbOrders() {
+        try {
+            const json = await request('/api/database/change-orders');
+            dbState.orders = json.data || [];
+            dbState.ordersLoaded = true;
+        } catch (e) {
+            console.error('加载工单列表失败', e);
+        }
+    }
+
+    /** 提交变更工单 */
+    async function submitDbChangeOrder() {
+        dbState.orderToast = null;
+        const sql = dbState.changeSql.trim();
+        const remark = dbState.changeRemark.trim();
+        if (!dbSelectionReady()) {
+            dbState.orderToast = { type: 'err', text: '请先选择数据库和数据表' };
+            return;
+        }
+        if (!sql) {
+            dbState.orderToast = { type: 'err', text: '请输入要执行的变更 SQL 语句' };
+            return;
+        }
+        if (!remark) {
+            dbState.orderToast = { type: 'err', text: '变更备注为必填项，请说明修改原因与影响范围' };
+            return;
+        }
+        try {
+            const json = await request('/api/database/change-orders', {
+                method: 'POST',
+                body: JSON.stringify({
+                    databaseName: dbState.selectedDb,
+                    tableName: dbState.currentTable,
+                    sqlText: sql,
+                    remark
+                })
+            });
+            dbState.orderToast = { type: json.success ? 'ok' : 'err', text: json.message || (json.success ? '工单已提交' : '提交失败') };
+            if (json.success) {
+                dbState.changeSql = '';
+                dbState.changeRemark = '';
+                await loadDbOrders();
+            }
+        } catch (e) {
+            dbState.orderToast = { type: 'err', text: e.message };
+        }
+    }
+
+    /** 审批工单（approve = true 批准执行，false 驳回） */
+    async function reviewDbOrder(id, approve, reviewRemark) {
+        try {
+            const json = await request(`/api/database/change-orders/${id}/${approve ? 'approve' : 'reject'}`, {
+                method: 'POST',
+                body: JSON.stringify({ reviewRemark: reviewRemark || '' })
+            });
+            if (!json.success) {
+                alert(json.message || '操作失败');
+            }
+            await loadDbOrders();
+            render();
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    /** 数据库页面加载入口 */
+    async function loadDatabasePage() {
+        if (!dbState.tables.length) {
+            await loadDbTables();
+        }
+        if (!dbState.selectedDb) dbState.selectedDb = '';
+        if (dbState.activeTab === 'change' && !dbState.ordersLoaded) {
+            await loadDbOrders();
+        }
+    }
+
+    /** 头像渲染：有自定义头像显示图片，否则显示首字母 */
+    function avatarEl(user, cls) {
+        const a = user && user.avatar;
+        if (a) return `<img class="${cls} avatar-img" src="${escapeAttr(a)}" alt="头像">`;
+        return `<span class="${cls}">${escapeHtml(((user && (user.nickname || user.username)) || "?").slice(0, 1).toUpperCase())}</span>`;
+    }
+
+    /** 将图片文件压缩裁剪为 size×size 的 JPEG dataURL */
+    function compressAvatar(file, size = 256) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error("读取图片失败"));
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = () => reject(new Error("图片解析失败"));
+                img.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext("2d");
+                    const scale = Math.max(size / img.width, size / img.height);
+                    const w = img.width * scale;
+                    const h = img.height * scale;
+                    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+                    resolve(canvas.toDataURL("image/jpeg", 0.85));
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     function accountView() {
         const dashboard = state.data.account || {};
         const user = dashboard.user || {};
@@ -8433,7 +9118,7 @@
         return `<main class="page account-page-v2">
             <section class="account-hero-v2">
                 <div class="hero-avatar">
-                    <span class="avatar-xl">${escapeHtml((user.nickname || user.username || "?").slice(0, 1).toUpperCase())}</span>
+                    ${avatarEl(user, "avatar-xl")}
                     <span class="online-dot"></span>
                 </div>
                 <div class="hero-info">
@@ -8622,7 +9307,7 @@
         const interests = parseInterestTags(user.interests);
         return `<div class="tab-panel settings-panel account-settings-redesign">
             <aside class="settings-profile-panel">
-                <div class="settings-avatar-ring"><span class="avatar-lg">${initial}</span></div>
+                <div class="settings-avatar-ring">${avatarEl(user, "avatar-lg")}</div>
                 <h2>${escapeHtml(user.nickname || user.username || "同学")}</h2>
                 <p>@${escapeHtml(user.username || "")}</p>
                 <div class="settings-profile-meta">
@@ -8642,7 +9327,7 @@
                     <div><span class="pill">个人资料</span><h2>${icon("user", 20)}基本信息</h2><p>用于学习画像、教师查看和系统推荐展示。</p></div>
                 </div>
                 <form class="settings-form settings-form-grid" data-settings-form="profile">
-                    <div class="form-row avatar-row"><label>头像</label><div class="avatar-upload"><span class="avatar-md">${initial}</span><input type="text" class="input" name="avatar" placeholder="头像 URL，可选" value="${escapeHtml(user.avatar || "")}"></div></div>
+                    <div class="form-row avatar-row"><label>头像</label><div class="avatar-upload">${avatarEl(user, "avatar-md")}<input type="text" class="input" name="avatar" placeholder="头像 URL，可选；或点击右侧上传图片" value="${escapeHtml(user.avatar && !String(user.avatar).startsWith("data:") ? user.avatar : "")}"><button type="button" class="btn ghost tiny" data-avatar-pick>${icon("upload", 14)} 上传图片</button><input type="file" accept="image/*" data-avatar-input hidden></div></div>
                     <div class="form-row"><label>用户名</label><input type="text" class="input" name="username" disabled value="${escapeHtml(user.username || "")}"><small>用户名不可修改</small></div>
                     <div class="form-row"><label>昵称</label><input type="text" class="input" name="nickname" value="${escapeHtml(user.nickname || "")}" placeholder="设置你的显示昵称"></div>
                     <div class="form-row"><label>邮箱</label><input type="email" class="input" name="email" value="${escapeHtml(user.email || "")}" placeholder="your@email.com"></div>
@@ -8661,6 +9346,28 @@
                         <div class="form-row"><label>确认新密码</label><input type="password" class="input" name="confirmPassword" required placeholder="再次输入新密码"></div>
                         <button type="submit" class="btn primary">${icon("lock", 16)}更新密码</button>
                     </form>
+                </section>
+                <section class="settings-security-card">
+                    <div class="settings-section-head compact">
+                        <div><span class="pill">外观</span><h2>${icon("layout", 20)}桌面小组件</h2><p>控制页面右下角悬浮组件的显示，偏好会自动保存。</p></div>
+                    </div>
+                    <div class="float-widget-prefs">
+                        ${
+                            [
+                                ["assistant", "反馈悬浮球", "学习反馈助手入口，随时提交课程问题与建议"],
+                                ["bot", "CodeBot 机器人", "代码机器人悬浮球，读取代码/拉取推送/绑库"],
+                                ["apibind", "API 绑定机器人", "绑定自定义模型 API：模型名称、版本、API Key"],
+                                ["knowledge", "知识库机器人", "通用知识库问答，检索 Obsidian 知识库并调用 AI 回答"]
+                            ]
+                                .map(
+                                    ([key, title, desc]) => `<button type="button" class="float-pref-row" data-float-toggle="${key}" aria-pressed="${floatWidgetPrefs()[key] ? "true" : "false"}">
+                                <span class="float-pref-text"><b>${title}</b><small>${desc}</small></span>
+                                <span class="float-pref-switch ${floatWidgetPrefs()[key] ? "on" : ""}" aria-hidden="true"></span>
+                            </button>`
+                                )
+                                .join("")
+                        }
+                    </div>
                 </section>
                 <section class="settings-exit-card">
                     <div>
@@ -8820,6 +9527,7 @@
             } else {
                 tabContent = `<section class="teacher-toolbar">
                     <button class="btn primary" data-teacher-action="create-exam">${icon("plus", 16)} 创建试卷</button>
+                    <button class="btn teal" data-teacher-action="upload-exam-image">${icon("upload-cloud", 16)} 上传图片生成试卷</button>
                     <button class="btn ghost" data-teacher-action="refresh-exams">${icon("refresh", 16)} 刷新</button>
                 </section>
                 <section class="teacher-exam-list">
@@ -9316,6 +10024,50 @@
         );
         const statusLabel = { priority: "优先修复", learning: "学习中", review: "复习迁移", done: "已完成" };
         const statusIcon = { priority: "bolt", learning: "play", review: "refresh", done: "check" };
+        // 学习风格 → 学生可读的资源类型描述
+        const styleResourceText = label => {
+            const map = {
+                "读写型": "文档、笔记整理和文字讲解",
+                "视觉型": "图示、思维导图和视频讲解",
+                "听觉型": "讲座视频和语音讲解",
+                "动手型": "动手实验和随堂练习",
+                "逻辑型": "案例推理和对比分析"
+            };
+            return map[label] || "文档、笔记整理和文字讲解";
+        };
+        // 薄弱点原因（带具体知识点名，学生可读）
+        const weakReasonWhy = sum => {
+            const weakNodes = (center.pathNodes || []).filter(n => n.status === "priority" || n.status === "learning").slice(0, 2);
+            const names = weakNodes.map(n => n.title || n.label || n.name).filter(Boolean);
+            if (names.length) return `「${names.join("」「")}」等 ${sum.weakCount || weakNodes.length} 个知识点掌握度偏低`;
+            return `还有 ${sum.weakCount || 0} 个薄弱知识点需要修复`;
+        };
+        // 基础知识结论（学生可读）
+        const masteryVals = (center.pathNodes || []).map(n => Number(n.mastery)).filter(v => v > 0);
+        const avgMastery = masteryVals.length
+            ? Math.round(masteryVals.reduce((a, b) => a + b, 0) / masteryVals.length)
+            : null;
+        const basicConclusionText = avgMastery
+            ? `当前学习内容平均掌握度约 <b>${avgMastery}%</b>，今天已完成 ${summary.doneTasks || 0}/${summary.todayTasks || 0} 个任务。${
+                  avgMastery < 50
+                      ? "整体还在打基础阶段，建议先从最薄弱的知识点补起。"
+                      : avgMastery < 75
+                        ? "基础已经入门，下一步重点是巩固练习和减少错题。"
+                        : "基础比较扎实，可以安排挑战题和知识迁移。"
+              }`
+            : `今天已有 ${summary.todayTasks || 0} 个学习任务，完成练习后系统会判断你的基础知识水平。`;
+        // 薄弱方面 chips（可移除 / 可添加）
+        const weakConclusionChips = (center.weakPoints || [])
+            .map(w => {
+                const action = w.source === "custom" ? "removeAdded" : "dismiss";
+                const label = w.source === "custom" ? "删除这个薄弱点" : "我不薄弱，移除";
+                return `<span class="weak-chip ${w.source === "custom" ? "custom" : ""}">${escapeHtml(w.title)}${
+                    w.mastery != null ? `<i class="weak-mastery">${w.mastery}%</i>` : ""
+                }<i data-weak-action="${action}" data-weak-topic="${escapeHtml(w.title)}" ${
+                    w.knowledgeId ? `data-weak-kid="${w.knowledgeId}"` : ""
+                } title="${label}">×</i></span>`;
+            })
+            .join("");
         if (!hasAgentPath) {
             const profile = center.profileContext || {};
             const loop = state.data.learningLoop || {};
@@ -9394,27 +10146,86 @@
                     .join("")}</select></div>
                 <button class="btn primary" data-path-generate>${icon("route", 17)}按画像重排</button>
             </section>
-            <section class="path-control card">
-                <div><label>画像驱动依据</label><b>${escapeHtml(profileContext.primaryStyleLabel || "读写型")}</b><small>来源：${escapeHtml(profileContext.source || "student_profiles")}</small></div>
-                <div><label>每日可用时间</label><b>${escapeHtml(String(profileContext.dailyMinutes || 60))} 分钟</b><small>用于控制任务数量</small></div>
-                <div><label>专注时长</label><b>${escapeHtml(String(profileContext.attentionSpan || 30))} 分钟</b><small>超过时会建议拆分</small></div>
-                <div><label>推荐资源偏好</label><b>${escapeHtml((profileContext.learningStyle || []).join(" / ") || "reading")}</b><small>影响视频、文档、实验、练习比例</small></div>
+            <section class="card path-conclusion-card">
+                <div class="pcc-head">
+                    <h2>${icon("brain", 18)} 你的学习画像</h2>
+                    <div class="pcc-actions">
+                        <button class="btn ghost btn-sm" data-path-reassess>${icon("refresh", 15)} 重新判断</button>
+                        <button class="btn primary btn-sm" data-path-generate>${icon("route", 15)} 重新生成路径</button>
+                    </div>
+                </div>
+                <div class="pcc-rows">
+                    <div class="pcc-row">
+                        <span class="pcc-emo">🎯</span>
+                        <div><b>你的学习爱好：</b>${escapeHtml(profileContext.primaryStyleLabel || "读写型")}型——你更喜欢通过${escapeHtml(styleResourceText(profileContext.primaryStyleLabel || "读写型"))}来学习，系统会多给你安排这类资源。</div>
+                    </div>
+                    <div class="pcc-row">
+                        <span class="pcc-emo">📚</span>
+                        <div><b>你的基础知识：</b>${basicConclusionText}</div>
+                    </div>
+                    <div class="pcc-row">
+                        <span class="pcc-emo">⚠️</span>
+                        <div class="pcc-weak">
+                            <b>你的薄弱方面：</b>
+                            <div class="weak-chips">
+                                ${weakConclusionChips}
+                                <span class="weak-add">
+                                    <input data-weak-input placeholder="输入薄弱知识点，如：动态规划" maxlength="40">
+                                    <button class="btn ghost btn-sm" data-weak-add>${icon("plus", 14)} 添加</button>
+                                </span>
+                            </div>
+                            ${
+                                (center.weakDismissed || []).length
+                                    ? `<div class="weak-dismissed">已忽略：${(center.weakDismissed || [])
+                                          .map(
+                                              w => `<span class="weak-chip dismissed">${escapeHtml(w.title)}<i data-weak-action="restore" data-weak-topic="${escapeHtml(w.title)}" title="恢复这项判断">↺</i></span>`
+                                          )
+                                          .join("")}</div>`
+                                    : ""
+                            }
+                            <small>判断错了点 × 移除；有漏掉的薄弱点可直接添加，改完点「重新生成路径」就按你的新情况安排。</small>
+                        </div>
+                    </div>
+                </div>
             </section>
-            <section class="path-proof-panel">
+            <section class="path-proof-panel single-col">
                 <article class="path-proof-card">
                     <span class="pill good">${center.debug?.personalized === false ? "未个性化" : "已个性化"}</span>
                     <h2>这条路径为什么是你的</h2>
                     <p>${escapeHtml((center.personalization || [])[0] || "系统正在读取画像、掌握度和今日任务来生成路径。")}</p>
-                    <div class="path-proof-grid">
-                        ${(center.personalization || [])
-                            .slice(0, 4)
-                            .map(item => `<div><b>${icon("check", 15)}${escapeHtml(item)}</b></div>`)
+                    <div class="path-why-list">
+                        ${[
+                            {
+                                icon: "target",
+                                why: `你输入的目标是「${state.data.pathGoal || "未填写"}」`,
+                                so: "系统把它当作筛选标准，优先安排与目标最相关的知识点，而不是从固定的第一章开始。"
+                            },
+                            {
+                                icon: "clock",
+                                why: `你每天约有 ${profileContext.dailyMinutes || 60} 分钟，专注时长约 ${profileContext.attentionSpan || 30} 分钟`,
+                                so: `任务量按这个节奏安排：单个任务控制在 ${profileContext.attentionSpan || 30} 分钟内，内容过多时会拆成多次完成，避免一次学太久记不住。`
+                            },
+                            {
+                                icon: "brain",
+                                why: `你的学习风格是「${profileContext.primaryStyleLabel || "读写型"}」`,
+                                so: `资源配比因此偏向${styleResourceText(profileContext.primaryStyleLabel || "读写型")}，减少你不擅长吸收的类型的比例。`
+                            },
+                            {
+                                icon: "bolt",
+                                why: weakReasonWhy(summary),
+                                so: "掌握度最低的知识点被排在最前面，并标为「优先修复」——先补最弱的，后面的学习才不会一直被它卡住。"
+                            },
+                            {
+                                icon: "pen",
+                                why: "你的错题、笔记和任务完成情况都在参与计算",
+                                so: "每次做错题或完成任务后，系统会重新评估掌握度并自动微调后面的节点，让路径始终和你当前的真实水平保持一致。"
+                            }
+                        ]
+                            .map(
+                                item => `<div class="path-why-item"><span class="round-icon">${icon(item.icon, 17)}</span><div><b>${escapeHtml(item.why)}</b><p>${escapeHtml(item.so)}</p></div></div>`
+                            )
                             .join("")}
                     </div>
-                </article>
-                <article class="path-json-card">
-                    <div class="card-head"><h2 class="section-title">${icon("file", 18)}路径判定 JSON</h2><span class="pill">profile-aware</span></div>
-                    <pre>${escapeHtml(debugJson)}</pre>
                 </article>
             </section>
             <section class="major-direction-band">
@@ -10385,6 +11196,95 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         return map[status] || status || "待确认";
     }
 
+    // ===== 结构化需求描述（功能/非功能 × 流程/非流程） =====
+    const BRIEF_FUNC_DIRECTIONS = [
+        "按钮操作", "表单提交", "数据选择", "列表展示",
+        "筛选查询", "弹窗交互", "页面跳转", "权限控制", "其他"
+    ];
+    const BRIEF_NONFUNC_DIRECTIONS = [
+        "性能响应", "安全与权限", "兼容性", "可用性",
+        "可维护性", "异常处理", "其他"
+    ];
+    const BRIEF_STRUCTURED_MARKER = "__brief_structured_v1__";
+
+    function newBriefId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    function emptyBriefFunctional() {
+        return { id: newBriefId(), direction: "按钮操作", title: "", description: "", isFlow: false, steps: "" };
+    }
+    function emptyBriefNonFunctional() {
+        return { id: newBriefId(), direction: "性能响应", description: "" };
+    }
+
+    /** 把结构化需求合并为 Markdown 文本（用于 AI 优化与后端保存的可读副本） */
+    function briefToText(draft) {
+        const lines = [];
+        if (draft.title) lines.push(`# ${draft.title}`);
+        const func = draft.functional || [];
+        if (func.length) {
+            lines.push("", "## 功能需求");
+            func.forEach((f, i) => {
+                lines.push(`### ${i + 1}. [${f.direction || "其他"}] ${f.title || "未命名需求点"}`);
+                if (f.description) lines.push(f.description);
+                lines.push(`- 类型：${f.isFlow ? "流程性" : "非流程性"}`);
+                if (f.isFlow && f.steps) {
+                    lines.push("- 流程步骤：");
+                    String(f.steps).split(/\r?\n/).forEach((s, idx) => {
+                        if (s.trim()) lines.push(`  ${idx + 1}. ${s.trim()}`);
+                    });
+                }
+            });
+        }
+        const nf = draft.nonFunctional || [];
+        if (nf.length) {
+            lines.push("", "## 非功能需求");
+            nf.forEach((n, i) => {
+                lines.push(`### ${i + 1}. [${n.direction || "其他"}]`);
+                if (n.description) lines.push(n.description);
+            });
+        }
+        if (draft.description && !draft.__structured) {
+            lines.push("", "## 原始描述", draft.description);
+        }
+        return lines.join("\n").trim();
+    }
+
+    /** 从后端 description 解析结构化数据；旧纯文本则放入原始描述区 */
+    function parseBriefDescription(text) {
+        const str = String(text || "");
+        const result = { functional: [], nonFunctional: [], description: "", __structured: false };
+        if (!str) return result;
+        if (str.startsWith(BRIEF_STRUCTURED_MARKER)) {
+            try {
+                const obj = JSON.parse(str.slice(BRIEF_STRUCTURED_MARKER.length));
+                result.functional = Array.isArray(obj.functional) ? obj.functional : [];
+                result.nonFunctional = Array.isArray(obj.nonFunctional) ? obj.nonFunctional : [];
+                result.__structured = true;
+                return result;
+            } catch (e) {
+                result.description = str;
+                return result;
+            }
+        }
+        result.description = str;
+        return result;
+    }
+
+    /** 保存用：结构化数据序列化为带标记的 JSON 字符串 */
+    function serializeBriefDescription(draft) {
+        const payload = {
+            functional: draft.functional || [],
+            nonFunctional: draft.nonFunctional || []
+        };
+        // 若没有任何结构化条目但有原始描述，保留原始描述以兼容
+        if (!payload.functional.length && !payload.nonFunctional.length && draft.description) {
+            return draft.description;
+        }
+        return BRIEF_STRUCTURED_MARKER + JSON.stringify(payload);
+    }
+
     function toolStatusName(status) {
         const map = { ready: "可用", draft: "待接入", blocked: "阻塞" };
         return map[status] || status || "未知";
@@ -10701,6 +11601,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                     </div>
                 </div>
                 <div class="team-v3-hero-actions">
+                    <button class="btn primary" data-view="database">${icon("database", 15)}数据库管理</button>
                     <label class="btn primary"><input type="file" multiple data-team-code-upload style="display:none">${icon("upload", 15)}上传代码</label>
                     <label class="btn ghost"><input type="file" multiple data-team-doc-upload style="display:none">${icon("file", 15)}上传文档</label>
                     <button class="btn ghost" data-team-refresh>${icon("refresh", 15)}刷新</button>
@@ -12216,7 +13117,29 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
     </main>`;
     }
 
+    // ========== 悬浮小组件显示偏好（localStorage 持久化） ==========
+    function floatWidgetPrefs() {
+        try {
+            const saved = JSON.parse(localStorage.getItem("edusmart_float_widgets") || "{}");
+            return {
+                assistant: saved.assistant !== false,
+                bot: saved.bot !== false,
+                apibind: saved.apibind !== false,
+                knowledge: saved.knowledge !== false
+            };
+        } catch (e) {
+            return { assistant: true, bot: true, apibind: true, knowledge: true };
+        }
+    }
+
+    function setFloatWidgetPref(key, visible) {
+        const prefs = floatWidgetPrefs();
+        prefs[key] = Boolean(visible);
+        localStorage.setItem("edusmart_float_widgets", JSON.stringify(prefs));
+    }
+
     function assistantFloat() {
+        if (!floatWidgetPrefs().assistant) return "";
         const open = Boolean(state.data.floatingAgentOpen);
         const activeCategory = state.data.floatingAgentFeedbackCategory || "course";
         const voiceActive = Boolean(state.data.floatingVoiceRecording);
@@ -12243,6 +13166,7 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                                 <b>学习反馈助手</b>
                                 <small>智能助手会把你的学习反馈整理成更清晰的改进线索</small>
                             </div>
+                            <button class="icon-btn" data-float-hide="assistant" aria-label="不在桌面显示" title="不在桌面显示悬浮球">${icon("eye-off", 16)}</button>
                             <button class="icon-btn" data-floating-agent-close aria-label="收起">${icon("x", 16)}</button>
                         </header>
                         <div class="feedback-helper-line">
@@ -12294,6 +13218,442 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
                 <small>${open ? "收起" : "反馈"}</small>
             </button>
         </div>`;
+    }
+
+    // ========== 代码机器人悬浮球（全站右下角，反馈球上方） ==========
+    function botFloat() {
+        if (!floatWidgetPrefs().bot) return "";
+        const open = Boolean(state.data.botWidgetOpen);
+        const fab = `<button class="bot-float-btn ${open ? "open" : ""}" data-botwidget-toggle aria-expanded="${open ? "true" : "false"}" title="代码机器人">
+            <span class="bot-float-ring" aria-hidden="true"></span>
+            ${icon("robot", 22)}
+            <small>${open ? "收起" : "CodeBot"}</small>
+        </button>`;
+        if (!open) return `<div class="bot-float">${fab}</div>`;
+
+        const projects = state.data.botWidgetProjects || [];
+        const pid = state.data.botWidgetProjectId || "";
+        const data = state.data.botWidget;
+        const bot = data?.bot || null;
+        const access = data?.access || {};
+        const members = data?.members || [];
+        const msgs = state.data.botWidgetMsgs || [];
+        const loading = Boolean(state.data.botWidgetLoading);
+        const advanced = Boolean(state.data.botWidgetAdvanced);
+        const permLabels = { can_pull: "拉取", can_push: "推送", can_bind: "绑库", can_toggle: "开关" };
+        const dbOptions = [{ name: "edu_smart", label: "EduSmart 主库" }];
+        const statusText = !bot
+            ? "配置加载中"
+            : bot.enabled
+                ? `运行中 · ${access.isOwner ? "创建者（全部权限）" : access.member ? "已授权成员" : "未分配权限"}`
+                : "已停用";
+        const pullEnabled = bot?.enabled && (access.canPull || access.isOwner);
+        const pushEnabled = bot?.enabled && (access.canPush || access.isOwner);
+        const bindEnabled = bot?.enabled && (access.canBind || access.isOwner);
+        const analyzeEnabled = bot?.enabled && (access.isOwner || access.member);
+        const membersList = bot
+            ? members
+                  .map(
+                      m => `<div class="botw-member"><b>${escapeHtml(m.username || `用户${m.user_id}`)}</b><div class="botw-member-perms">${["can_pull", "can_push", "can_bind", "can_toggle"]
+                          .map(
+                              k => `<button class="botw-chip ${Number(m[k]) === 1 ? "on" : ""}" data-botwidget-perm-flip="${m.id}:${k}:${Number(m[k]) === 1 ? 0 : 1}" ${access.canManage && !loading ? "" : "disabled"}>${permLabels[k]}</button>`
+                          )
+                          .join("")}${access.canManage ? `<button class="botw-chip-remove" data-botwidget-member-remove="${m.id}" ${loading ? "disabled" : ""}>移除</button>` : ""}</div></div>`
+                  )
+                  .join("")
+            : "";
+        const projectMembers = state.data.botWidgetDetail?.members || [];
+        const assignable = [...new Map(projectMembers.filter(m => m.user_id && m.username).map(m => [m.user_id, m.username])).entries()];
+        const bubbles = msgs
+            .map(
+                m =>
+                    m.kind === "report"
+                        ? `<div class="botw-msg bot report"><pre>${escapeHtml(m.text)}</pre></div>`
+                        : `<div class="botw-msg ${m.role}">${escapeHtml(m.text)}<i>${m.time || ""}</i></div>`
+            )
+            .join("");
+        return `<div class="bot-float open">
+            ${fab}
+            <section class="botw-panel" aria-label="代码机器人助手">
+                <header class="botw-head">
+                    <div class="botw-avatar ${bot?.enabled ? "on" : ""}">${icon("robot", 20)}</div>
+                    <div class="botw-title">
+                        <b>${escapeHtml(bot?.name || "CodeBot")}</b>
+                        <small>${statusText}</small>
+                    </div>
+                    ${
+                        access.canToggle
+                            ? `<button class="btn tiny ${bot?.enabled ? "ghost" : "primary"}" data-botwidget-action="toggle" ${loading ? "disabled" : ""}>${bot?.enabled ? "关闭" : "开启"}</button>`
+                            : ""
+                    }
+                    <button class="icon-btn" data-float-hide="bot" aria-label="不在桌面显示" title="不在桌面显示悬浮球">${icon("eye-off", 16)}</button>
+                    <button class="icon-btn" data-botwidget-toggle aria-label="收起">${icon("x", 16)}</button>
+                </header>
+                <div class="botw-project">
+                    <select class="input" data-botwidget-project ${loading ? "disabled" : ""}>
+                        ${projects.length ? projects.map(p => `<option value="${p.id}" ${Number(p.id) === Number(pid) ? "selected" : ""}>${escapeHtml(p.name || `项目${p.id}`)}</option>`).join("") : `<option value="">暂无可操作的项目</option>`}
+                    </select>
+                </div>
+                <div class="botw-stream" data-botwidget-stream>
+                    ${bubbles}
+                    ${loading ? `<div class="botw-msg bot typing"><span></span><span></span><span></span></div>` : ""}
+                </div>
+                <div class="botw-actions">
+                    <button class="botw-act" data-botwidget-action="analyze" ${analyzeEnabled && !loading ? "" : "disabled"}>${icon("search", 15)}读取代码与需求</button>
+                    <button class="botw-act" data-botwidget-action="pull" ${pullEnabled && !loading ? "" : "disabled"}>${icon("download", 15)}拉取代码</button>
+                    <button class="botw-act" data-botwidget-action="push" ${pushEnabled && !loading ? "" : "disabled"}>${icon("upload", 15)}推送代码</button>
+                    <button class="botw-act" data-botwidget-action="bind-db" ${bindEnabled && !loading ? "" : "disabled"}>${icon("database", 15)}绑定数据库</button>
+                </div>
+                <button class="botw-advanced-toggle" data-botwidget-advanced>${icon(advanced ? "chevron-up" : "settings", 14)}${advanced ? "收起设置" : "绑定与权限设置"}</button>
+                ${
+                    advanced
+                        ? `<div class="botw-advanced">
+                        <div class="botw-block">
+                            <b>${icon("git", 13)}GitHub 绑定</b>
+                            <input class="input" data-botwidget-repo placeholder="仓库地址，如：owner/repo" value="${escapeHtml(bot?.github_repo || "")}" ${access.canConfig ? "" : "disabled"}>
+                            <div class="botw-row">
+                                <input class="input" data-botwidget-branch placeholder="分支（默认 main）" value="${escapeHtml(bot?.github_branch || "main")}" ${access.canConfig ? "" : "disabled"}>
+                                <input class="input" type="password" data-botwidget-token placeholder="${bot?.github_token ? "Token 已配置" : "Token（推送需要）"}" value="" ${access.canConfig ? "" : "disabled"}>
+                            </div>
+                            ${
+                                access.canConfig
+                                    ? `<button class="btn tiny primary" data-botwidget-save-github ${loading ? "disabled" : ""}>${icon("save", 13)}保存绑定</button>`
+                                    : `<small class="botw-hint">仅项目创建者可修改绑定</small>`
+                            }
+                        </div>
+                        <div class="botw-block">
+                            <b>${icon("database", 13)}数据库绑定</b>
+                            <div class="botw-row">
+                                <select class="input" data-botwidget-dbname ${access.canConfig || access.canBind ? "" : "disabled"}>
+                                    ${dbOptions.map(db => `<option value="${db.name}" ${bot?.database_name === db.name ? "selected" : ""}>${db.label}</option>`).join("")}
+                                </select>
+                                <button class="btn tiny primary" data-botwidget-action="bind-db" ${bindEnabled && !loading ? "" : "disabled"}>一键绑定</button>
+                            </div>
+                            <small class="botw-hint">${bot?.database_name ? `当前绑定：${escapeHtml(bot.database_name)}` : "尚未绑定数据库"}</small>
+                        </div>
+                        <div class="botw-block">
+                            <b>${icon("users", 13)}人员权限${access.canManage ? "" : "（仅创建者可管理）"}</b>
+                            ${
+                                access.canManage
+                                    ? `<div class="botw-row">
+                                    <select class="input" data-botwidget-member-select>
+                                        ${assignable.length ? assignable.map(([id, name]) => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("") : `<option value="">项目暂无成员</option>`}
+                                    </select>
+                                </div>
+                                <div class="botw-perm-checks">
+                                    <label><input type="checkbox" data-botwidget-perm value="can_pull" checked>拉取</label>
+                                    <label><input type="checkbox" data-botwidget-perm value="can_push">推送</label>
+                                    <label><input type="checkbox" data-botwidget-perm value="can_bind">绑库</label>
+                                    <label><input type="checkbox" data-botwidget-perm value="can_toggle">开关</label>
+                                    <button class="btn tiny ghost" data-botwidget-member-add ${loading ? "disabled" : ""}>授权</button>
+                                </div>`
+                                    : ""
+                            }
+                            ${membersList ? `<div class="botw-member-list">${membersList}</div>` : `<small class="botw-hint">尚未分配人员；创建者默认拥有全部权限。</small>`}
+                        </div>
+                    </div>`
+                        : ""
+                }
+            </section>
+        </div>`;
+    }
+
+    // ========== API 绑定机器人悬浮球（全站右下角，CodeBot 上方） ==========
+    // API 服务商预设：不同模型的绑定内容、地址、凭证类型与校验规则不同
+    const API_PROVIDER_PRESETS = [
+        {
+            key: "xfyun",
+            name: "讯飞星火 Spark",
+            baseUrl: "https://spark-api-open.xf-yun.com/v1",
+            keyPlaceholder: "APIPassword（http服务接口认证信息）",
+            models: ["lite", "generalv3", "pro-128k", "max-32k", "4.0Ultra"],
+            guide: "① 讯飞控制台 → 星火认知大模型 → 选择模型；② 在「http服务接口认证信息」复制 APIPassword（掩码形如 Qto****jDI）；③ 切勿使用 Websocket 区的 APIKey/APISecret；④ 模型名用官方标识：Spark Lite 填 lite，Pro-128K 填 pro-128k。",
+            check: (key, model) => {
+                const warns = [];
+                if (/^[0-9a-f]{32}$/i.test(key)) {
+                    warns.push({ block: true, text: "检测到 32 位十六进制 Key——这是 Websocket 区的 APIKey，HTTP 接口无法使用（会报 HMAC secret key does not match）。请到「http服务接口认证信息」复制 APIPassword。" });
+                } else if (key && key.length < 24) {
+                    warns.push({ block: false, text: "APIPassword 通常为 32 位字母数字组合，当前长度偏短，请核对是否复制完整（可对照控制台掩码首尾字符）。" });
+                }
+                if (model && !["lite", "generalv3", "pro-128k", "max-32k", "4.0Ultra"].includes(model)) {
+                    warns.push({ block: true, text: `讯飞模型标识应为 lite / generalv3 / pro-128k / max-32k / 4.0Ultra 之一，当前「${model}」无效，否则会报模型不存在。` });
+                }
+                return warns;
+            }
+        },
+        {
+            key: "openai",
+            name: "OpenAI",
+            baseUrl: "https://api.openai.com/v1",
+            keyPlaceholder: "API Key（sk- 开头）",
+            models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"],
+            guide: "platform.openai.com → API keys → 创建 sk- 开头的密钥。国内访问需自备代理或使用中转地址。",
+            check: (key) => (key && !key.startsWith("sk-") ? [{ block: false, text: "OpenAI 密钥通常以 sk- 开头，请核对是否复制完整。" }] : [])
+        },
+        {
+            key: "deepseek",
+            name: "DeepSeek",
+            baseUrl: "https://api.deepseek.com/v1",
+            keyPlaceholder: "API Key（sk- 开头）",
+            models: ["deepseek-chat", "deepseek-reasoner"],
+            guide: "platform.deepseek.com → API keys → 创建密钥。",
+            check: (key) => (key && !key.startsWith("sk-") ? [{ block: false, text: "DeepSeek 密钥通常以 sk- 开头，请核对。" }] : [])
+        },
+        {
+            key: "zhipu",
+            name: "智谱 GLM",
+            baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+            keyPlaceholder: "API Key",
+            models: ["glm-4-plus", "glm-4-flash", "glm-4-air", "glm-4-long"],
+            guide: "bigmodel.cn → 右上角头像 → API keys。注意接口地址是 /api/paas/v4，不是 /v1。",
+            check: () => []
+        },
+        {
+            key: "moonshot",
+            name: "月之暗面 Kimi",
+            baseUrl: "https://api.moonshot.cn/v1",
+            keyPlaceholder: "API Key（sk- 开头）",
+            models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+            guide: "platform.moonshot.cn → API Key 管理。模型名带上下文长度后缀（如 moonshot-v1-8k）。",
+            check: (key) => (key && !key.startsWith("sk-") ? [{ block: false, text: "Kimi 密钥通常以 sk- 开头，请核对。" }] : [])
+        },
+        {
+            key: "qwen",
+            name: "阿里通义千问",
+            baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            keyPlaceholder: "API Key（sk- 开头）",
+            models: ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long"],
+            guide: "阿里云百炼控制台 → API-KEY 管理。必须使用 compatible-mode 兼容地址。",
+            check: (key) => (key && !key.startsWith("sk-") ? [{ block: false, text: "通义千问密钥通常以 sk- 开头，请核对。" }] : [])
+        },
+        {
+            key: "custom",
+            name: "自定义（OpenAI 兼容）",
+            baseUrl: "",
+            keyPlaceholder: "API Key",
+            models: [],
+            guide: "适用于任意 OpenAI 兼容服务（中转站、Ollama、vLLM 等）：接口地址 + /chat/completions。",
+            showProvider: true,
+            check: () => []
+        }
+    ];
+
+    function apiPresetByKey(key) {
+        return API_PROVIDER_PRESETS.find(p => p.key === key) || API_PROVIDER_PRESETS[API_PROVIDER_PRESETS.length - 1];
+    }
+
+    // 全站 AI 徽标显示当前绑定的服务商名称（未绑定或停用时显示默认）
+    function boundAiProviderName(fallback = "讯飞星火") {
+        const b = state.data.apiWidgetData;
+        return b && b.enabled !== false && b.provider ? b.provider : fallback;
+    }
+
+    function apiPresetOfBinding(binding) {
+        if (!binding) return null;
+        const byUrl = API_PROVIDER_PRESETS.find(p => p.baseUrl && binding.baseUrl && binding.baseUrl.indexOf(p.baseUrl) === 0);
+        if (byUrl) return byUrl.key;
+        const byName = API_PROVIDER_PRESETS.find(p => binding.provider && p.name === binding.provider);
+        return byName ? byName.key : (binding.provider ? "custom" : null);
+    }
+
+    function apiFloat() {
+        if (!floatWidgetPrefs().apibind) return "";
+        const open = Boolean(state.data.apiWidgetOpen);
+        const fab = `<button class="api-float-btn ${open ? "open" : ""}" data-apiwidget-toggle aria-expanded="${open ? "true" : "false"}" title="API 绑定机器人">
+            <span class="bot-float-ring api" aria-hidden="true"></span>
+            ${icon("server", 22)}
+            <small>${open ? "收起" : "API绑定"}</small>
+        </button>`;
+        if (!open) return `<div class="api-float">${fab}</div>`;
+
+        const data = state.data.apiWidgetData;
+        const binding = data || null;
+        const bound = Boolean(binding);
+        const enabled = binding?.enabled !== false && bound;
+        const loading = Boolean(state.data.apiWidgetLoading);
+        const testing = Boolean(state.data.apiWidgetTesting);
+        const testResult = state.data.apiWidgetTestResult || "";
+        const statusText = !bound
+            ? "未绑定 · 点击下方填写并绑定"
+            : enabled
+                ? `已绑定 · ${escapeHtml(binding.modelName || "")}${binding.modelVersion ? ` ${escapeHtml(binding.modelVersion)}` : ""}`
+                : "已绑定 · 已停用";
+        const preset = apiPresetByKey(state.data.apiWidgetPreset || apiPresetOfBinding(binding) || "xfyun");
+        const presetKey = state.data.apiWidgetPreset || apiPresetOfBinding(binding) || "xfyun";
+        return `<div class="api-float open">
+            ${fab}
+            <section class="botw-panel" aria-label="API 绑定机器人">
+                <header class="botw-head">
+                    <div class="botw-avatar ${enabled ? "on" : ""}">${icon("server", 20)}</div>
+                    <div class="botw-title">
+                        <b>API 绑定机器人</b>
+                        <small>${statusText}</small>
+                    </div>
+                    ${bound ? `<button class="btn tiny ${enabled ? "ghost" : "primary"}" data-apiwidget-toggle-enabled ${loading ? "disabled" : ""}>${enabled ? "停用" : "启用"}</button>` : ""}
+                    <button class="icon-btn" data-float-hide="apibind" aria-label="不在桌面显示" title="不在桌面显示悬浮球">${icon("eye-off", 16)}</button>
+                    <button class="icon-btn" data-apiwidget-toggle aria-label="收起">${icon("x", 16)}</button>
+                </header>
+                <div class="botw-stream apiw-stream">
+                    <div class="botw-msg bot">你好，我是 API 绑定机器人。先选择服务商/模型，我会自动填好接口地址并告诉你需要哪种凭证；填写时会实时校验并给出引导。</div>
+                    ${
+                        bound && testResult
+                            ? `<div class="botw-msg report"><pre>${escapeHtml(testResult)}</pre></div>`
+                            : ""
+                    }
+                </div>
+                <div class="botw-advanced">
+                    <div class="botw-block">
+                        <b>${icon("cloud", 13)}选择服务商 / 模型</b>
+                        <select class="input" id="apiw_preset">
+                            ${API_PROVIDER_PRESETS.map(p => `<option value="${p.key}" ${p.key === presetKey ? "selected" : ""}>${p.name}</option>`).join("")}
+                        </select>
+                        <div class="apiw-guide">${escapeHtml(preset.guide)}</div>
+                    </div>
+                    <div class="botw-block">
+                        <b>${icon("lock", 13)}绑定信息${preset.showProvider ? "" : `（${escapeHtml(preset.name)}）`}</b>
+                        ${preset.showProvider ? `<input class="input" id="apiw_provider" placeholder="服务商名称（如 中转站 / Ollama）" value="${escapeHtml(binding?.provider || "")}">` : `<input type="hidden" id="apiw_provider" value="${escapeHtml(preset.name)}">`}
+                        <input class="input" id="apiw_baseurl" placeholder="接口地址${preset.baseUrl ? `，默认 ${preset.baseUrl}` : "，如 https://api.xxx.com/v1"}" value="${escapeHtml(preset.baseUrl || binding?.baseUrl || "")}">
+                        <div class="botw-row">
+                            <input class="input" id="apiw_model" list="apiw_model_list" placeholder="${preset.models.length ? `模型名称（如 ${preset.models[0]}）` : "模型名称"}" value="${escapeHtml(binding?.modelName || "")}">
+                            <input class="input" id="apiw_version" placeholder="版本（可选）" value="${escapeHtml(binding?.modelVersion || "")}">
+                        </div>
+                        <datalist id="apiw_model_list">
+                            ${preset.models.map(m => `<option value="${m}"></option>`).join("")}
+                        </datalist>
+                        <input class="input" type="password" id="apiw_key" autocomplete="new-password" data-1p-ignore data-lpignore="true" placeholder="${binding?.hasKey ? `Key 已配置（${escapeHtml(binding.apiKeyMasked)}），留空保持不变` : preset.keyPlaceholder}" value="">
+                        <div id="apiw_validate"></div>
+                        <div class="botw-row">
+                            <button class="btn tiny primary" id="apiw_save" ${loading ? "disabled" : ""}>${icon("save", 13)}${bound ? "更新绑定" : "绑定 API"}</button>
+                            <button class="btn tiny teal" id="apiw_test" ${!bound || testing ? "disabled" : ""}>${icon("zap", 13)}${testing ? "测试中..." : "测试连接"}</button>
+                            <button class="btn tiny ghost" id="apiw_unbind" ${loading ? "disabled" : ""} style="color:var(--red)">解绑</button>
+                        </div>
+                        <small class="botw-hint">密钥仅保存在你的账户下，不会明文展示。测试连接会直接使用当前表单值，无需先保存。</small>
+                    </div>
+                </div>
+            </section>
+        </div>`;
+    }
+
+    // ========== 知识库机器人悬浮球（全站右下角，API 绑定上方） ==========
+    // 通用知识库问答：检索 Obsidian 同步到 rag_* 的内容，调用 LLM 生成回答
+    function knowledgeFloat() {
+        if (!floatWidgetPrefs().knowledge) return "";
+        const open = Boolean(state.data.knowledgeWidgetOpen);
+        const fab = `<button class="knowledge-float-btn ${open ? "open" : ""}" data-knowledgewidget-toggle aria-expanded="${open ? "true" : "false"}" title="知识库机器人">
+            <span class="bot-float-ring knowledge" aria-hidden="true"></span>
+            ${icon("book-open", 22)}
+            <small>${open ? "收起" : "知识库"}</small>
+        </button>`;
+        if (!open) return `<div class="knowledge-float">${fab}</div>`;
+
+        const msgs = state.data.knowledgeWidgetMsgs || [];
+        const loading = Boolean(state.data.knowledgeWidgetLoading);
+        const input = state.data.knowledgeWidgetInput || "";
+        const suggestions = ["什么是二分查找？", "解释一下数据库索引", "HTTP 和 HTTPS 的区别", "如何理解递归？"];
+        const kbwRenderMd = text => {
+            // 剥离模型误输出的整文代码围栏（```markdown ... ```）与分区标题行
+            let t = String(text || "").trim().replace(/^```(?:markdown)?\s*/i, "").replace(/```$/m, "").trim();
+            return escapeHtml(t)
+                .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+                .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+                .replace(/^#{1,4}\s*(.+)$/gm, "<b>$1</b>")
+                .replace(/\n/g, "<br>");
+        };
+        const kbwText = text => escapeHtml(text || "").replace(/\n/g, "<br>");
+        const bubbles = msgs
+            .map(m => {
+                // 复合回答消息：📚 知识库匹配（原文）+ 💡 AI 思考与解答（AI 提炼）两个分区
+                if (m.role === "bot" && m.answer !== undefined) {
+                    const kws = m.analysis && Array.isArray(m.analysis.keywords) ? m.analysis.keywords.slice(0, 6) : [];
+                    const analysisLine = kws.length ? `<div class="kbw-analysis">🔍 AI 理解：${kws.map(escapeHtml).join(" · ")}</div>` : "";
+                    const hasKb = Array.isArray(m.kb) && m.kb.length > 0;
+                    const kbItems = hasKb
+                        ? m.kb
+                              .map(
+                                  c => `<div class="kbw-kb-item">
+                                <div class="kbw-kb-head"><span class="kbw-cite-rank">[${c.rank}]</span><b>${escapeHtml(c.title || "")}</b><small>${escapeHtml(c.course || "")} · 相关性 ${Math.round((c.relevance || 0) * 100)}%</small></div>
+                                <blockquote>${kbwText(c.snippet)}</blockquote>
+                            </div>`
+                              )
+                              .join("")
+                        : `<div class="kbw-kb-empty">未在知识库中找到直接匹配的资料</div>`;
+                    return `<div class="botw-msg bot kbw-composite">${analysisLine}
+                        <div class="kbw-section kbw-kb ${hasKb ? "" : "empty"}">
+                            <div class="kbw-sec-head">📚 知识库匹配${hasKb ? `<small>${m.kb.length} 条 · 来自 Obsidian 原文</small>` : ""}</div>
+                            ${kbItems}
+                        </div>
+                        <div class="kbw-section kbw-ai">
+                            <div class="kbw-sec-head">💡 AI 思考与解答${hasKb ? "" : "<small>通用知识 · 非知识库内容</small>"}</div>
+                            <div class="kbw-ai-body">${kbwRenderMd(m.answer)}</div>
+                        </div>
+                        ${m.time ? `<i>${m.time}</i>` : ""}
+                    </div>`;
+                }
+                const body = m.role === "bot" ? kbwRenderMd(m.text) : escapeHtml(m.text);
+                return `<div class="botw-msg ${m.role}">${body}${m.time ? `<i>${m.time}</i>` : ""}</div>`;
+            })
+            .join("");
+        return `<div class="knowledge-float open">
+            ${fab}
+            <section class="botw-panel kbw-panel" aria-label="知识库机器人">
+                <header class="botw-head">
+                    <div class="botw-avatar knowledge">${icon("book-open", 20)}</div>
+                    <div class="botw-title">
+                        <b>知识库机器人</b>
+                        <small>检索 Obsidian 知识库 · AI 智能回答</small>
+                    </div>
+                    <button class="icon-btn" data-float-hide="knowledge" aria-label="不在桌面显示" title="不在桌面显示悬浮球">${icon("eye-off", 16)}</button>
+                    <button class="icon-btn" data-knowledgewidget-toggle aria-label="收起">${icon("x", 16)}</button>
+                </header>
+                <div class="kbw-stream" data-knowledgewidget-stream>
+                    ${bubbles || `<div class="botw-msg bot">你好！我是知识库机器人。每次回答分两部分：<b>📚 知识库匹配</b>展示 Obsidian 中检索到的原文片段，<b>💡 AI 思考与解答</b>是 AI 的提炼与推理。试着问我一个知识点吧～</div>`}
+                    ${loading ? `<div class="botw-msg bot typing"><span></span><span></span><span></span></div>` : ""}
+                </div>
+                ${msgs.length === 0 ? `<div class="kbw-suggestions">${suggestions.map(s => `<button class="kbw-suggest" data-knowledgewidget-suggest="${escapeAttr(s)}">${escapeHtml(s)}</button>`).join("")}</div>` : ""}
+                <div class="kbw-input-row">
+                    <input class="input" data-knowledgewidget-input placeholder="输入你的问题，回车发送..." value="${escapeAttr(input)}" ${loading ? "disabled" : ""}>
+                    <button class="btn primary" data-knowledgewidget-send ${loading ? "disabled" : ""}>${icon("send", 15)}</button>
+                </div>
+                <small class="botw-hint">📚 绿色区 = 知识库原文匹配；💡 紫色区 = AI 思考提炼（含 🤖 AI 补充标记的内容为通用知识）。</small>
+            </section>
+        </div>`;
+    }
+
+    function kbwSay(role, text, extra = {}) {
+        const msgs = state.data.knowledgeWidgetMsgs || [];
+        msgs.push({ role, text, time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), ...extra });
+        state.data.knowledgeWidgetMsgs = msgs;
+    }
+
+    async function runKnowledgeAsk(query) {
+        const q = String(query || "").trim();
+        if (!q) return;
+        kbwSay("user", q);
+        state.data.knowledgeWidgetInput = "";
+        state.data.knowledgeWidgetLoading = true;
+        render();
+        try {
+            const json = await request("/api/rag/ask", {
+                method: "POST",
+                body: JSON.stringify({ query: q, limit: 6 })
+            });
+            const data = json.data || {};
+            const answer = data.answer || "未能获取回答，请稍后重试。";
+            // 复合消息：answer=AI 思考与解答；kb=知识库匹配原文；analysis=AI 理解关键词
+            kbwSay("bot", "", {
+                answer,
+                kb: Array.isArray(data.citations) ? data.citations.slice(0, 6) : [],
+                mode: data.mode,
+                analysis: data.analysis
+            });
+        } catch (e) {
+            kbwSay("bot", `提问失败：${e.message || "网络错误"}`);
+        } finally {
+            state.data.knowledgeWidgetLoading = false;
+            render();
+            const stream = document.querySelector("[data-knowledgewidget-stream]");
+            if (stream) stream.scrollTop = stream.scrollHeight;
+        }
     }
 
     // ========== Obsidian 知识库视图 ==========
@@ -12730,9 +14090,298 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
         </main>`;
     }
 
-    // Agent 中心当前先进入可用知识库，避免把调试 JSON 暴露给用户。
+    // ========== 15 分钟学习计划（Agent 学习中心） ==========
+    const SPRINT15_TOTAL = 15 * 60;
+    const SPRINT15_KEY = "edusmart_sprint15_v1";
+
+    function sprint15Store() {
+        const today = new Date().toISOString().split("T")[0];
+        let saved = null;
+        try {
+            saved = JSON.parse(localStorage.getItem(SPRINT15_KEY) || "null");
+        } catch (e) {
+            saved = null;
+        }
+        if (!saved || saved.date !== today) {
+            return {
+                date: today,
+                task: null,
+                lowPressure: false,
+                steps: [],
+                running: false,
+                remaining: SPRINT15_TOTAL,
+                lastTick: null,
+                completed: false,
+                history: (saved && saved.history) || []
+            };
+        }
+        if (!Array.isArray(saved.steps) || saved.steps.length !== 3) saved.steps = sprint15Steps();
+        return saved;
+    }
+
+    function saveSprint15(sprint) {
+        try {
+            localStorage.setItem(SPRINT15_KEY, JSON.stringify(sprint));
+        } catch (e) {
+            /* 存储失败不影响页面 */
+        }
+    }
+
+    function sprint15Steps() {
+        return [
+            { key: "recall", label: "快速回顾", minutes: 4, desc: "翻看这个知识点的笔记或摘要，唤起记忆，顺手写下 1 个已经忘掉的点。", done: false },
+            { key: "focus", label: "专注执行", minutes: 8, desc: "围绕该知识点做 3-5 道练习，或精读一段材料，这一段只做这一件事。", done: false },
+            { key: "output", label: "输出复盘", minutes: 3, desc: "用一句话总结今天的收获，并标记下次要继续巩固的内容。", done: false }
+        ];
+    }
+
+    function sprint15Candidates() {
+        const list = [];
+        const seen = new Set();
+        const push = item => {
+            if (!item.title || seen.has(item.title)) return;
+            seen.add(item.title);
+            list.push(item);
+        };
+        const center = state.data.pathCenter || {};
+        (center.tasks || []).forEach(t => {
+            push({
+                id: t.id || null,
+                title: t.title || t.knowledge_title,
+                subject: t.subject || "Agent 生成",
+                reason: t.subtitle || "由 Agent 个性化学习写入今日计划。",
+                mastery: t.mastery === null || t.mastery === undefined ? null : Number(t.mastery),
+                source: "agent",
+                done: t.status === "done"
+            });
+        });
+        (state.data.weakPoints || []).slice(0, 5).forEach(p => {
+            push({
+                id: null,
+                title: `专项突破：${p.title}`,
+                subject: p.subject || "薄弱点",
+                reason: `当前掌握度 ${Number(p.mastery || 0)}%，15 分钟聚焦一个薄弱点最划算。`,
+                mastery: p.mastery === null || p.mastery === undefined ? null : Number(p.mastery),
+                source: "weak",
+                done: false
+            });
+        });
+        (state.data.studentPathDashboard?.active || []).slice(0, 3).forEach(a => {
+            push({
+                id: null,
+                title: `路径推进：${a.name}`,
+                subject: a.subject || "学习路径",
+                reason: `进行中的路径（${a.completed_steps || 0}/${a.total_steps || 0} 步），推进一小步保持节奏。`,
+                mastery: null,
+                source: "path",
+                done: false
+            });
+        });
+        push({
+            id: null,
+            title: "通用 15 分钟冲刺",
+            subject: "综合",
+            reason: "没有找到个性化任务时的兜底选择：回顾 + 练习 + 复盘各来一小段。",
+            mastery: null,
+            source: "default",
+            done: false
+        });
+        return list;
+    }
+
+    function sprint15EnsureTask() {
+        const sprint = sprint15Store();
+        const candidates = sprint15Candidates();
+        if (!sprint.task || !candidates.some(c => c.title === sprint.task.title)) {
+            const pendingPrompt = state.data._pendingAgentPrompt || "";
+            const lowPressure = pendingPrompt.includes("低压力") || pendingPrompt.includes("低压");
+            let picked;
+            if (lowPressure) {
+                // 低压模式：选最容易完成的（掌握度最高、未完成的）
+                picked =
+                    [...candidates]
+                        .filter(c => !c.done)
+                        .sort((a, b) => (Number(b.mastery ?? -1) || 0) - (Number(a.mastery ?? -1) || 0))[0] || candidates[0];
+            } else {
+                picked = candidates.find(c => !c.done) || candidates[0];
+            }
+            sprint.task = picked;
+            sprint.lowPressure = lowPressure;
+            sprint.steps = sprint15Steps();
+            sprint.running = false;
+            sprint.remaining = SPRINT15_TOTAL;
+            sprint.lastTick = null;
+            sprint.completed = false;
+            saveSprint15(sprint);
+        }
+        if (state.data._pendingAgentPrompt) delete state.data._pendingAgentPrompt;
+        return sprint;
+    }
+
+    function sprint15History() {
+        return sprint15Store().history || [];
+    }
+
+    function sprint15Streak() {
+        const days = new Set(sprint15History().map(h => h.date));
+        let streak = 0;
+        const cursor = new Date();
+        if (!days.has(cursor.toISOString().split("T")[0])) cursor.setDate(cursor.getDate() - 1);
+        while (days.has(cursor.toISOString().split("T")[0])) {
+            streak += 1;
+            cursor.setDate(cursor.getDate() - 1);
+        }
+        return streak;
+    }
+
+    function formatSprintTime(seconds) {
+        const s = Math.max(0, Math.round(seconds));
+        return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    }
+
+    let sprint15Handle = null;
+
+    function sprint15Tick() {
+        const sprint = sprint15Store();
+        if (!sprint.running || !sprint.lastTick) return;
+        const delta = Math.floor((Date.now() - sprint.lastTick) / 1000);
+        if (delta <= 0) return;
+        sprint.lastTick = Date.now();
+        sprint.remaining = Math.max(0, sprint.remaining - delta);
+        if (sprint.remaining === 0) {
+            sprint.running = false;
+            sprint.lastTick = null;
+            toast("15 分钟冲刺完成！点击「完成打卡」记录这次冲刺吧");
+        }
+        saveSprint15(sprint);
+        sprint15Paint(sprint);
+    }
+
+    function sprint15Paint(sprint) {
+        const timeNode = document.querySelector("[data-sprint-time]");
+        const ringNode = document.querySelector("[data-sprint-ring]");
+        const statusNode = document.querySelector("[data-sprint-status]");
+        const startNode = document.querySelector("[data-sprint-start]");
+        const remain = Number(sprint.remaining || 0);
+        if (timeNode) timeNode.textContent = formatSprintTime(remain);
+        if (ringNode) {
+            const c = 2 * Math.PI * 52;
+            ringNode.style.strokeDashoffset = String(c * (remain / SPRINT15_TOTAL));
+        }
+        if (statusNode) statusNode.textContent = sprint.completed ? "已完成" : sprint.running ? "冲刺中" : remain === SPRINT15_TOTAL ? "待开始" : "已暂停";
+        if (startNode) startNode.innerHTML = sprint.running ? `${icon("lock", 15)}暂停` : `${icon("play", 15)}${remain === SPRINT15_TOTAL || sprint.remaining === 0 ? "开始冲刺" : "继续"}`;
+    }
+
+    function syncSprint15Timer() {
+        if (sprint15Handle) {
+            clearInterval(sprint15Handle);
+            sprint15Handle = null;
+        }
+        const sprint = sprint15Store();
+        sprint15Paint(sprint);
+        if (sprint.running) {
+            sprint15Handle = setInterval(sprint15Tick, 1000);
+        }
+    }
+
     function agentCenterView() {
-        return knowledgeBaseView();
+        const sprint = sprint15EnsureTask();
+        const candidates = sprint15Candidates();
+        const task = sprint.task || candidates[0];
+        const total = SPRINT15_TOTAL;
+        const remain = Number(sprint.remaining || 0);
+        const progress = Math.round(((total - remain) / total) * 100);
+        const history = sprint15History().slice(-6).reverse();
+        const streak = sprint15Streak();
+        const todayDone = sprint15History().some(h => h.date === sprint.date);
+        const stepsDone = sprint.steps.filter(s => s.done).length;
+        const sourceLabel = { agent: "Agent 今日任务", weak: "薄弱点突破", path: "学习路径", default: "通用冲刺" }[task.source] || "Agent 推荐";
+        const candidateRows = candidates
+            .slice(0, 5)
+            .map(
+                (c, i) => `<button class="sprint-candidate ${c.title === task.title ? "active" : ""} ${c.done ? "done" : ""}" data-sprint-pick="${i}" ${c.done ? "disabled" : ""}>
+                <span class="sprint-candidate-main"><b>${escapeHtml(c.title)}</b><small>${escapeHtml(c.subject)} · ${escapeHtml(c.reason)}</small></span>
+                ${c.done ? `<span class="pill good">${icon("check", 12)}已完成</span>` : c.title === task.title ? `<span class="pill">${icon("target", 12)}当前</span>` : `<span class="pill ghost">换这个</span>`}
+            </button>`
+            )
+            .join("");
+        const stepRows = sprint.steps
+            .map(
+                (step, i) => `<button class="sprint-step ${step.done ? "done" : ""}" data-sprint-step="${i}">
+                <span class="sprint-step-check">${step.done ? icon("check", 14) : `<i>${step.minutes}′</i>`}</span>
+                <span class="sprint-step-body"><b>${escapeHtml(step.label)}<em>${step.minutes} 分钟</em></b><small>${escapeHtml(step.desc)}</small></span>
+            </button>`
+            )
+            .join("");
+        const historyRows = history
+            .map(
+                h => `<div class="sprint-history-row"><span>${icon("check", 13)}<b>${escapeHtml(h.title)}</b></span><small>${escapeHtml(h.date)} ${escapeHtml(h.time || "")} · 专注 ${h.minutes} 分钟</small></div>`
+            )
+            .join("");
+        return `<main class="page sprint-page">
+            <section class="sprint-hero">
+                <div class="sprint-hero-copy">
+                    <span class="home-eyebrow">15-Minute Sprint · Agent 学习中心</span>
+                    <h1>${icon("target", 26)} 15 分钟学习计划</h1>
+                    <p>${sprint.lowPressure ? "低压模式：状态不好的时候，就完成一个最小可完成的动作。" : "把「继续学」变成一个 15 分钟内一定能完成的小冲刺：回顾 → 专注 → 复盘。"}完成动作会写入学习画像与今日任务。</p>
+                    <div class="sprint-hero-meta">
+                        <span class="pill">${icon("calendar", 13)} ${escapeHtml(sprint.date)}</span>
+                        <span class="pill">${icon("flame", 13)} 连续打卡 ${streak} 天</span>
+                        ${todayDone ? `<span class="pill good">${icon("check", 13)} 今天已打卡</span>` : `<span class="pill ghost">今天还未打卡</span>`}
+                    </div>
+                </div>
+                <div class="sprint-timer-wrap">
+                    <div class="sprint-ring" data-sprint-state="${sprint.running ? "running" : sprint.completed ? "done" : "idle"}">
+                        <svg viewBox="0 0 120 120" aria-hidden="true">
+                            <circle class="sprint-ring-bg" cx="60" cy="60" r="52"></circle>
+                            <circle class="sprint-ring-fg" cx="60" cy="60" r="52" data-sprint-ring style="stroke-dashoffset:${(2 * Math.PI * 52 * remain) / total}"></circle>
+                        </svg>
+                        <div class="sprint-ring-center">
+                            <b data-sprint-time>${formatSprintTime(remain)}</b>
+                            <span data-sprint-status>${sprint.completed ? "已完成" : sprint.running ? "冲刺中" : remain === total ? "待开始" : "已暂停"}</span>
+                        </div>
+                    </div>
+                    <div class="sprint-timer-actions">
+                        <button class="btn primary" data-sprint-start>${sprint.running ? `${icon("lock", 15)}暂停` : `${icon("play", 15)}${remain === SPRINT15_TOTAL || sprint.remaining === 0 ? "开始冲刺" : "继续"}`}</button>
+                        <button class="btn ghost" data-sprint-reset>${icon("refresh", 15)}重置</button>
+                    </div>
+                    <small class="sprint-timer-hint">进度 ${progress}% · 步骤 ${stepsDone}/3</small>
+                </div>
+            </section>
+            <section class="sprint-grid">
+                <div class="sprint-main-col">
+                    <article class="card sprint-task-card">
+                        <div class="card-head">
+                            <div>
+                                <h2 class="section-title">${icon("zap", 18)} 本次冲刺任务</h2>
+                                <p class="muted-line">来源：${escapeHtml(sourceLabel)}${sprint.lowPressure ? " · 低压模式" : ""}</p>
+                            </div>
+                            ${task.mastery !== null && task.mastery !== undefined ? `<span class="pill">${icon("chart", 13)} 掌握度 ${task.mastery}%</span>` : ""}
+                        </div>
+                        <h3 class="sprint-task-title">${escapeHtml(task.title)}</h3>
+                        <p class="sprint-task-reason">${escapeHtml(task.reason)}</p>
+                        <div class="sprint-steps">${stepRows}</div>
+                        <div class="sprint-complete-row">
+                            <button class="btn primary glow ${sprint.completed ? "is-done" : ""}" data-sprint-complete ${sprint.completed ? "disabled" : ""}>
+                                ${sprint.completed ? `${icon("check", 16)}今日冲刺已完成` : `${icon("trophy", 16)}完成打卡`}
+                            </button>
+                            ${sprint.completed ? `<button class="btn ghost" data-plan-action="/practice" data-plan-subject="${escapeHtml(task.subject || "")}" data-plan-title="${escapeHtml(task.title || "")}" data-plan-knowledge="${escapeHtml(task.title || "")}">${icon("zap", 15)}去练习巩固</button>` : ""}
+                            <small>${sprint.completed ? "干得漂亮，可以再带任务上下文去练一组题巩固。" : "建议走完计时 + 3 个步骤后打卡，也会同步到今日学习任务。"}</small>
+                        </div>
+                    </article>
+                </div>
+                <aside class="sprint-side-col">
+                    <article class="card">
+                        <div class="card-head"><h2 class="section-title">${icon("route", 18)} 候选任务</h2><span class="pill">${candidates.length}</span></div>
+                        <div class="sprint-candidates">${candidateRows}</div>
+                    </article>
+                    <article class="card">
+                        <div class="card-head"><h2 class="section-title">${icon("history", 18)} 最近打卡</h2><span class="pill">${history.length}</span></div>
+                        <div class="sprint-history">${historyRows || "<p>还没有打卡记录，完成第一次 15 分钟冲刺吧。</p>"}</div>
+                    </article>
+                </aside>
+            </section>
+        </main>`;
     }
 
     function loginView() {
@@ -13042,6 +14691,18 @@ console.log(cases.map(item => item.name + ": " + (item.passed ? "PASS" : "TODO")
 
     function bindEvents() {
         initLoginExperience();
+        // 启动时静默拉取用户 API 绑定，供全站 AI 徽标显示服务商名称（每会话一次）
+        if (state.user && !state.data.apiWidgetGlobalLoaded) {
+            state.data.apiWidgetGlobalLoaded = true;
+            request("/api/api-binding")
+                .then(json => {
+                    if (json?.data) {
+                        state.data.apiWidgetData = json.data;
+                        render();
+                    }
+                })
+                .catch(() => {});
+        }
         // ========== 智能诊断与学习画像标签页事件绑定 ==========
         // 智能诊断标签页切换
         document.querySelectorAll("[data-diagnostic-tab]").forEach(btn => {
@@ -14817,6 +16478,121 @@ ${content}
                 }
             })
         );
+        document.querySelectorAll("[data-sprint-start]").forEach(el =>
+            el.addEventListener("click", () => {
+                const sprint = sprint15Store();
+                if (sprint.completed || sprint.remaining === 0) return;
+                if (sprint.running) {
+                    sprint.running = false;
+                    sprint.lastTick = null;
+                } else {
+                    sprint.running = true;
+                    sprint.lastTick = Date.now();
+                }
+                saveSprint15(sprint);
+                sprint15Paint(sprint);
+                if (sprint.running && !sprint15Handle) sprint15Handle = setInterval(sprint15Tick, 1000);
+            })
+        );
+        document.querySelectorAll("[data-sprint-reset]").forEach(el =>
+            el.addEventListener("click", () => {
+                const sprint = sprint15Store();
+                sprint.running = false;
+                sprint.lastTick = null;
+                sprint.remaining = SPRINT15_TOTAL;
+                sprint.completed = false;
+                sprint.steps = sprint15Steps();
+                saveSprint15(sprint);
+                sprint15Paint(sprint);
+                toast("已重置，可以再开始一轮 15 分钟冲刺");
+                render();
+            })
+        );
+        document.querySelectorAll("[data-sprint-step]").forEach(el =>
+            el.addEventListener("click", () => {
+                const sprint = sprint15Store();
+                const idx = Number(el.dataset.sprintStep);
+                if (!sprint.steps[idx]) return;
+                sprint.steps[idx].done = !sprint.steps[idx].done;
+                saveSprint15(sprint);
+                el.classList.toggle("done", sprint.steps[idx].done);
+                const check = el.querySelector(".sprint-step-check");
+                if (check) check.innerHTML = sprint.steps[idx].done ? icon("check", 14) : `<i>${sprint.steps[idx].minutes}′</i>`;
+                const hint = document.querySelector(".sprint-timer-hint");
+                if (hint) {
+                    const progress = Math.round(((SPRINT15_TOTAL - sprint.remaining) / SPRINT15_TOTAL) * 100);
+                    hint.textContent = `进度 ${progress}% · 步骤 ${sprint.steps.filter(s => s.done).length}/3`;
+                }
+            })
+        );
+        document.querySelectorAll("[data-sprint-pick]").forEach(el =>
+            el.addEventListener("click", async () => {
+                const candidates = sprint15Candidates();
+                const picked = candidates[Number(el.dataset.sprintPick)];
+                if (!picked || picked.done) return;
+                const sprint = sprint15Store();
+                if (picked.title === sprint.task?.title) return;
+                sprint.task = picked;
+                sprint.lowPressure = false;
+                sprint.steps = sprint15Steps();
+                sprint.running = false;
+                sprint.remaining = SPRINT15_TOTAL;
+                sprint.lastTick = null;
+                sprint.completed = false;
+                saveSprint15(sprint);
+                toast(`已切换任务：${picked.title}`);
+                render();
+            })
+        );
+        document.querySelectorAll("[data-sprint-complete]").forEach(el =>
+            el.addEventListener("click", async () => {
+                const sprint = sprint15Store();
+                if (sprint.completed) return;
+                el.classList.add("is-loading");
+                el.disabled = true;
+                const focusedMinutes = Math.max(1, Math.round((SPRINT15_TOTAL - sprint.remaining) / 60));
+                try {
+                    if (sprint.task?.id) {
+                        try {
+                            await request(`/api/app/tasks/${encodeURIComponent(sprint.task.id)}/toggle`, { method: "POST", body: "{}" });
+                            // 已同步到后端任务，避免重置后再次打卡造成重复切换
+                            sprint.task.id = null;
+                        } catch (e) {
+                            /* 任务同步失败不阻塞打卡 */
+                        }
+                    }
+                    sprint.completed = true;
+                    sprint.running = false;
+                    sprint.lastTick = null;
+                    sprint.history = sprint.history || [];
+                    sprint.history.push({
+                        date: sprint.date,
+                        time: new Date().toTimeString().slice(0, 5),
+                        title: sprint.task?.title || "15 分钟冲刺",
+                        subject: sprint.task?.subject || "综合",
+                        minutes: focusedMinutes
+                    });
+                    saveSprint15(sprint);
+                    toast("打卡成功！本次冲刺已记录");
+                    // 打卡会把任务置为 done，刷新全局数据让首页任务卡/周历/动态立即同步
+                    try {
+                        await loadData(true);
+                    } catch (e) {
+                        /* 首页数据刷新失败不阻塞打卡 */
+                    }
+                    if (state.data.pathCenter) {
+                        try {
+                            await loadPathCenter(true);
+                        } catch (e) {
+                            /* 刷新失败不影响打卡 */
+                        }
+                    }
+                    render();
+                } finally {
+                    el.classList.remove("is-loading");
+                }
+            })
+        );
         document.querySelectorAll("[data-ai-feature]").forEach(el =>
             el.addEventListener("click", async event => {
                 event.stopPropagation();
@@ -14885,7 +16661,30 @@ ${content}
         document.querySelectorAll("[data-plan-action]").forEach(el =>
             el.addEventListener("click", () => {
                 const target = el.dataset.planAction || "/practice";
-                window.location.href = target;
+                const view = routeToView(target);
+                // 任务闭环：目标是练测页时携带任务上下文，提交达标后自动完成任务
+                if (["practice", "test", "onlineExam"].includes(view)) {
+                    // subject 必须是学科代码（如 math/software_engineering）才参与组卷，
+                    // "Agent 生成" 之类的展示文案不能当过滤条件
+                    const rawSubject = el.dataset.planSubject || "";
+                    const subjectCode = /^[a-z0-9_]+$/.test(rawSubject) ? rawSubject : null;
+                    state.data.practiceContext = {
+                        taskId: el.dataset.planTaskId || null,
+                        subject: subjectCode,
+                        knowledgeTitle: el.dataset.planKnowledge || null,
+                        title: el.dataset.planTitle || null
+                    };
+                    delete state.data.questionSets[`${view}:${subjectCode || "all"}`];
+                    state.data.assessmentStarted[view] = false;
+                }
+                setView(view);
+            })
+        );
+        document.querySelectorAll("[data-clear-practice-context]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.practiceContext = null;
+                toast("已取消任务关联，本次练习不计入任务打卡");
+                render();
             })
         );
         document.querySelectorAll("[data-study-plan-refresh]").forEach(el =>
@@ -14979,6 +16778,11 @@ ${content}
                     state.data.pathCenter = null;
                     state.data.studyPlan = null;
                     await loadStudyPlan(true);
+                    try {
+                        await loadData(true);
+                    } catch (e) {
+                        // 首页数据刷新失败不阻塞计划展示
+                    }
                     await render();
                     toast(
                         result.stage === "diagnosis_required"
@@ -15362,6 +17166,226 @@ ${content}
                         }
                     });
                 }
+            })
+        );
+        /* 教师工作台 - 上传试卷图片一键生成试卷 */
+        document.querySelectorAll("[data-teacher-action='upload-exam-image']").forEach(el =>
+            el.addEventListener("click", () => {
+                const subjects = state.data.teacherSubjects.length
+                    ? state.data.teacherSubjects
+                    : ["数据结构与算法", "计算机网络", "操作系统", "数据库", "程序设计", "前端开发", "人工智能", "软件工程"];
+                const subjOptions = subjects.map((s, i) => `<option value="${escapeHtml(s)}" ${i === 0 ? "selected" : ""}>${escapeHtml(s)}</option>`).join("");
+                const uploadHtml = `<div class="modal-form">
+                    <div class="scan-upload-card" style="border:none;padding:0">
+                        <div class="scan-dropzone" data-exam-scan-dropzone style="min-height:180px">
+                            <div class="scan-dropzone-inner">
+                                <span class="scan-upload-icon">${icon("upload-cloud", 42)}</span>
+                                <h3>上传试卷图片</h3>
+                                <p>支持 JPG、PNG，拖拽或点击选择，系统将自动识别题目并按系统试卷格式生成</p>
+                                <input type="file" accept="image/*" data-exam-scan-file hidden>
+                                <button class="btn primary" data-exam-scan-choose>${icon("image", 15)} 选择图片</button>
+                            </div>
+                        </div>
+                        <div data-exam-scan-preview></div>
+                        <div data-exam-scan-status></div>
+                        <div style="margin-top:10px;text-align:center">
+                            <button class="btn ghost tiny" data-es-toggle-manual>${icon("edit", 13)} 或手动粘贴试卷文本</button>
+                        </div>
+                        <div data-es-manual-box hidden style="margin-top:8px">
+                            <textarea class="input" id="es_manual_text" rows="5" placeholder="粘贴试卷文字，例如：&#10;1. 下列哪个是数据结构？&#10;A. 数组 B. 函数 C. 变量 D. 语句&#10;答案：A"></textarea>
+                            <button class="btn teal" id="es_parse_text" style="margin-top:6px">${icon("wand", 14)} 解析文本</button>
+                        </div>
+                        <div data-exam-scan-form hidden style="margin-top:14px;display:grid;gap:10px">
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+                                <div><label>试卷名称</label><input class="input" id="es_name" placeholder="如：第一章综合测试"></div>
+                                <div><label>学科</label><select class="input" id="es_subject">${subjOptions}</select></div>
+                                <div><label>难度</label><select class="input" id="es_difficulty"><option value="easy">简单</option><option value="medium" selected>中等</option><option value="hard">困难</option></select></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                                <div><label>时长(分钟)</label><input class="input" id="es_duration" type="number" value="60"></div>
+                                <div style="display:flex;align-items:flex-end"><label><input type="checkbox" id="es_use_ocr" checked> 保留 OCR 识别的题目（可在下方编辑）</label></div>
+                            </div>
+                            <div><label>识别题目（<span id="es_qcount">0</span>道），可点击题干/选项编辑</label>
+                                <div id="es_qlist" style="max-height:320px;overflow:auto;border:1px solid #e8edf8;border-radius:10px;padding:10px;display:grid;gap:10px"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                showPanel("上传试卷图片生成试卷", uploadHtml);
+                const panel = document.querySelector(".panel-content");
+                const fileInput = panel.querySelector("[data-exam-scan-file]");
+                const previewBox = panel.querySelector("[data-exam-scan-preview]");
+                const statusBox = panel.querySelector("[data-exam-scan-status]");
+                const formBox = panel.querySelector("[data-exam-scan-form]");
+                let scanQuestions = [];
+
+                function applyParsedQuestions(data) {
+                    scanQuestions = (data?.questions || []).map(q => ({
+                        content: q.content,
+                        type: q.type || "single",
+                        options: Array.isArray(q.options) ? q.options : [],
+                        answer: q.answer || "",
+                        difficulty: q.difficulty || "medium",
+                        subject: q.subject || "",
+                        score: 5
+                    }));
+                    statusBox.innerHTML = `<p style="color:var(--green)">解析完成，共 ${scanQuestions.length} 道题，可在下方编辑后生成试卷。</p>`;
+                    formBox.hidden = false;
+                    if (data?.ocrText) {
+                        const subjectGuess = subjects.find(s => data.ocrText.includes(s)) || subjects[0];
+                        const sel = panel.querySelector("#es_subject");
+                        if (sel && Array.from(sel.options).some(o => o.value === subjectGuess)) sel.value = subjectGuess;
+                    }
+                    renderQuestions();
+                }
+
+                function renderQuestions() {
+                    const qlist = panel.querySelector("#es_qlist");
+                    if (!qlist) return;
+                    panel.querySelector("#es_qcount").textContent = scanQuestions.length;
+                    qlist.innerHTML = scanQuestions
+                        .map((q, i) => {
+                            const typeMap = { single: "单选题", multiple: "多选题", fill: "填空题", short: "简答题", truefalse: "判断题" };
+                            const optsHtml = (q.type === "single" || q.type === "multiple") && Array.isArray(q.options) && q.options.length
+                                ? `<div class="sq-options" style="margin-top:6px">${q.options.map((o, oi) => `<span class="sq-opt"><b>${String.fromCharCode(65 + oi)}.</b> <span contenteditable="true" data-es-opt="${i}" data-oi="${oi}" style="outline:none;border-bottom:1px dashed #ccc">${escapeHtml(o)}</span></span>`).join("")}</div>`
+                                : "";
+                            return `<div class="scan-question-row" style="padding:10px;border:1px solid #eef2f9;border-radius:8px">
+                                <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                                    <b>${i + 1}.</b>
+                                    <select class="input tiny" data-es-field="type" data-es-i="${i}" style="width:auto">
+                                        ${Object.entries(typeMap).map(([k, v]) => `<option value="${k}" ${q.type === k ? "selected" : ""}>${v}</option>`).join("")}
+                                    </select>
+                                    <input class="input tiny" placeholder="学科" value="${escapeHtml(q.subject || "")}" data-es-field="subject" data-es-i="${i}" style="width:90px">
+                                    <input class="input tiny" type="number" placeholder="分" value="${q.score || 5}" data-es-field="score" data-es-i="${i}" style="width:55px">
+                                </div>
+                                <div contenteditable="true" data-es-field="content" data-es-i="${i}" style="outline:none;border-bottom:1px dashed #ccc;min-height:22px">${escapeHtml(q.content || "")}</div>
+                                ${optsHtml}
+                                <div style="margin-top:6px"><label>答案：</label><input class="input tiny" style="width:200px" placeholder="如 A 或 光合作用" value="${escapeHtml(q.answer || "")}" data-es-field="answer" data-es-i="${i}"></div>
+                            </div>`;
+                        })
+                        .join("");
+                    // 绑定编辑
+                    qlist.querySelectorAll("[data-es-field]").forEach(el => {
+                        el.addEventListener(el.tagName === "SELECT" ? "change" : "blur", () => {
+                            const i = parseInt(el.dataset.esI);
+                            const f = el.dataset.esField;
+                            if (scanQuestions[i]) scanQuestions[i][f] = el.tagName === "SELECT" || el.tagName === "INPUT" ? el.value : el.innerText;
+                        });
+                    });
+                    qlist.querySelectorAll("[data-es-opt]").forEach(el => {
+                        el.addEventListener("blur", () => {
+                            const i = parseInt(el.dataset.esOpt);
+                            const oi = parseInt(el.dataset.oi);
+                            if (scanQuestions[i]?.options) scanQuestions[i].options[oi] = el.innerText;
+                        });
+                    });
+                }
+
+                async function handleImage(file) {
+                    if (!file || !file.type.startsWith("image/")) return toast("请上传图片文件");
+                    const reader = new FileReader();
+                    reader.onload = async ev => {
+                        const dataUrl = ev.target.result;
+                        previewBox.innerHTML = `<div class="scan-preview" style="display:flex;gap:12px;align-items:flex-start;margin-top:10px"><img src="${dataUrl}" style="max-width:160px;border-radius:8px;border:1px solid #e8edf8"><div><p>已选择：${escapeHtml(file.name)}</p></div></div>`;
+                        statusBox.innerHTML = `<div class="scan-loading card" style="padding:12px;margin-top:10px"><div class="spinner" style="width:18px;height:18px"></div><span style="margin-left:8px">正在 OCR 识别并解析题目...</span></div>`;
+                        try {
+                            const json = await request("/api/paper-scan/scan", {
+                                method: "POST",
+                                body: JSON.stringify({ imageBase64: dataUrl, fileName: file.name })
+                            });
+                            if (!json.success) {
+                                const msg = json.message || "识别失败";
+                                if (/OCR凭证|未配置/.test(msg)) {
+                                    statusBox.innerHTML = `<p style="color:var(--orange)">${msg}，已为你切换到「手动粘贴文本」模式，仍可一键按格式解析题目并生成试卷。</p>`;
+                                    const mb = panel.querySelector("[data-es-manual-box]");
+                                    if (mb) mb.hidden = false;
+                                } else {
+                                    statusBox.innerHTML = `<p style="color:var(--red)">${msg}</p>`;
+                                }
+                                return;
+                            }
+                            applyParsedQuestions(json.data);
+                        } catch (e) {
+                            statusBox.innerHTML = `<p style="color:var(--red)">扫描失败：${e.message}</p>`;
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+
+                panel.querySelector("[data-exam-scan-choose]")?.addEventListener("click", () => fileInput.click());
+                panel.querySelector("[data-es-toggle-manual]")?.addEventListener("click", () => {
+                    const mb = panel.querySelector("[data-es-manual-box]");
+                    if (mb) mb.hidden = !mb.hidden;
+                });
+                const bindParseText = () => {
+                    panel.querySelector("#es_parse_text")?.addEventListener("click", async () => {
+                        const txt = panel.querySelector("#es_manual_text")?.value;
+                        if (!txt?.trim()) return toast("请粘贴试卷文本");
+                        statusBox.innerHTML = `<div class="scan-loading card" style="padding:12px"><div class="spinner" style="width:18px;height:18px"></div><span style="margin-left:8px">AI 解析中...</span></div>`;
+                        try {
+                            const tj = await request("/api/paper-scan/parse-text", {
+                                method: "POST",
+                                body: JSON.stringify({ text: txt, fileName: "text-paper.jpg" })
+                            });
+                            if (!tj.success) throw new Error(tj.message || "解析失败");
+                            applyParsedQuestions(tj.data);
+                        } catch (e) {
+                            statusBox.innerHTML = `<p style="color:var(--red)">解析失败：${e.message}</p>`;
+                        }
+                    });
+                };
+                bindParseText();
+                fileInput?.addEventListener("change", e => handleImage(e.target.files[0]));
+                const dz = panel.querySelector("[data-exam-scan-dropzone]");
+                dz?.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag-over"); });
+                dz?.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+                dz?.addEventListener("drop", e => { e.preventDefault(); dz.classList.remove("drag-over"); handleImage(e.dataTransfer.files[0]); });
+
+                // 提交按钮
+                const actionBar = document.createElement("div");
+                actionBar.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:16px";
+                actionBar.innerHTML = `<button class="btn ghost" data-panel-close>取消</button><button class="btn primary" id="es_submit">${icon("check", 16)} 生成试卷</button>`;
+                panel.appendChild(actionBar);
+                panel.querySelector("#es_submit")?.addEventListener("click", async () => {
+                    const name = panel.querySelector("#es_name")?.value?.trim();
+                    if (!name) return toast("请输入试卷名称");
+                    if (!scanQuestions.length) return toast("未识别到题目，请先上传图片");
+                    const useOcr = panel.querySelector("#es_use_ocr")?.checked;
+                    const questions = useOcr
+                        ? scanQuestions.filter(q => q.content).map(q => ({
+                              content: q.content,
+                              type: q.type,
+                              options: q.options || [],
+                              correct_answer: q.answer || "",
+                              score: parseInt(q.score) || 5
+                          }))
+                        : [];
+                    if (!questions.length) return toast("请至少保留一道题目");
+                    const btn = panel.querySelector("#es_submit");
+                    btn.disabled = true;
+                    btn.textContent = "生成中...";
+                    try {
+                        const res = await request("/api/teacher/exams/create", {
+                            method: "POST",
+                            body: JSON.stringify({
+                                name,
+                                subject: panel.querySelector("#es_subject")?.value || "综合",
+                                difficulty: panel.querySelector("#es_difficulty")?.value || "medium",
+                                duration: parseInt(panel.querySelector("#es_duration")?.value || "60"),
+                                description: "由试卷图片识别生成",
+                                questions
+                            })
+                        });
+                        toast(res.message || "试卷生成成功");
+                        closePanel();
+                        state.data.teacherTab = "exams";
+                        await render();
+                    } catch (e) {
+                        toast(e.message || "生成失败");
+                        btn.disabled = false;
+                        btn.innerHTML = icon("check", 16) + " 生成试卷";
+                    }
+                });
             })
         );
         /* 教师工作台 - 查看试卷详情 */
@@ -16619,6 +18643,74 @@ zhaoliu,赵六"></textarea>
                 toast(`已切换为${track.title}方向`);
             })
         );
+        // 重新判断：用最新答题/练习记录重算画像与薄弱点
+        document.querySelectorAll("[data-path-reassess]").forEach(el =>
+            el.addEventListener("click", async () => {
+                el.classList.add("is-loading");
+                try {
+                    state.data.pathCenter = null;
+                    await loadPathCenter(true);
+                    render();
+                    toast("已根据你最近的答题和练习记录重新判断");
+                } catch (error) {
+                    toast(error.message);
+                } finally {
+                    el.classList.remove("is-loading");
+                }
+            })
+        );
+        // 添加自定义薄弱点
+        const addWeakPoint = async () => {
+            const input = document.querySelector("[data-weak-input]");
+            const topic = (input?.value || "").trim();
+            if (!topic) return toast("请先输入薄弱知识点名称");
+            try {
+                await request("/api/app/path/weak-overrides", {
+                    method: "POST",
+                    body: JSON.stringify({ action: "add", topic })
+                });
+                state.data.pathCenter = null;
+                await loadPathCenter(true);
+                render();
+                toast(`已添加「${topic}」为薄弱点，点「重新生成路径」即生效`);
+            } catch (error) {
+                toast(error.message);
+            }
+        };
+        document.querySelectorAll("[data-weak-add]").forEach(el =>
+            el.addEventListener("click", addWeakPoint)
+        );
+        document.querySelectorAll("[data-weak-input]").forEach(el =>
+            el.addEventListener("keydown", e => {
+                if (e.key === "Enter") addWeakPoint();
+            })
+        );
+        // 移除 / 恢复薄弱点判断
+        document.querySelectorAll("[data-weak-action]").forEach(el =>
+            el.addEventListener("click", async () => {
+                const action = el.dataset.weakAction;
+                const topic = el.dataset.weakTopic || "";
+                const knowledgeId = el.dataset.weakKid || null;
+                try {
+                    await request("/api/app/path/weak-overrides", {
+                        method: "POST",
+                        body: JSON.stringify({ action, topic, knowledgeId })
+                    });
+                    state.data.pathCenter = null;
+                    await loadPathCenter(true);
+                    render();
+                    toast(
+                        action === "dismiss"
+                            ? `已移除「${topic}」的薄弱判断`
+                            : action === "restore"
+                              ? `已恢复「${topic}」的薄弱判断`
+                              : `已删除自定义薄弱点「${topic}」`
+                    );
+                } catch (error) {
+                    toast(error.message);
+                }
+            })
+        );
         document.querySelectorAll("[data-path-start]").forEach(el =>
             el.addEventListener("click", async () => {
                 el.classList.add("is-loading");
@@ -17654,11 +19746,659 @@ zhaoliu,赵六"></textarea>
             })
         );
         document.querySelectorAll("[data-team-screen]").forEach(el =>
-            el.addEventListener("click", () => {
+            el.addEventListener("click", async () => {
                 state.data.teamCodeScreen = el.dataset.teamScreen || "overview";
+                render();
+                if (state.data.teamCodeScreen === "briefs" && !state.data.teamBriefs) {
+                    await loadTeamBriefs();
+                    render();
+                }
+                if (state.data.teamCodeScreen === "bot" && !state.data.teamBot) {
+                    await loadTeamBot();
+                    render();
+                }
+            })
+        );
+
+        // ===== 需求描述面板 =====
+        // 确保 draft 携带结构化字段
+        function ensureBriefDraft() {
+            const draft = state.data.teamBriefDraft || {};
+            if (!Array.isArray(draft.functional)) draft.functional = [];
+            if (!Array.isArray(draft.nonFunctional)) draft.nonFunctional = [];
+            state.data.teamBriefDraft = draft;
+            return draft;
+        }
+        document.querySelectorAll("[data-brief-title]").forEach(el =>
+            el.addEventListener("input", () => {
+                state.data.teamBriefDraft = { ...(state.data.teamBriefDraft || {}), title: el.value };
+            })
+        );
+        document.querySelectorAll("[data-brief-desc]").forEach(el =>
+            el.addEventListener("input", () => {
+                state.data.teamBriefDraft = { ...(state.data.teamBriefDraft || {}), description: el.value };
+            })
+        );
+        document.querySelectorAll("[data-brief-optimized]").forEach(el =>
+            el.addEventListener("input", () => {
+                state.data.teamBriefDraft = { ...(state.data.teamBriefDraft || {}), optimized: el.value };
+            })
+        );
+        document.querySelectorAll("[data-brief-new]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                state.data.teamBriefActive = "new";
+                state.data.teamBriefDraft = { title: "", description: "", optimized: "", functional: [], nonFunctional: [] };
                 render();
             })
         );
+        document.querySelectorAll("[data-brief-select]").forEach(el =>
+            el.addEventListener("click", () => {
+                const id = Number(el.dataset.briefSelect);
+                const brief = (state.data.teamBriefs || []).find(item => Number(item.id) === id);
+                const parsed = parseBriefDescription(brief?.description || "");
+                state.data.teamBriefActive = id;
+                state.data.teamBriefDraft = {
+                    title: brief?.title || "",
+                    description: parsed.description || "",
+                    optimized: brief?.optimized || "",
+                    functional: parsed.functional,
+                    nonFunctional: parsed.nonFunctional,
+                    __structured: parsed.__structured
+                };
+                render();
+            })
+        );
+        // 添加功能需求
+        document.querySelectorAll("[data-brief-add-func]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const draft = ensureBriefDraft();
+                draft.functional.push(emptyBriefFunctional());
+                state.data.teamBriefDraft = { ...draft };
+                render();
+            })
+        );
+        // 添加非功能需求
+        document.querySelectorAll("[data-brief-add-nonfunc]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const draft = ensureBriefDraft();
+                draft.nonFunctional.push(emptyBriefNonFunctional());
+                state.data.teamBriefDraft = { ...draft };
+                render();
+            })
+        );
+        // 删除功能需求
+        document.querySelectorAll("[data-brief-func-del]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const id = btn.dataset.briefFuncDel;
+                const draft = ensureBriefDraft();
+                draft.functional = draft.functional.filter(f => f.id !== id);
+                state.data.teamBriefDraft = { ...draft };
+                render();
+            })
+        );
+        // 删除非功能需求
+        document.querySelectorAll("[data-brief-nonfunc-del]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const id = btn.dataset.briefNonfuncDel;
+                const draft = ensureBriefDraft();
+                draft.nonFunctional = draft.nonFunctional.filter(n => n.id !== id);
+                state.data.teamBriefDraft = { ...draft };
+                render();
+            })
+        );
+        // 功能需求字段编辑
+        document.querySelectorAll("[data-brief-func-field]").forEach(el => {
+            const field = el.dataset.briefFuncField;
+            const id = el.dataset.briefFuncId;
+            const evt = field === "isFlow" ? "change" : "input";
+            el.addEventListener(evt, () => {
+                const draft = ensureBriefDraft();
+                const item = draft.functional.find(f => f.id === id);
+                if (!item) return;
+                if (field === "isFlow") item.isFlow = el.checked;
+                else item[field] = el.value;
+                state.data.teamBriefDraft = { ...draft };
+                // isFlow 切换需要显示/隐藏步骤框，触发重渲染
+                if (field === "isFlow") render();
+            });
+        });
+        // 非功能需求字段编辑
+        document.querySelectorAll("[data-brief-nonfunc-field]").forEach(el => {
+            const field = el.dataset.briefNonfuncField;
+            const id = el.dataset.briefNonfuncId;
+            el.addEventListener("input", () => {
+                const draft = ensureBriefDraft();
+                const item = draft.nonFunctional.find(n => n.id === id);
+                if (!item) return;
+                item[field] = el.value;
+                state.data.teamBriefDraft = { ...draft };
+            });
+        });
+        document.querySelectorAll("[data-brief-ai]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const draft = ensureBriefDraft();
+                // AI 优化：把结构化内容合并为 Markdown 文本，再加上原始描述
+                const text = briefToText({
+                    title: draft.title || "",
+                    functional: draft.functional,
+                    nonFunctional: draft.nonFunctional,
+                    description: draft.description || "",
+                    __structured: false
+                });
+                if (!String(text || "").trim()) return toast("请先录入需求内容（功能/非功能需求或原始描述）");
+                state.data.teamBriefAi = true;
+                render();
+                try {
+                    const result = await request("/api/app/ai/requirement", {
+                        method: "POST",
+                        body: JSON.stringify({ title: draft.title || "", text })
+                    });
+                    if (result.success && result.data?.optimized) {
+                        state.data.teamBriefDraft = { ...draft, optimized: result.data.optimized };
+                        toast("AI 优化完成");
+                    } else {
+                        toast(result.message || "AI 优化失败");
+                    }
+                } catch (e) {
+                    toast("AI 服务连接失败，请稍后重试");
+                } finally {
+                    state.data.teamBriefAi = false;
+                    render();
+                }
+            })
+        );
+        document.querySelectorAll("[data-brief-adopt]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const draft = state.data.teamBriefDraft || {};
+                if (!draft.optimized) return toast("暂无优化结果可采用");
+                // 采用优化稿：把 AI 输出放入原始描述区，清空结构化条目（AI 稿已是完整结构化文本）
+                state.data.teamBriefDraft = {
+                    ...draft,
+                    description: draft.optimized,
+                    functional: [],
+                    nonFunctional: [],
+                    __structured: false
+                };
+                toast("已采用优化稿，可继续编辑后保存");
+                render();
+            })
+        );
+        document.querySelectorAll("[data-brief-save]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const projectId = state.data.teamCodeActiveProjectId;
+                if (!projectId) return toast("请先选择团队项目");
+                const draft = ensureBriefDraft();
+                const title = String(draft.title || "").trim();
+                const hasStructured = (draft.functional || []).length || (draft.nonFunctional || []).length;
+                const rawDesc = String(draft.description || "").trim();
+                if (!title) return toast("请填写需求标题");
+                if (!hasStructured && !rawDesc) return toast("请至少录入一条功能/非功能需求，或填写原始描述");
+                const desc = serializeBriefDescription(draft);
+                state.data.teamBriefSaving = true;
+                render();
+                try {
+                    const activeId = state.data.teamBriefActive;
+                    if (activeId && activeId !== "new") {
+                        await request(`/api/team-code/projects/${projectId}/briefs/${activeId}`, {
+                            method: "PUT",
+                            body: JSON.stringify({ title, description: desc, optimized: draft.optimized || "" })
+                        });
+                    } else {
+                        const created = await request(`/api/team-code/projects/${projectId}/briefs`, {
+                            method: "POST",
+                            body: JSON.stringify({ title, description: desc, optimized: draft.optimized || "" })
+                        });
+                        if (created?.data?.id) state.data.teamBriefActive = created.data.id;
+                    }
+                    state.data.teamBriefDraft = null;
+                    await loadTeamBriefs();
+                    toast("需求已保存");
+                } catch (e) {
+                    toast(e.message || "保存失败");
+                } finally {
+                    state.data.teamBriefSaving = false;
+                    render();
+                }
+            })
+        );
+        document.querySelectorAll("[data-brief-delete]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const projectId = state.data.teamCodeActiveProjectId;
+                const id = btn.dataset.briefDelete;
+                if (!projectId || !id) return;
+                try {
+                    await request(`/api/team-code/projects/${projectId}/briefs/${id}`, { method: "DELETE" });
+                    state.data.teamBriefActive = null;
+                    state.data.teamBriefDraft = null;
+                    await loadTeamBriefs();
+                    toast("需求已删除");
+                } catch (e) {
+                    toast(e.message || "删除失败");
+                }
+            })
+        );
+
+        // ===== 代码机器人面板 =====
+        document.querySelectorAll("[data-bot-toggle]").forEach(btn =>
+            btn.addEventListener("click", () => runBotAction("toggle"))
+        );
+        document.querySelectorAll("[data-bot-save-github]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const repo = document.querySelector("[data-bot-repo]")?.value?.trim() || "";
+                const branch = document.querySelector("[data-bot-branch]")?.value?.trim() || "main";
+                const token = document.querySelector("[data-bot-token]")?.value?.trim() || "";
+                if (!repo) return toast("请填写仓库地址（格式：owner/repo）");
+                const body = { github_repo: repo, github_branch: branch };
+                if (token) body.github_token = token;
+                runBotAction("", body);
+            })
+        );
+        document.querySelectorAll("[data-bot-bind-db]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const databaseName = document.querySelector("[data-bot-dbname]")?.value || "";
+                if (!databaseName) return toast("请选择要绑定的数据库");
+                runBotAction("bind-db", { databaseName });
+            })
+        );
+        document.querySelectorAll("[data-bot-pull]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const json = await runBotAction("pull");
+                if (json?.success) await loadTeamCodeProject(state.data.teamCodeActiveProjectId, true);
+            })
+        );
+        document.querySelectorAll("[data-bot-push]").forEach(btn =>
+            btn.addEventListener("click", () => runBotAction("push"))
+        );
+        document.querySelectorAll("[data-bot-analyze]").forEach(btn =>
+            btn.addEventListener("click", async () => {
+                const projectId = state.data.teamCodeActiveProjectId;
+                if (!projectId) return;
+                state.data.teamBotLoading = true;
+                render();
+                try {
+                    const json = await request(`/api/team-code/projects/${projectId}/bot/analyze`, {
+                        method: "POST",
+                        body: JSON.stringify({})
+                    });
+                    state.data.teamBotReport = json.data?.report || "";
+                    toast("机器人已读取代码与需求");
+                } catch (e) {
+                    toast(e.message || "机器人读取失败");
+                } finally {
+                    state.data.teamBotLoading = false;
+                    render();
+                }
+            })
+        );
+        document.querySelectorAll("[data-bot-member-add]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const username = document.querySelector("[data-bot-member-select]")?.value || "";
+                if (!username) return toast("请选择要授权的人员");
+                const perms = Array.from(document.querySelectorAll("[data-bot-perm]:checked")).map(el => el.value);
+                runBotAction("members", {
+                    username,
+                    can_pull: perms.includes("can_pull"),
+                    can_push: perms.includes("can_push"),
+                    can_bind: perms.includes("can_bind"),
+                    can_toggle: perms.includes("can_toggle")
+                });
+            })
+        );
+        document.querySelectorAll("[data-bot-perm-flip]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const [memberId, key, next] = String(btn.dataset.botPermFlip).split(":");
+                const member = (state.data.teamBot?.members || []).find(m => Number(m.id) === Number(memberId));
+                if (!member || !key) return;
+                // 接口为整行 upsert，需携带全部权限，避免只传一项把其余权限重置为 0
+                const body = {
+                    username: member.username,
+                    can_pull: Number(member.can_pull) === 1,
+                    can_push: Number(member.can_push) === 1,
+                    can_bind: Number(member.can_bind) === 1,
+                    can_toggle: Number(member.can_toggle) === 1
+                };
+                body[key] = next === "1";
+                runBotAction("members", body);
+            })
+        );
+        document.querySelectorAll("[data-bot-member-remove]").forEach(btn =>
+            btn.addEventListener("click", () =>
+                runBotAction(`members/${btn.dataset.botMemberRemove}`, undefined, { method: "DELETE" })
+            )
+        );
+
+        // ===== 代码机器人悬浮球 =====
+        document.querySelectorAll("[data-botwidget-toggle]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.botWidgetOpen = !state.data.botWidgetOpen;
+                render();
+                if (state.data.botWidgetOpen && !state.data.botWidgetProjectId) {
+                    (async () => {
+                        try {
+                            const json = await request("/api/team-code/summary");
+                            const projects = json.data?.projects || [];
+                            state.data.botWidgetProjects = projects;
+                            state.data.botWidgetProjectId = projects[0]?.id || "";
+                            if (!projects.length) {
+                                botWidgetSay("bot", "你还没有可操作的团队项目，请先在「团队项目」中创建或加入一个项目。");
+                                render();
+                                return;
+                            }
+                            await loadBotWidget();
+                        } catch (e) {
+                            botWidgetSay("bot", e.message || "项目列表加载失败");
+                            render();
+                        }
+                    })();
+                }
+            })
+        );
+        document.querySelectorAll("[data-botwidget-project]").forEach(el =>
+            el.addEventListener("change", () => {
+                state.data.botWidgetProjectId = Number(el.value) || "";
+                state.data.botWidget = null;
+                if (state.data.botWidgetProjectId) loadBotWidget();
+            })
+        );
+        document.querySelectorAll("[data-botwidget-advanced]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                state.data.botWidgetAdvanced = !state.data.botWidgetAdvanced;
+                render();
+            })
+        );
+        document.querySelectorAll("[data-botwidget-action]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const action = btn.dataset.botwidgetAction;
+            if (action === "toggle") return runBotWidgetAction("toggle");
+            if (action === "analyze")
+                return runBotWidgetAction("analyze", {}, "读取项目的代码与需求", {
+                    fallbackText: "读取完成",
+                    describe: json =>
+                        json.data?.stats ? `（代码 ${json.data.stats.files} 个文件 · 需求 ${json.data.stats.briefs} 条）` : ""
+                });
+                if (action === "pull") return runBotWidgetAction("pull", {}, "拉取 GitHub 代码到项目", {
+                    describe: json => (json.data?.saved !== undefined ? `（${json.data.saved}/${json.data.total} 个文件）` : "")
+                });
+                if (action === "push") return runBotWidgetAction("push", {}, "推送项目代码到 GitHub", {
+                    describe: json => (json.data?.pushed !== undefined ? `（${json.data.pushed}/${json.data.total} 个文件）` : "")
+                });
+                if (action === "bind-db") {
+                    const databaseName = document.querySelector("[data-botwidget-dbname]")?.value || "edu_smart";
+                    return runBotWidgetAction("bind-db", { databaseName }, "绑定数据库", {
+                        describe: json => (json.data?.tables ? `（${json.data.tables.length} 张表）` : "")
+                    });
+                }
+            })
+        );
+        document.querySelectorAll("[data-botwidget-save-github]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const repo = document.querySelector("[data-botwidget-repo]")?.value?.trim() || "";
+                if (!repo) return toast("请填写仓库地址（格式：owner/repo）");
+                const branch = document.querySelector("[data-botwidget-branch]")?.value?.trim() || "main";
+                const token = document.querySelector("[data-botwidget-token]")?.value?.trim() || "";
+                const body = { github_repo: repo, github_branch: branch };
+                if (token) body.github_token = token;
+                runBotWidgetAction("", body, "保存 GitHub 绑定");
+            })
+        );
+        document.querySelectorAll("[data-botwidget-member-add]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const username = document.querySelector("[data-botwidget-member-select]")?.value || "";
+                if (!username) return toast("请选择要授权的人员");
+                const perms = Array.from(document.querySelectorAll("[data-botwidget-perm]:checked")).map(el => el.value);
+                runBotWidgetAction(
+                    "members",
+                    {
+                        username,
+                        can_pull: perms.includes("can_pull"),
+                        can_push: perms.includes("can_push"),
+                        can_bind: perms.includes("can_bind"),
+                        can_toggle: perms.includes("can_toggle")
+                    },
+                    `给 ${username} 更新机器人权限`
+                );
+            })
+        );
+        document.querySelectorAll("[data-botwidget-perm-flip]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const [memberId, key, next] = String(btn.dataset.botwidgetPermFlip).split(":");
+                const member = (state.data.botWidget?.members || []).find(m => Number(m.id) === Number(memberId));
+                if (!member || !key) return;
+                // 接口为整行 upsert，需携带全部权限，避免只传一项把其余权限重置为 0
+                const body = {
+                    username: member.username,
+                    can_pull: Number(member.can_pull) === 1,
+                    can_push: Number(member.can_push) === 1,
+                    can_bind: Number(member.can_bind) === 1,
+                    can_toggle: Number(member.can_toggle) === 1
+                };
+                body[key] = next === "1";
+                runBotWidgetAction("members", body, `更新 ${member.username} 的「${{ can_pull: "拉取", can_push: "推送", can_bind: "绑库", can_toggle: "开关" }[key]}」权限`);
+            })
+        );
+        document.querySelectorAll("[data-botwidget-member-remove]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const member = (state.data.botWidget?.members || []).find(m => Number(m.id) === Number(btn.dataset.botwidgetMemberRemove));
+                runBotWidgetAction(`members/${btn.dataset.botwidgetMemberRemove}`, undefined, `移除 ${member?.username || "该成员"} 的机器人权限`, { method: "DELETE" });
+            })
+        );
+        // 消息流滚到底部
+        const botwStream = document.querySelector("[data-botwidget-stream]");
+        if (botwStream) botwStream.scrollTop = botwStream.scrollHeight;
+
+        // ===== API 绑定机器人悬浮球 =====
+        // 实时校验：按所选服务商预设检查 Key 类型与模型标识，给出引导提示
+        function apiwCollectWarnings() {
+            const preset = apiPresetByKey(document.getElementById("apiw_preset")?.value || state.data.apiWidgetPreset || "xfyun");
+            const key = document.getElementById("apiw_key")?.value?.trim() || "";
+            const model = document.getElementById("apiw_model")?.value?.trim() || "";
+            const baseUrl = document.getElementById("apiw_baseurl")?.value?.trim() || "";
+            const warns = [];
+            if (!baseUrl) warns.push({ block: true, text: preset.baseUrl ? `请填写接口地址（${preset.name} 使用 ${preset.baseUrl}）` : "请填写接口地址" });
+            else if (!/^https?:\/\//i.test(baseUrl)) warns.push({ block: true, text: "接口地址需以 http(s):// 开头，请检查格式。" });
+            if (!model) warns.push({ block: true, text: `请输入模型名称${preset.models.length ? `（${preset.name} 常用：${preset.models.join("、")}）` : ""}` });
+            if (typeof preset.check === "function") warns.push(...preset.check(key, model));
+            return warns;
+        }
+        function apiwRenderValidate() {
+            const box = document.getElementById("apiw_validate");
+            if (!box) return;
+            const warns = apiwCollectWarnings();
+            if (!warns.length) {
+                box.innerHTML = "";
+                return;
+            }
+            box.innerHTML = warns.map(w => `<div class="apiw-validate ${w.block ? "block" : "warn"}">${w.block ? "⛔" : "💡"} ${escapeHtml(w.text)}</div>`).join("");
+        }
+        document.getElementById("apiw_preset")?.addEventListener("change", e => {
+            state.data.apiWidgetPreset = e.target.value;
+            state.data.apiWidgetTestResult = "";
+            render(); // 重渲染后按预设自动填充地址、模型候选与引导文案
+        });
+        ["apiw_key", "apiw_model", "apiw_baseurl"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("input", apiwRenderValidate);
+        });
+        apiwRenderValidate();
+        document.querySelectorAll("[data-apiwidget-toggle]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.apiWidgetOpen = !state.data.apiWidgetOpen;
+                state.data.apiWidgetTestResult = "";
+                render();
+                if (state.data.apiWidgetOpen && !state.data.apiWidgetLoaded) {
+                    state.data.apiWidgetLoaded = true;
+                    request("/api/api-binding")
+                        .then(json => {
+                            state.data.apiWidgetData = json.data || null;
+                            render();
+                        })
+                        .catch(() => {});
+                }
+            })
+        );
+        document.querySelectorAll("[data-apiwidget-toggle-enabled]").forEach(el =>
+            el.addEventListener("click", async () => {
+                state.data.apiWidgetLoading = true;
+                render();
+                try {
+                    const json = await request("/api/api-binding/toggle", { method: "POST" });
+                    toast(json.message || "操作成功");
+                    state.data.apiWidgetData = json.data || null;
+                } catch (e) {
+                    toast(e.message || "操作失败");
+                }
+                state.data.apiWidgetLoading = false;
+                render();
+            })
+        );
+        document.getElementById("apiw_save")?.addEventListener("click", async () => {
+            // 保存前校验：阻断性错误直接引导用户修正
+            const blocking = apiwCollectWarnings().filter(w => w.block);
+            if (blocking.length) {
+                toast(blocking[0].text);
+                apiwRenderValidate();
+                return;
+            }
+            const payload = {
+                provider: document.getElementById("apiw_provider")?.value?.trim() || "openai-compatible",
+                baseUrl: document.getElementById("apiw_baseurl")?.value?.trim() || "",
+                modelName: document.getElementById("apiw_model")?.value?.trim() || "",
+                modelVersion: document.getElementById("apiw_version")?.value?.trim() || "",
+                apiKey: document.getElementById("apiw_key")?.value?.trim() || ""
+            };
+            if (!payload.modelName) return toast("请输入模型名称");
+            if (!payload.baseUrl) return toast("请输入接口地址");
+            state.data.apiWidgetLoading = true;
+            render();
+            try {
+                const json = await request("/api/api-binding", { method: "POST", body: JSON.stringify(payload) });
+                toast(json.message || "绑定成功");
+                state.data.apiWidgetData = json.data || null;
+                document.getElementById("apiw_key").value = "";
+            } catch (e) {
+                toast(e.message || "绑定失败");
+            }
+            state.data.apiWidgetLoading = false;
+            render();
+        });
+        document.getElementById("apiw_test")?.addEventListener("click", async () => {
+            state.data.apiWidgetTesting = true;
+            state.data.apiWidgetTestResult = "正在测试连接...";
+            render();
+            try {
+                const json = await request("/api/api-binding/test", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        apiKey: document.getElementById("apiw_key")?.value?.trim() || "",
+                        baseUrl: document.getElementById("apiw_baseurl")?.value?.trim() || "",
+                        modelName: document.getElementById("apiw_model")?.value?.trim() || "",
+                        modelVersion: document.getElementById("apiw_version")?.value?.trim() || ""
+                    })
+                });
+                state.data.apiWidgetTestResult = (json.success ? "[成功] " : "[失败] ") + (json.message || "") + (json.data?.reply ? `\n模型回复：${json.data.reply}` : "");
+                if (json.success) {
+                    // 测试成功即自动保存当前表单配置，避免"测试通过但未保存导致正式调用仍用旧密钥"的陷阱
+                    const payload = {
+                        provider: document.getElementById("apiw_provider")?.value?.trim() || "openai-compatible",
+                        baseUrl: document.getElementById("apiw_baseurl")?.value?.trim() || "",
+                        modelName: document.getElementById("apiw_model")?.value?.trim() || "",
+                        modelVersion: document.getElementById("apiw_version")?.value?.trim() || "",
+                        apiKey: document.getElementById("apiw_key")?.value?.trim() || ""
+                    };
+                    if (payload.baseUrl && payload.modelName) {
+                        try {
+                            const saved = await request("/api/api-binding", { method: "POST", body: JSON.stringify(payload) });
+                            state.data.apiWidgetData = saved.data || null;
+                            document.getElementById("apiw_key").value = "";
+                            state.data.apiWidgetTestResult += "\n绑定已自动保存，全站 AI 功能即刻生效。";
+                            toast("测试成功，绑定已保存");
+                        } catch (se) {
+                            state.data.apiWidgetTestResult += `\n（自动保存失败：${se.message}，请手动点击「更新绑定」）`;
+                        }
+                    }
+                }
+            } catch (e) {
+                state.data.apiWidgetTestResult = `[失败] ${e.message}`;
+            }
+            state.data.apiWidgetTesting = false;
+            render();
+        });
+        document.getElementById("apiw_unbind")?.addEventListener("click", async () => {
+            if (!confirm("确定解除 API 绑定？")) return;
+            state.data.apiWidgetLoading = true;
+            render();
+            try {
+                const json = await request("/api/api-binding", { method: "DELETE" });
+                toast(json.message || "已解绑");
+                state.data.apiWidgetData = null;
+                state.data.apiWidgetTestResult = "";
+            } catch (e) {
+                toast(e.message || "解绑失败");
+            }
+            state.data.apiWidgetLoading = false;
+            render();
+        });
+
+        // ===== 悬浮小组件显示开关 =====
+        document.querySelectorAll("[data-float-hide]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const key = btn.dataset.floatHide;
+                setFloatWidgetPref(key, false);
+                if (key === "bot") state.data.botWidgetOpen = false;
+                if (key === "assistant") state.data.floatingAgentOpen = false;
+                if (key === "apibind") state.data.apiWidgetOpen = false;
+                if (key === "knowledge") state.data.knowledgeWidgetOpen = false;
+                toast("悬浮球已隐藏，可在「账户设置 → 桌面小组件」重新开启");
+                render();
+            })
+        );
+        document.querySelectorAll("[data-float-toggle]").forEach(el =>
+            el.addEventListener("click", () => {
+                const key = el.dataset.floatToggle;
+                const visible = !floatWidgetPrefs()[key];
+                setFloatWidgetPref(key, visible);
+                if (!visible) {
+                    if (key === "bot") state.data.botWidgetOpen = false;
+                    if (key === "assistant") state.data.floatingAgentOpen = false;
+                    if (key === "apibind") state.data.apiWidgetOpen = false;
+                    if (key === "knowledge") state.data.knowledgeWidgetOpen = false;
+                }
+                render();
+            })
+        );
+
+        // ===== 知识库机器人悬浮球事件 =====
+        document.querySelectorAll("[data-knowledgewidget-toggle]").forEach(el =>
+            el.addEventListener("click", () => {
+                state.data.knowledgeWidgetOpen = !state.data.knowledgeWidgetOpen;
+                render();
+            })
+        );
+        document.querySelectorAll("[data-knowledgewidget-input]").forEach(el =>
+            el.addEventListener("input", () => {
+                state.data.knowledgeWidgetInput = el.value;
+            })
+        );
+        document.querySelectorAll("[data-knowledgewidget-input]").forEach(el =>
+            el.addEventListener("keydown", e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    runKnowledgeAsk(el.value);
+                }
+            })
+        );
+        document.querySelectorAll("[data-knowledgewidget-send]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const input = document.querySelector("[data-knowledgewidget-input]");
+                runKnowledgeAsk(input?.value || "");
+            })
+        );
+        document.querySelectorAll("[data-knowledgewidget-suggest]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                runKnowledgeAsk(btn.dataset.knowledgewidgetSuggest || "");
+            })
+        );
+
         document.querySelectorAll("[data-team-tool-task]").forEach(el =>
             el.addEventListener("input", () => {
                 state.data.teamCodeToolTask = el.value;
@@ -18321,11 +21061,14 @@ zhaoliu,赵六"></textarea>
                 el.classList.add("is-loading");
                 try {
                     const apiMode = mode === "onlineExam" ? "exam" : mode;
+                    // 任务闭环：携带练习上下文里的任务 id，达标后后端自动完成任务
+                    const taskId = state.data.practiceContext?.taskId || null;
                     const result = await request("/api/app/practice/submit-set", {
                         method: "POST",
                         body: JSON.stringify({
                             mode: apiMode,
                             answers,
+                            taskId,
                             learningGoalId: state.data.learningLoop?.goal?.id || state.data.learningLoop?.goalId || null
                         })
                     });
@@ -18337,15 +21080,25 @@ zhaoliu,赵六"></textarea>
                         state.data.studyPlan = null;
                     }
                     state.data.notesCenter = null;
-                    const subject = mode === "test" ? state.data.selectedSubject : "all";
+                    const subject = assessmentSubject(mode);
                     const key = `${mode}:${subject}`;
                     state.data.questionSets[key] = { ...(state.data.questionSets[key] || {}), result };
                     state.data.assessmentStarted[mode] = true;
                     delete state.data.assessmentTimers[key];
+                    // 提交后清上下文并刷新任务/周历/路径，防止重复打卡
+                    const wasTaskDone = Boolean(result.taskMarkedDone);
+                    state.data.practiceContext = null;
+                    state.data.pathCenter = null;
+                    state.data.studyPlan = null;
                     await loadData(true);
+                    try {
+                        await loadStudyPlan(true);
+                    } catch (e) {
+                        /* 学习中心数据下一轮 render 时兜底 */
+                    }
                     state.data.account = null;
                     render();
-                    toast(`提交成功，得分 ${result.score}`);
+                    toast(wasTaskDone ? `提交成功，得分 ${result.score}，今日任务已完成` : `提交成功，得分 ${result.score}`);
                 } catch (error) {
                     toast(error.message);
                 } finally {
@@ -18886,6 +21639,37 @@ zhaoliu,赵六"></textarea>
                     toast("个人信息已更新");
                 } catch (error) {
                     toast(error.message);
+                }
+            })
+        );
+        document.querySelectorAll("[data-avatar-pick]").forEach(btn =>
+            btn.addEventListener("click", () => {
+                const input = btn.closest(".avatar-upload")?.querySelector("[data-avatar-input]");
+                if (input) input.click();
+            })
+        );
+        document.querySelectorAll("[data-avatar-input]").forEach(input =>
+            input.addEventListener("change", async () => {
+                const file = input.files && input.files[0];
+                input.value = "";
+                if (!file) return;
+                if (!/^image\//.test(file.type)) return toast("请选择图片文件");
+                if (file.size > 5 * 1024 * 1024) return toast("图片大小不能超过 5MB");
+                try {
+                    const dataUrl = await compressAvatar(file, 256);
+                    await request("/api/user/avatar", {
+                        method: "POST",
+                        body: JSON.stringify({ avatar: dataUrl })
+                    });
+                    state.user = { ...state.user, avatar: dataUrl };
+                    localStorage.setItem("edusmart_user", JSON.stringify(state.user));
+                    state.data.account = null;
+                    state.loaded = false;
+                    await loadAccount(true);
+                    render();
+                    toast("头像已更新");
+                } catch (error) {
+                    toast(error.message || "头像上传失败");
                 }
             })
         );
@@ -21048,6 +23832,202 @@ zhaoliu,赵六"></textarea>
                     }
                 </div>
             </section>`;
+            if (codexPanel === "briefs") {
+                const briefs = state.data.teamBriefs || [];
+                const activeId = state.data.teamBriefActive ?? (briefs[0]?.id ?? "new");
+                const active = briefs.find(b => Number(b.id) === Number(activeId));
+                // 优先用编辑中的 draft；否则从后端 description 解析结构化数据
+                const draft = state.data.teamBriefDraft || {};
+                const briefTitle = draft.title ?? active?.title ?? "";
+                const briefRawDesc = draft.description ?? active?.description ?? "";
+                const briefOptimized = draft.optimized ?? active?.optimized ?? "";
+                const functional = Array.isArray(draft.functional)
+                    ? draft.functional
+                    : parseBriefDescription(active?.description || "").functional;
+                const nonFunctional = Array.isArray(draft.nonFunctional)
+                    ? draft.nonFunctional
+                    : parseBriefDescription(active?.description || "").nonFunctional;
+                const rawDescription = draft.__structured === false || !draft.functional
+                    ? briefRawDesc
+                    : (draft.description || "");
+                const funcCards = functional.map((f, idx) => `
+                    <div class="brief-req-card" data-brief-func-id="${escapeAttr(f.id)}">
+                        <div class="brief-req-head">
+                            <span class="brief-req-index">F${idx + 1}</span>
+                            <select class="brief-req-dir" data-brief-func-field="direction" data-brief-func-id="${escapeAttr(f.id)}">
+                                ${BRIEF_FUNC_DIRECTIONS.map(d => `<option value="${escapeAttr(d)}" ${String(f.direction) === d ? "selected" : ""}>${escapeHtml(d)}</option>`).join("")}
+                            </select>
+                            <input class="brief-req-title" data-brief-func-field="title" data-brief-func-id="${escapeAttr(f.id)}" placeholder="需求点标题，如：导出学习进度按钮" value="${escapeHtml(f.title || "")}">
+                            <label class="brief-flow-toggle">
+                                <input type="checkbox" data-brief-func-field="isFlow" data-brief-func-id="${escapeAttr(f.id)}" ${f.isFlow ? "checked" : ""}>
+                                <span>流程性</span>
+                            </label>
+                            <button class="brief-req-del" data-brief-func-del="${escapeAttr(f.id)}" title="删除">${icon("x", 14)}</button>
+                        </div>
+                        <textarea class="brief-req-desc" data-brief-func-field="description" data-brief-func-id="${escapeAttr(f.id)}" placeholder="详细描述这个需求点要做什么、解决什么问题">${escapeHtml(f.description || "")}</textarea>
+                        ${f.isFlow ? `<textarea class="brief-req-steps" data-brief-func-field="steps" data-brief-func-id="${escapeAttr(f.id)}" placeholder="流程步骤（每行一步，如：点击导出按钮 → 选择导出格式 → 下载文件）">${escapeHtml(f.steps || "")}</textarea>` : ""}
+                    </div>`).join("");
+                const nonFuncCards = nonFunctional.map((n, idx) => `
+                    <div class="brief-req-card nonfunc" data-brief-nonfunc-id="${escapeAttr(n.id)}">
+                        <div class="brief-req-head">
+                            <span class="brief-req-index nf">NF${idx + 1}</span>
+                            <select class="brief-req-dir" data-brief-nonfunc-field="direction" data-brief-nonfunc-id="${escapeAttr(n.id)}">
+                                ${BRIEF_NONFUNC_DIRECTIONS.map(d => `<option value="${escapeAttr(d)}" ${String(n.direction) === d ? "selected" : ""}>${escapeHtml(d)}</option>`).join("")}
+                            </select>
+                            <button class="brief-req-del" data-brief-nonfunc-del="${escapeAttr(n.id)}" title="删除">${icon("x", 14)}</button>
+                        </div>
+                        <textarea class="brief-req-desc" data-brief-nonfunc-field="description" data-brief-nonfunc-id="${escapeAttr(n.id)}" placeholder="描述该非功能需求的具体要求，如：列表加载应在 1 秒内返回">${escapeHtml(n.description || "")}</textarea>
+                    </div>`).join("");
+                return `<section class="team-main-panel team-brief-panel">
+                <div class="team-main-head"><h2>${icon("edit", 20)}需求描述</h2><small>按「功能需求 / 非功能需求 × 流程性 / 非流程性」结构化录入，方向细化到按钮、表单、数据等，AI 会基于此生成可落地的需求说明</small><button class="btn ghost" data-brief-new>${icon("plus", 15)}新增需求</button></div>
+                <div class="team-brief-layout">
+                    <div class="team-brief-list">
+                        ${
+                            briefs.length
+                                ? briefs
+                                      .map(
+                                          b => `<button class="team-brief-item ${Number(b.id) === Number(activeId) ? "active" : ""}" data-brief-select="${b.id}"><b>${escapeHtml(b.title || "未命名需求")}</b><small>${b.optimized ? "已优化" : "草稿"} · ${formatDate(b.updated_at)}</small></button>`
+                                      )
+                                      .join("")
+                                : `<p class="team-brief-empty">暂无需求，点击右上角“新增需求”开始描述。</p>`
+                        }
+                    </div>
+                    <div class="team-brief-editor">
+                        <input class="input" data-brief-title placeholder="需求标题，如：新增学习进度导出功能" value="${escapeHtml(briefTitle)}">
+
+                        <div class="brief-section">
+                            <div class="brief-section-head">
+                                <h3>${icon("layers", 16)}功能需求</h3>
+                                <span class="brief-section-hint">流程性需求可填写交互步骤</span>
+                                <button class="btn tiny ghost" data-brief-add-func>${icon("plus", 13)}添加功能需求</button>
+                            </div>
+                            <div class="brief-req-list">
+                                ${funcCards || `<p class="brief-empty-hint">暂无功能需求，点击「添加功能需求」开始录入。</p>`}
+                            </div>
+                        </div>
+
+                        <div class="brief-section">
+                            <div class="brief-section-head">
+                                <h3>${icon("shield", 16)}非功能需求</h3>
+                                <span class="brief-section-hint">性能、安全、兼容、可用性等约束</span>
+                                <button class="btn tiny ghost" data-brief-add-nonfunc>${icon("plus", 13)}添加非功能需求</button>
+                            </div>
+                            <div class="brief-req-list">
+                                ${nonFuncCards || `<p class="brief-empty-hint">暂无非功能需求，点击「添加非功能需求」开始录入。</p>`}
+                            </div>
+                        </div>
+
+                        <div class="brief-section">
+                            <div class="brief-section-head">
+                                <h3>${icon("file-text", 16)}原始描述</h3>
+                                <span class="brief-section-hint">快速录入或补充说明（与上面结构化内容一并保存）</span>
+                            </div>
+                            <textarea class="team-brief-textarea" data-brief-desc placeholder="也可直接粘贴一段原始需求描述，AI 优化会综合以上结构化内容与本描述一起处理。">${escapeHtml(rawDescription || "")}</textarea>
+                        </div>
+
+                        <div class="team-brief-actions">
+                            <button class="btn primary" data-brief-ai ${state.data.teamBriefAi ? "disabled" : ""}>${icon("zap", 15)}${state.data.teamBriefAi ? "AI 优化中..." : "AI 优化需求"}</button>
+                            <button class="btn ghost" data-brief-save ${state.data.teamBriefSaving ? "disabled" : ""}>${icon("save", 15)}保存需求</button>
+                            ${active ? `<button class="btn ghost team-brief-delete" data-brief-delete="${active.id}">${icon("trash", 15)}删除</button>` : ""}
+                            <span class="ai-provider-tag">${escapeHtml(boundAiProviderName())} · AI 智能助手</span>
+                        </div>
+                        ${
+                            briefOptimized
+                                ? `<div class="team-brief-optimized"><div class="team-brief-opt-head"><b>AI 优化结果</b><button class="btn ghost tiny" data-brief-adopt>采用优化稿</button></div><textarea class="team-brief-textarea" data-brief-optimized>${escapeHtml(briefOptimized)}</textarea></div>`
+                                : ""
+                        }
+                    </div>
+                </div>
+            </section>`;
+            }
+            if (codexPanel === "bot") {
+                const botData = state.data.teamBot;
+                const bot = botData?.bot || { enabled: 0, github_repo: "", github_branch: "main", github_token: "", database_name: "", name: "CodeBot" };
+                const access = botData?.access || {};
+                const botMembers = botData?.members || [];
+                const botLoading = state.data.teamBotLoading;
+                const assignableUsers = [...new Map(members.filter(m => m.user_id && m.username).map(m => [m.user_id, m.username])).entries()];
+                const dbOptions = [{ name: "edu_smart", label: "EduSmart 主库" }];
+                const permLabels = { can_pull: "拉取", can_push: "推送", can_bind: "绑库", can_toggle: "开关" };
+                const pullEnabled = bot.enabled && (access.canPull || access.isOwner);
+                const pushEnabled = bot.enabled && (access.canPush || access.isOwner);
+                const bindEnabled = bot.enabled && (access.canBind || access.isOwner);
+                const canAnalyze = bot.enabled && (access.isOwner || access.member);
+                return `<section class="team-main-panel team-bot-panel">
+                <div class="team-main-head">
+                    <h2>${icon("robot", 20)}${escapeHtml(bot.name || "CodeBot")}</h2>
+                    <small>${bot.enabled ? "运行中" : "已停用"} · ${access.isOwner ? "项目创建者（全部权限）" : access.member ? "按分配权限操作" : "未分配权限"}</small>
+                    ${
+                        access.canToggle
+                            ? `<button class="btn ${bot.enabled ? "ghost" : "primary"}" data-bot-toggle ${botLoading ? "disabled" : ""}>${icon("zap", 15)}${bot.enabled ? "关闭机器人" : "开启机器人"}</button>`
+                            : `<span class="bot-switch-tag ${bot.enabled ? "on" : "off"}">${bot.enabled ? "已开启" : "已关闭"}</span>`
+                    }
+                </div>
+                <div class="team-bot-grid">
+                    <div class="team-bot-card">
+                        <h3>${icon("git", 16)}GitHub 绑定</h3>
+                        <input class="input" data-bot-repo placeholder="仓库地址，如：owner/repo" value="${escapeHtml(bot.github_repo || "")}" ${access.canConfig ? "" : "disabled"}>
+                        <input class="input" data-bot-branch placeholder="分支，默认 main" value="${escapeHtml(bot.github_branch || "main")}" ${access.canConfig ? "" : "disabled"}>
+                        <input class="input" type="password" data-bot-token placeholder="${bot.github_token ? "Token 已配置，输入可覆盖" : "Token（推送 / 私有仓库需要）"}" value="" ${access.canConfig ? "" : "disabled"}>
+                        <div class="team-bot-hint">${bot.github_token ? "已配置 Token" : "未配置 Token：公开仓库可拉取，推送需 Token"}</div>
+                        ${access.canConfig ? `<button class="btn primary" data-bot-save-github ${botLoading ? "disabled" : ""}>${icon("save", 14)}保存 GitHub 绑定</button>` : `<div class="team-bot-hint">仅项目创建者可修改绑定</div>`}
+                    </div>
+                    <div class="team-bot-card">
+                        <h3>${icon("database", 16)}数据库绑定</h3>
+                        <select class="input" data-bot-dbname ${bindEnabled ? "" : "disabled"}>
+                            <option value="">请选择数据库</option>
+                            ${dbOptions.map(db => `<option value="${db.name}" ${bot.database_name === db.name ? "selected" : ""}>${db.label}</option>`).join("")}
+                        </select>
+                        <div class="team-bot-hint">${bot.database_name ? `当前绑定：${escapeHtml(bot.database_name)}` : "尚未绑定数据库"}</div>
+                        <button class="btn primary" data-bot-bind-db ${bindEnabled && !botLoading ? "" : "disabled"}>${icon("database", 14)}一键绑定数据库</button>
+                    </div>
+                    <div class="team-bot-card">
+                        <h3>${icon("zap", 16)}机器人动作</h3>
+                        <div class="team-bot-actions">
+                            <button class="btn primary" data-bot-pull ${pullEnabled && !botLoading ? "" : "disabled"}>${icon("download", 14)}一键拉取代码</button>
+                            <button class="btn primary" data-bot-push ${pushEnabled && !botLoading ? "" : "disabled"}>${icon("upload", 14)}一键推送代码</button>
+                            <button class="btn ghost" data-bot-analyze ${canAnalyze && !botLoading ? "" : "disabled"}>${icon("search", 14)}读取代码与需求</button>
+                        </div>
+                        <div class="team-bot-hint">上次拉取：${bot.last_pull_at ? escapeHtml(String(bot.last_pull_at).replace("T", " ").slice(0, 19)) : "从未"} · 上次推送：${bot.last_push_at ? escapeHtml(String(bot.last_push_at).replace("T", " ").slice(0, 19)) : "从未"}</div>
+                    </div>
+                    <div class="team-bot-card team-bot-members">
+                        <h3>${icon("users", 16)}人员与权限</h3>
+                        ${
+                            access.canManage
+                                ? `<div class="team-bot-assign">
+                                <select class="input" data-bot-member-select>
+                                    ${assignableUsers.length ? assignableUsers.map(([id, name]) => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("") : `<option value="">项目暂无成员</option>`}
+                                </select>
+                                <div class="team-bot-perm-checks">
+                                    <label><input type="checkbox" data-bot-perm value="can_pull" checked>拉取</label>
+                                    <label><input type="checkbox" data-bot-perm value="can_push">推送</label>
+                                    <label><input type="checkbox" data-bot-perm value="can_bind">绑库</label>
+                                    <label><input type="checkbox" data-bot-perm value="can_toggle">开关</label>
+                                </div>
+                                <button class="btn ghost" data-bot-member-add ${botLoading ? "disabled" : ""}>添加 / 更新权限</button>
+                            </div>`
+                                : ""
+                        }
+                        <div class="team-bot-member-list">
+                            ${
+                                botMembers.length
+                                    ? botMembers
+                                          .map(
+                                              m => `<div class="team-bot-member"><b>${escapeHtml(m.username || `用户${m.user_id}`)}</b><div class="team-bot-member-perms">${["can_pull", "can_push", "can_bind", "can_toggle"]
+                                                  .map(
+                                                      k => `<button class="bot-perm-chip ${Number(m[k]) === 1 ? "on" : ""}" data-bot-perm-flip="${m.id}:${k}:${Number(m[k]) === 1 ? 0 : 1}" ${access.canManage && !botLoading ? "" : "disabled"}>${permLabels[k]}</button>`
+                                                  )
+                                                  .join("")}${access.canManage ? `<button class="bot-perm-remove" data-bot-member-remove="${m.id}" ${botLoading ? "disabled" : ""}>移除</button>` : ""}</div></div>`
+                                          )
+                                          .join("")
+                                    : `<p>尚未分配人员；项目创建者默认拥有全部权限。</p>`
+                            }
+                        </div>
+                    </div>
+                </div>
+                ${state.data.teamBotReport ? `<pre class="team-main-pre team-bot-report">${escapeHtml(state.data.teamBotReport)}</pre>` : ""}
+            </section>`;
+            }
             if (codexPanel === "modules")
                 return `<section class="team-main-panel">
                 <div class="team-main-head"><h2>${icon("layers", 20)}模块开发卡片</h2><small>按开发颗粒度查看进度</small></div>
@@ -21109,11 +24089,15 @@ zhaoliu,赵六"></textarea>
                 <button class="team-codex-side-action ghost ${codexPanel === "docs" ? "active" : ""}" data-team-screen="docs">${icon("file-text", 17)}项目文档</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "people" ? "active" : ""}" data-team-screen="people">${icon("users", 17)}人员分工</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "requirements" ? "active" : ""}" data-team-screen="requirements">${icon("target", 17)}功能需求</button>
+                <button class="team-codex-side-action ghost ${codexPanel === "briefs" ? "active" : ""}" data-team-screen="briefs">${icon("edit", 17)}需求描述<small>AI 优化需求说明</small></button>
+                <button class="team-codex-side-action ghost ${codexPanel === "bot" ? "active" : ""}" data-team-screen="bot">${icon("robot", 17)}代码机器人<small>GitHub · 数据库 · 权限</small></button>
                 <button class="team-codex-side-action ghost ${codexPanel === "modules" ? "active" : ""}" data-team-screen="modules">${icon("layers", 17)}模块开发</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "collab" ? "active" : ""}" data-team-screen="collab">${icon("message", 17)}协作开发</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "review" ? "active" : ""}" data-team-screen="review">${icon("search", 17)}代码审查</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "tools" ? "active" : ""}" data-team-screen="tools">${icon("external-link", 17)}外部工具</button>
                 <button class="team-codex-side-action ghost ${codexPanel === "logs" ? "active" : ""}" data-team-screen="logs">${icon("history", 17)}过程日志</button>
+                <div class="team-codex-side-divider"></div>
+                <button class="team-codex-side-action ghost" data-view="database">${icon("database", 17)}数据库管理<small>在线查询 · 变更审批</small></button>
             </aside>
 
             <section class="team-codex-chat">
@@ -21222,6 +24206,14 @@ zhaoliu,赵六"></textarea>
                 await loadXfyunCapabilities();
             }
             if (state.view === "studyPlan") await loadStudyPlan();
+            if (state.view === "agentCenter") {
+                // 15 分钟学习计划：加载 Agent 今日任务作为候选
+                try {
+                    await loadPathCenter();
+                } catch (e) {
+                    /* 加载失败时使用薄弱点兜底 */
+                }
+            }
             if (state.view === "aiAssistant") {
                 await loadAiAssistant();
                 await loadAiConfig();
@@ -21236,6 +24228,7 @@ zhaoliu,赵六"></textarea>
                 }
             }
             if (state.view === "smartNotes") await loadNotesCenter();
+            if (state.view === "database") await loadDatabasePage();
             // 打开路径页：若无计划则自动生成；先展示「生成中」，完成后再刷新
             if (state.view === "path") {
                 try {
@@ -21264,7 +24257,14 @@ zhaoliu,赵六"></textarea>
                     console.warn(error.message);
                 }
             }
-            if (state.view === "profile") await loadProfileInsight();
+            // 画像数据：profile 与 home 首页 KPI 都需要真实画像
+            if (state.view === "profile" || state.view === "home") {
+                try {
+                    await loadProfileInsight();
+                } catch (e) {
+                    /* 首页可空态渲染 */
+                }
+            }
             if (state.view === "conceptCanvas" && !state.data._canvases) {
                 try {
                     const json = await request("/api/concept-canvas");
@@ -21371,7 +24371,8 @@ zhaoliu,赵六"></textarea>
                 studentPath: studentPathView,
                 obsidian: obsidianView,
                 ragSearch: ragSearchView,
-                agentCenter: agentCenterView
+                agentCenter: agentCenterView,
+                database: databaseView
             };
             const assessmentViews = { practice: "practice", test: "test", onlineExam: "onlineExam" };
             const activeAssessmentMode = assessmentViews[state.view];
@@ -21391,9 +24392,11 @@ zhaoliu,赵六"></textarea>
             const focusOverlayHtml = isFocusMode ? renderFocusOverlay(room, studyRoomElapsed(room), room.targetMinutes * 60, studyRoomScore(room), room.effect) : "";
             app.innerHTML = focusAssessment
                 ? `<div class="exam-shell">${guideHtml}${pageHtml}</div>${focusOverlayHtml}${algoModalView()}`
-                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}</div>${focusOverlayHtml}${algoModalView()}`;
+                : `<div class="shell">${topbar()}${guideHtml}${pageHtml}${assistantFloat()}${botFloat()}${apiFloat()}${knowledgeFloat()}</div>${focusOverlayHtml}${algoModalView()}`;
             bindEvents();
+            if (state.view === "database") bindDatabaseEvents();
             syncMembershipFunTimer();
+            syncSprint15Timer();
             syncAssessmentClock();
             if (!window._studyRoomTimerActive) {
                 syncStudyRoomTimer();
@@ -21738,58 +24741,6 @@ zhaoliu,赵六"></textarea>
                     { target: "算法实践", action: "做3道简单算法题", priority: "medium" }
                 ]
             }
-        };
-    }
-
-    function getMockProfileInsight() {
-        return {
-            persona: "稳步成长型学习者",
-            summary: {
-                mastery: 78,
-                accuracy: 82,
-                efficiency: 76,
-                studyHours: 126,
-                completedToday: 6,
-                todayTasks: 8,
-                weakCount: 5,
-                continuousDays: 14
-            },
-            dimensions: [
-                { label: "记忆能力", value: 75 },
-                { label: "理解能力", value: 82 },
-                { label: "应用能力", value: 70 },
-                { label: "分析能力", value: 85 },
-                { label: "创造能力", value: 68 },
-                { label: "评价能力", value: 72 }
-            ],
-            subjectScores: [
-                { subject: "JavaScript", mastery: 85, weakCount: 3, wrongCount: 12 },
-                { subject: "Python", mastery: 78, weakCount: 4, wrongCount: 18 },
-                { subject: "数据结构", mastery: 65, weakCount: 6, wrongCount: 25 },
-                { subject: "数据库", mastery: 72, weakCount: 4, wrongCount: 15 },
-                { subject: "HTML/CSS", mastery: 90, weakCount: 2, wrongCount: 8 },
-                { subject: "前端框架", mastery: 68, weakCount: 5, wrongCount: 20 }
-            ],
-            strongPoints: [
-                { title: "前端开发", subject: "HTML/CSS/JavaScript", mastery: 88 },
-                { title: "快速学习", subject: "技术学习", mastery: 85 },
-                { title: "问题解决", subject: "编程实践", mastery: 80 }
-            ],
-            risks: [
-                { title: "算法基础薄弱", level: "warning", subject: "数据结构", reason: "在排序和查找算法上经常出错" },
-                { title: "异步编程", level: "info", subject: "JavaScript", reason: "Promise链式调用理解不够" }
-            ],
-            recommendations: [
-                { title: "加强算法练习", reason: "提升解决复杂问题的能力", action: "每天练习", target: "practice" },
-                { title: "学习设计模式", reason: "提升代码质量", action: "开始学习", target: "course" },
-                { title: "项目实战", reason: "将知识应用到实际项目中", action: "开始项目", target: "path" }
-            ],
-            tasks: [
-                { id: 1, title: "完成数组练习", subtitle: "算法练习", estimated_minutes: 30, status: "done" },
-                { id: 2, title: "阅读设计模式", subtitle: "学习材料", estimated_minutes: 45, status: "pending" },
-                { id: 3, title: "完成项目模块", subtitle: "项目开发", estimated_minutes: 60, status: "pending" },
-                { id: 4, title: "复习JavaScript", subtitle: "知识点回顾", estimated_minutes: 25, status: "pending" }
-            ]
         };
     }
 

@@ -25,11 +25,15 @@ const { errorHandler } = require('./error-handler');
 const { requestLogger } = require('./request-logger');
 const { rateLimiter } = require('./rate-limit');
 const { validate } = require('./validate');
+const { attachUserBinding } = require('./user-binding');
 
 module.exports = {
   // 认证中间件
   authenticateJWT,
   requireTeacher,
+
+  // 用户 API 绑定注入（AI 功能自动使用用户绑定的模型）
+  attachUserBinding,
 
   // 通用中间件
   errorHandler,

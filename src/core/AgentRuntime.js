@@ -1,6 +1,7 @@
 const config = require("../config");
 const { buildAgentRunMetadata } = require("./AgentRunMetadata");
 const createToolRegistry = require("./agent-tools/createToolRegistry");
+const llmGateway = require("./llm/LlmGateway");
 
 class AgentRuntime {
     constructor(pool) {
@@ -245,7 +246,7 @@ class AgentRuntime {
                     confidence || null
                 ]
             )
-            .catch(() => {});
+            .catch(() => [null]); // 返回可迭代的占位，避免解构 undefined 抛 TypeError
         return result?.insertId;
     }
 
@@ -506,7 +507,7 @@ class AgentRuntime {
             note.noteId ? "今晚复习 AI 任务卡，并标记掌握情况。" : "把今天的错因写成一张复盘卡。"
         ];
 
-        const answer = [
+        const templateAnswer = [
             `我已经把你的目标「${goal}」转成可执行学习闭环。`,
             profile.summary,
             publicSource ? publicSource.summary : "",
@@ -520,6 +521,38 @@ class AgentRuntime {
         ]
             .filter(Boolean)
             .join("\n\n");
+
+        // 优先用大模型生成自然语言回答（自动优先用户绑定的模型）；
+        // 未绑定/调用失败时 llmGateway 返回 fallbackContent（即规则模板），保证功能永远可用
+        let answer = templateAnswer;
+        let llmAnswered = false;
+        try {
+            const llmResult = await llmGateway.chat({
+                messages: [
+                    {
+                        role: "system",
+                        content:
+                            "你是 EduSmart 学习智能体。基于下方提供的真实学习画像与工具执行结果，用中文自然地回应学生的问题或目标。" +
+                            "回答要切题、简洁（200字内优先），直接回应学生说了什么；只有当学生表达了学习意图时才安排学习计划。" +
+                            "不要编造数据，引用给出的数字时保持原样。"
+                    },
+                    {
+                        role: "user",
+                        content: `学生输入：${message}\n\n[学习画像]\n${profile.summary}\n\n[资源匹配]\n${resources.summary}\n\n[练习]\n${practice.summary}\n\n[学习路径]\n${path.summary}${rag ? `\n\n[知识库证据]\n${rag.answer}` : ""}`
+                    }
+                ],
+                temperature: 0.6,
+                maxTokens: 1200,
+                fallbackContent: templateAnswer
+            });
+            if (llmResult.content && llmResult.content.trim()) {
+                answer = llmResult.content.trim();
+                llmAnswered = llmResult.provider !== "fallback";
+            }
+        } catch (llmError) {
+            /* 大模型不可用时保持规则模板回答 */
+        }
+        if (llmAnswered) metadata.plannerSource = "llm";
 
         traces.push(
             await this.recordTrace({

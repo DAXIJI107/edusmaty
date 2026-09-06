@@ -57,6 +57,37 @@ async function callOcrApi(imageBase64) {
 }
 
 // ── 调用本地 LLM 解析试卷文本为结构化题目 ──
+// ── 正则兜底解析：按题号切分，识别选择题选项与答案 ──
+function parseQuestionsWithRegex(rawText) {
+    const text = String(rawText || "").replace(/\r/g, "");
+    // 按 "1." "2)" "（1）" 等题号切分
+    const blocks = text.split(/(?:^|\n)\s*(?:\d+[\.、\)]|（\d+）|\(\d+\))\s*/).filter(b => b.trim());
+    if (blocks.length === 0) return [{ content: text.trim(), type: "short", options: [], answer: "", difficulty: "medium", subject: "" }];
+    return blocks.map(block => {
+        const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+        const joined = lines.join(" ");
+        // 先剥离答案部分，避免选项吞掉答案
+        const ansMatch = joined.match(/(?:答案|正确答案|参考答案)[:：]?\s*([A-Da-d对错√××]+)/i);
+        const answer = ansMatch ? ansMatch[1].trim() : "";
+        const withoutAns = joined.replace(/(?:答案|正确答案|参考答案)[:：]?\s*.+$/i, "").trim();
+        // 提取选项 A. B. C. D.
+        const optRegex = /([A-D])[\.、\)．]\s*([^\n]+?)(?=\s+[A-D][\.、\)．]|$)/g;
+        const options = [];
+        let m;
+        while ((m = optRegex.exec(withoutAns)) !== null) {
+            options.push(m[2].trim().replace(/\s+/g, " "));
+        }
+        // 题干：去掉选项部分
+        let content = withoutAns;
+        if (options.length) {
+            const firstOptIdx = content.search(/[A-D][\.、\)．]/);
+            if (firstOptIdx > 0) content = content.slice(0, firstOptIdx).trim();
+        }
+        const type = options.length >= 2 ? "single" : /(对|错|√|×|是否|是不是)/.test(joined) ? "truefalse" : "fill";
+        return { content, type, options, answer, difficulty: "medium", subject: "" };
+    }).filter(q => q.content);
+}
+
 async function parseQuestionsWithAI(rawText) {
     const prompt = `你是一个专业的试卷解析助手。请根据以下OCR识别出的试卷文本，提取所有题目并格式化为JSON数组。
 
@@ -83,8 +114,8 @@ ${rawText}
         });
     } catch (e) {
         console.error("本地 AI 解析失败:", e.message);
-        // 回退：返回原始文本作为一道简答题
-        return [{ content: rawText, type: "short", options: [], answer: "", difficulty: "medium", subject: "" }];
+        // 回退：正则解析（无 LLM 配置时仍可用）
+        return parseQuestionsWithRegex(rawText);
     }
 
     // 尝试解析 JSON
@@ -108,7 +139,7 @@ ${rawText}
 
 // ── 初始化 paper_scans 表 ──
 async function ensureTable() {
-    await db.execute(`
+    await db.query(`
         CREATE TABLE IF NOT EXISTS paper_scans (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
@@ -147,7 +178,7 @@ router.post("/scan", async (req, res) => {
         // Step 3: 存储扫描记录
         await ensureTable();
         const userId = req.user?.id || 1;
-        const [result] = await db.execute(
+        const [result] = await db.query(
             `INSERT INTO paper_scans (user_id, file_name, ocr_text, parsed_questions) VALUES (?, ?, ?, ?)`,
             [userId, fileName || "paper.jpg", ocrText, JSON.stringify(questions)]
         );
@@ -197,6 +228,30 @@ router.get("/history/:id", async (req, res) => {
     }
 });
 
+// ── POST /parse-text — 纯文本（手动粘贴）直接走 AI 解析，无 OCR 凭证时的兜底 ──
+router.post("/parse-text", async (req, res) => {
+    try {
+        const { text, fileName } = req.body || {};
+        if (!text || !String(text).trim()) {
+            return res.status(400).json({ success: false, message: "请提供试卷文本" });
+        }
+        const questions = await parseQuestionsWithAI(text);
+        await ensureTable();
+        const userId = req.user?.id || 1;
+        const [result] = await db.query(
+            `INSERT INTO paper_scans (user_id, file_name, ocr_text, parsed_questions) VALUES (?, ?, ?, ?)`,
+            [userId, fileName || "text-paper.jpg", text, JSON.stringify(questions)]
+        );
+        res.json({
+            success: true,
+            data: { scanId: result.insertId, fileName: fileName || "text-paper.jpg", ocrText: text, questions }
+        });
+    } catch (error) {
+        console.error("[paper-scan] 文本解析失败:", error.message);
+        res.status(500).json({ success: false, message: "解析失败", error: error.message });
+    }
+});
+
 // ── POST /save — 保存识别的题目到题库 ──
 router.post("/save", async (req, res) => {
     try {
@@ -215,7 +270,7 @@ router.post("/save", async (req, res) => {
             const subject = q.subject || "";
             const score = q.score || 5;
 
-            await db.execute(
+            await db.query(
                 `INSERT INTO questions (content, type, options, answer, difficulty, score, subject, is_active)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
                 [q.content, type, options, answer, difficulty, score, subject]

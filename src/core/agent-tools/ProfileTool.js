@@ -60,6 +60,43 @@ class ProfileTool {
             ? Math.round(weakPoints.reduce((sum, item) => sum + Number(item.mastery || 0), 0) / weakPoints.length)
             : 0;
 
+        // 合并学生手动维护的薄弱点：手动忽略的剔除，手动添加的置顶优先
+        const [overrides] = await this.pool
+            .query("SELECT topic, knowledge_id, kind FROM user_weak_overrides WHERE user_id = ?", [userId])
+            .catch(() => [[]]);
+        if (overrides.length) {
+            const removedTopics = new Set(overrides.filter(o => o.kind === "removed").map(o => o.topic));
+            weakPoints = weakPoints.filter(w => !removedTopics.has(w.title));
+            const existingIds = new Set(weakPoints.map(w => Number(w.id)).filter(Boolean));
+            const existingTitles = new Set(weakPoints.map(w => w.title));
+            const customPoints = [];
+            for (const added of overrides.filter(o => o.kind === "added")) {
+                if (added.knowledge_id && !existingIds.has(Number(added.knowledge_id))) {
+                    const [[kp]] = await this.pool
+                        .query("SELECT id, title, subject, mastery, summary FROM knowledge_points WHERE id = ?", [
+                            added.knowledge_id
+                        ])
+                        .catch(() => [[]]);
+                    if (kp) {
+                        customPoints.push({ ...kp, custom: true });
+                        existingIds.add(Number(kp.id));
+                    }
+                } else if (!added.knowledge_id && !existingTitles.has(added.topic)) {
+                    // 自由文本薄弱点（知识库中无对应节点）：低掌握度占位，推动 Agent 优先安排
+                    customPoints.push({
+                        id: null,
+                        title: added.topic,
+                        subject: "自定义",
+                        mastery: 20,
+                        summary: "你手动标记的薄弱点",
+                        custom: true
+                    });
+                    existingTitles.add(added.topic);
+                }
+            }
+            weakPoints = [...customPoints, ...weakPoints];
+        }
+
         return {
             weakPoints,
             answerStats: {

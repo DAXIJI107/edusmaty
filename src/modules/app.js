@@ -126,6 +126,33 @@ async function ensureNotesSchema() {
     }
 }
 
+// 学生自定义薄弱点覆盖表：
+// added = 学生手动标记"这里薄弱"；removed = 学生认为"我不薄弱"而忽略的自动判定项
+async function ensureWeakOverridesSchema() {
+    if (!(await tableExists("user_weak_overrides"))) {
+        await pool.query(`
+            CREATE TABLE user_weak_overrides (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                topic VARCHAR(200) NOT NULL,
+                knowledge_id INT NULL,
+                kind VARCHAR(10) NOT NULL DEFAULT 'added',
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_weak_override (user_id, topic, kind),
+                INDEX idx_weak_override_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+    }
+}
+
+async function getWeakOverrides(userId) {
+    await ensureWeakOverridesSchema();
+    const [rows] = await pool
+        .query("SELECT id, topic, knowledge_id, kind FROM user_weak_overrides WHERE user_id = ? ORDER BY id", [userId])
+        .catch(() => [[]]);
+    return rows;
+}
+
 function safeJson(value, fallback) {
     if (Array.isArray(value) || (value && typeof value === "object")) return value;
     try {
@@ -383,6 +410,44 @@ async function getOverview(req, res) {
         [userId]
     );
 
+    // 本周一~周日任务完成统计（真实周历，与今日任务同源）
+    // task_date 由 CURDATE() 生成（SQLite 的 'now' 为 UTC），周历必须用同一 UTC 基准，
+    // 否则任务会落在昨天的列上、isToday 与今日任务页对不上
+    const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+    const utcDateKey = d => d.toISOString().slice(0, 10);
+    const now = new Date();
+    const monday = new Date(`${utcDateKey(now)}T00:00:00Z`);
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const [weekRows] = await pool.query(
+        `SELECT task_date, COUNT(*) AS total, SUM(status = 'done') AS done
+         FROM study_tasks
+         WHERE user_id = ? AND task_date >= ? AND task_date <= ?
+         GROUP BY task_date`,
+        [userId, utcDateKey(monday), utcDateKey(sunday)]
+    );
+    const weekMap = new Map(
+        (weekRows || []).map(row => [
+            String(row.task_date).slice(0, 10),
+            { total: Number(row.total || 0), done: Number(row.done || 0) }
+        ])
+    );
+    const weekTasks = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setUTCDate(monday.getUTCDate() + i);
+        const key = utcDateKey(d);
+        const stat = weekMap.get(key) || { total: 0, done: 0 };
+        weekTasks.push({
+            date: key,
+            weekday: WEEKDAY_LABELS[d.getUTCDay()],
+            total: stat.total,
+            done: stat.done,
+            isToday: key === utcDateKey(now)
+        });
+    }
+
     const totalTasks = Number(taskStats.total || 0);
     const doneTasks = Number(taskStats.done || 0);
     const minutes = Number(taskStats.minutes || 0);
@@ -459,6 +524,7 @@ async function getOverview(req, res) {
             minutes,
             percent: totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0
         },
+        weekTasks,
         activities: activities.map(item => ({
             icon: item.icon || "check",
             text: item.title,
@@ -1052,32 +1118,50 @@ router.post("/ai-assistant/chat", async (req, res, next) => {
     }
 });
 
+// 共用：把学习任务标记为完成（幂等，只做"完成"方向）；/tasks/:id/toggle 与 /practice/submit-set 复用
+async function completeStudyTask(userId, taskId) {
+    const [[task]] = await pool.query(
+        "SELECT id, title, status, estimated_minutes FROM study_tasks WHERE id = ? AND user_id = ?",
+        [taskId, userId]
+    );
+    if (!task) return { ok: false, reason: "not_found" };
+    if (task.status === "done") return { ok: true, taskMarkedDone: false, reason: "already_done" };
+    await pool.query('UPDATE study_tasks SET status = ?, completed_at = NOW() WHERE id = ? AND user_id = ?', [
+        "done",
+        taskId,
+        userId
+    ]);
+    await pool.query(
+        "UPDATE users SET study_hours = study_hours + ?, study_efficiency = LEAST(100, study_efficiency + 1), continuous_days = GREATEST(continuous_days, 1) WHERE id = ?",
+        [Number(task.estimated_minutes || 0) / 60, userId]
+    );
+    await pool.query(
+        `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
+         VALUES (?, 'check', '完成了学习任务，系统已更新学习画像', '刚刚', '闭环更新', '#18b87a', 'rgba(24,184,122,.12)')`,
+        [userId]
+    );
+    return { ok: true, taskMarkedDone: true, taskId: task.id, taskTitle: task.title };
+}
+
 router.post("/tasks/:id/toggle", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
         const taskId = Number(req.params.id);
-        const [[task]] = await pool.query(
-            "SELECT status, estimated_minutes FROM study_tasks WHERE id = ? AND user_id = ?",
-            [taskId, userId]
-        );
+        const [[task]] = await pool.query("SELECT status FROM study_tasks WHERE id = ? AND user_id = ?", [
+            taskId,
+            userId
+        ]);
         if (!task) return res.status(404).json({ success: false, message: "任务不存在" });
-        const nextStatus = task.status === "done" ? "pending" : "done";
-        await pool.query(
-            'UPDATE study_tasks SET status = ?, completed_at = IF(? = "done", NOW(), NULL) WHERE id = ? AND user_id = ?',
-            [nextStatus, nextStatus, taskId, userId]
-        );
-        if (nextStatus === "done") {
+        if (task.status === "done") {
             await pool.query(
-                "UPDATE users SET study_hours = study_hours + ?, study_efficiency = LEAST(100, study_efficiency + 1), continuous_days = GREATEST(continuous_days, 1) WHERE id = ?",
-                [Number(task.estimated_minutes || 0) / 60, userId]
+                'UPDATE study_tasks SET status = ?, completed_at = NULL WHERE id = ? AND user_id = ?',
+                ["pending", taskId, userId]
             );
-            await pool.query(
-                `INSERT INTO activities (user_id, icon, title, time_label, badge, color, soft_color)
-                 VALUES (?, 'check', '完成了学习任务，系统已更新学习画像', '刚刚', '闭环更新', '#18b87a', 'rgba(24,184,122,.12)')`,
-                [userId]
-            );
+            return res.json({ success: true, status: "pending" });
         }
-        res.json({ success: true, status: nextStatus });
+        const result = await completeStudyTask(userId, taskId);
+        if (!result.ok) return res.status(404).json({ success: false, message: "任务不存在" });
+        res.json({ success: true, status: "done" });
     } catch (error) {
         next(error);
     }
@@ -1171,10 +1255,93 @@ router.post("/ai/polish", async (req, res, next) => {
         });
     } catch (error) {
         console.error("[AI美化] 调用失败:", error.message);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: "AI美化服务暂时不可用，请稍后重试",
-            error: error.message 
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 需求描述优化接口 - 使用讯飞星火大模型
+ * 将团队项目中粗糙的需求描述优化为结构化、可落地的需求说明
+ * 未配置 Spark 凭据时，回退为本地生成的结构化需求草稿
+ */
+function buildRequirementFallback(text, title) {
+    const clean = String(text || "").trim();
+    return [
+        `# ${String(title || "需求说明").trim() || "需求说明"}（本地结构化草稿）`,
+        "",
+        "> 当前环境未配置讯飞星火凭据，以下为按规范生成的草稿，可在 .env 配置 XFYUN_API_PASSWORD 后使用 AI 深度优化。",
+        "",
+        "## 需求背景",
+        clean,
+        "",
+        "## 目标用户",
+        "- 使用本功能的核心用户群体（请补充具体角色，如学生/教师/管理员）",
+        "",
+        "## 功能描述",
+        `- 基于原始描述实现：${clean}`,
+        "- 请在此补充功能的具体行为与展示形式",
+        "",
+        "## 交互流程",
+        "1. 用户进入相关页面并触发入口",
+        "2. 系统呈现功能界面并收集必要输入",
+        "3. 系统处理并反馈结果，记录操作日志",
+        "",
+        "## 边界与异常",
+        "- 输入为空或格式不正确时的提示与拦截",
+        "- 网络/服务异常时的降级与重试策略",
+        "- 权限不足时的访问控制",
+        "",
+        "## 验收标准",
+        "- [ ] 核心流程可完整走通",
+        "- [ ] 异常场景有明确提示",
+        "- [ ] 相关数据正确保存并可查询"
+    ].join("\n");
+}
+
+router.post("/ai/requirement", async (req, res, next) => {
+    try {
+        const { text, title } = req.body;
+
+        if (!text || text.trim().length === 0) {
+            return res.status(400).json({ success: false, message: "请先输入需求描述" });
+        }
+
+        const messages = [
+            {
+                role: "system",
+                content: "你是资深软件产品经理，擅长把粗糙的功能需求打磨成结构化、可开发落地的需求说明。请使用 Markdown 输出，包含以下小节：需求背景、目标用户、功能描述（区分新增/修改）、交互流程、边界与异常、验收标准。内容必须基于用户给出的原始需求，具体明确，不要臆造无关功能。"
+            },
+            {
+                role: "user",
+                content: `请优化以下团队项目需求描述${title ? `（需求标题：${title}）` : ""}，输出结构化需求说明：\n\n${text}`
+            }
+        ];
+
+        const result = await llmGateway.chat({
+            messages,
+            temperature: 0.5,
+            maxTokens: 2048,
+            fallbackContent: buildRequirementFallback(text, title)
+        });
+
+        res.json({
+            success: true,
+            data: {
+                original: text,
+                optimized: result.content || "",
+                provider: result.provider === "spark" ? "讯飞星火" : result.provider === "fallback" ? "本地草稿（讯飞星火未配置）" : result.provider
+            }
+        });
+    } catch (error) {
+        console.error("[AI需求优化] 调用失败:", error.message);
+        res.status(500).json({
+            success: false,
+            message: "AI需求优化服务暂时不可用，请稍后重试",
+            error: error.message
         });
     }
 });
@@ -2070,6 +2237,23 @@ router.get("/path/center", async (req, res, next) => {
         const totalMinutes = pathNodes.reduce((sum, node) => sum + Number(node.estimateMinutes || 0), 0);
         const weakCount = pathNodes.filter(node => Number(node.mastery || 0) < 60).length;
 
+        // 学生自定义薄弱点：手动添加的并入，手动忽略的剔除
+        const weakOverrides = await getWeakOverrides(userId);
+        const removedTopics = new Set(weakOverrides.filter(o => o.kind === "removed").map(o => o.topic));
+        const removedIds = new Set(
+            weakOverrides.filter(o => o.kind === "removed").map(o => Number(o.knowledge_id)).filter(Boolean)
+        );
+        const nodeTitles = new Set(pathNodes.map(n => n.title));
+        const autoWeak = pathNodes
+            .filter(n => Number(n.mastery || 0) < 60 && !removedTopics.has(n.title) && !removedIds.has(Number(n.id)))
+            .map(n => ({ title: n.title, knowledgeId: n.id, mastery: n.mastery, subject: n.subject, source: "auto" }));
+        const customWeak = weakOverrides
+            .filter(o => o.kind === "added" && !nodeTitles.has(o.topic))
+            .map(o => ({ title: o.topic, knowledgeId: o.knowledge_id, mastery: null, subject: "自定义", source: "custom" }));
+        const weakDismissed = pathNodes
+            .filter(n => removedTopics.has(n.title) || removedIds.has(Number(n.id)))
+            .map(n => ({ title: n.title, knowledgeId: n.id, mastery: n.mastery, subject: n.subject, source: "auto" }));
+
         res.json({
             success: true,
             generatedByAgent: true,
@@ -2090,6 +2274,8 @@ router.get("/path/center", async (req, res, next) => {
             tasks,
             courses: [],
             notes: [],
+            weakPoints: [...customWeak, ...autoWeak],
+            weakDismissed,
             profileContext,
             personalization: [
                 ...profileContext.evidence,
@@ -2119,6 +2305,69 @@ router.get("/path/center", async (req, res, next) => {
                 }))
             }
         });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// POST /api/app/path/weak-overrides
+// 学生自定义薄弱点：add=手动添加，dismiss=忽略自动判定，restore=恢复忽略项，removeAdded=删除手动添加
+router.post("/path/weak-overrides", async (req, res, next) => {
+    try {
+        const userId = req.user.id || 1;
+        const action = String(req.body?.action || "add");
+        const topic = String(req.body?.topic || "").trim().slice(0, 100);
+        const knowledgeId = req.body?.knowledgeId ? Number(req.body.knowledgeId) : null;
+        if (!topic) return res.status(400).json({ success: false, message: "请输入知识点名称" });
+        await ensureWeakOverridesSchema();
+
+        if (action === "add") {
+            let matchedId = knowledgeId;
+            if (!matchedId) {
+                const [[kp]] = await pool
+                    .query("SELECT id FROM knowledge_points WHERE title LIKE ? ORDER BY mastery ASC LIMIT 1", [
+                        `%${topic}%`
+                    ])
+                    .catch(() => [[]]);
+                matchedId = kp?.id || null;
+            }
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'removed'", [userId, topic])
+                .catch(() => {});
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'added'", [userId, topic])
+                .catch(() => {});
+            await pool
+                .query("INSERT INTO user_weak_overrides (user_id, topic, knowledge_id, kind) VALUES (?, ?, ?, 'added')", [
+                    userId,
+                    topic,
+                    matchedId
+                ])
+                .catch(() => {});
+        } else if (action === "dismiss") {
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'added'", [userId, topic])
+                .catch(() => {});
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'removed'", [userId, topic])
+                .catch(() => {});
+            await pool
+                .query("INSERT INTO user_weak_overrides (user_id, topic, knowledge_id, kind) VALUES (?, ?, ?, 'removed')", [
+                    userId,
+                    topic,
+                    knowledgeId
+                ])
+                .catch(() => {});
+        } else if (action === "restore") {
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'removed'", [userId, topic])
+                .catch(() => {});
+        } else if (action === "removeAdded") {
+            await pool
+                .query("DELETE FROM user_weak_overrides WHERE user_id = ? AND topic = ? AND kind = 'added'", [userId, topic])
+                .catch(() => {});
+        }
+        res.json({ success: true, message: "薄弱点已更新，重新生成路径后生效" });
     } catch (error) {
         next(error);
     }
@@ -2291,6 +2540,26 @@ router.post("/path/generate", async (req, res, next) => {
                     ]
                 );
             }
+            // 学生手动添加的薄弱点：今天就安排「学习 + 练习」任务
+            const addedHints = (await getWeakOverrides(userId).catch(() => [])).filter(o => o.kind === "added");
+            let hintOrder = days.length + 1;
+            for (const hint of addedHints.slice(0, 5)) {
+                if (days.some(d => String(d.task?.title || "").includes(hint.topic))) continue;
+                for (const [title, subtitle, iconName, minutes] of [
+                    [`课程学习：${hint.topic}`, "你手动标记的薄弱点，已优先安排", "book", 25],
+                    [`基础练习：${hint.topic}`, "3 道基础题 · 做完后掌握度会更新", "exam", 20]
+                ]) {
+                    await connection.query(
+                        `INSERT INTO study_tasks
+                            (user_id, knowledge_id, title, subtitle, icon, estimated_minutes, status,
+                             task_date, sort_order, color, soft_color, source)
+                         VALUES (?, ?, ?, ?, ?, ?, 'pending', CURDATE(), ?, '#ff6b35', 'rgba(255,107,53,.12)',
+                            'agent-learning-loop')`,
+                        [userId, hint.knowledge_id || null, title, subtitle, iconName, minutes, hintOrder]
+                    );
+                    hintOrder += 1;
+                }
+            }
             await connection.commit();
         } catch (dbErr) {
             await connection.rollback();
@@ -2460,7 +2729,7 @@ router.get("/account/dashboard", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
         const [[user]] = await pool.query(
-            `SELECT id, username, nickname, email, role, interests,
+            `SELECT id, username, nickname, email, role, interests, avatar,
                     study_hours, completed_courses, knowledge_mastery,
                     correct_answers, study_efficiency, continuous_days,
                     created_at
@@ -2960,7 +3229,7 @@ router.post("/report/generate", async (req, res, next) => {
 router.post("/practice/submit-set", async (req, res, next) => {
     try {
         const userId = req.user.id || 1;
-        const { mode = "practice", answers = {}, learningGoalId = null } = req.body || {};
+        const { mode = "practice", answers = {}, learningGoalId = null, taskId = null } = req.body || {};
         if (learningGoalId) {
             const LearningLoopService = require("../core/LearningLoopService");
             const learningLoop = new LearningLoopService(pool);
@@ -3041,7 +3310,25 @@ router.post("/practice/submit-set", async (req, res, next) => {
             sourceType: mode === "exam" ? "exam" : mode === "test" ? "test" : "practice",
             tags: [mode === "exam" ? "考试" : mode === "test" ? "阶段测试" : "练习", "错题", "复盘"]
         });
-        res.json({ success: true, mode, total: rows.length, correct, score, details });
+        // 练习联动：携带任务上下文且得分达标时，自动完成对应学习任务（失败不阻塞提交）
+        let taskResult = null;
+        if (taskId && score >= 60) {
+            try {
+                taskResult = await completeStudyTask(userId, Number(taskId));
+            } catch (e) {
+                taskResult = null;
+            }
+        }
+        res.json({
+            success: true,
+            mode,
+            total: rows.length,
+            correct,
+            score,
+            details,
+            taskMarkedDone: Boolean(taskResult?.taskMarkedDone),
+            task: taskResult?.taskMarkedDone ? { id: taskResult.taskId, title: taskResult.taskTitle } : null
+        });
     } catch (error) {
         next(error);
     }

@@ -68,6 +68,7 @@ const appRoutes = [
   '/intelligence',
   '/knowledge-graph',
   '/concept-canvas',
+  '/database',
 ];
 
 /**
@@ -84,16 +85,21 @@ const appRoutes = [
  * @param {string}              appHtml - SPA 入口 HTML 文件路径
  */
 function registerWebRoutes(app, appHtml) {
+  // HTML 入口禁用缓存：HTML 引用带版本号的 JS，必须每次拿到最新 HTML
+  // 否则浏览器缓存旧 HTML 后，JS 版本号升级不会生效（用户永远加载旧脚本）
+  const sendAppHtml = (req, res) => {
+    res.set('Cache-Control', 'no-store, must-revalidate');
+    res.sendFile(appHtml);
+  };
+
   // 首页（无需登录）
-  app.get('/', (req, res) => res.sendFile(appHtml));
+  app.get('/', sendAppHtml);
 
   // 直接访问 HTML 文件
-  app.get('/html/app.html', (req, res) => res.sendFile(appHtml));
+  app.get('/html/app.html', sendAppHtml);
 
   // SPA 子页面（需要登录）
-  appRoutes.forEach((route) =>
-    app.get(route, authenticateJWT, (req, res) => res.sendFile(appHtml))
-  );
+  appRoutes.forEach((route) => app.get(route, authenticateJWT, sendAppHtml));
 
   // Favicon（避免不必要的 404 日志）
   app.get('/favicon.ico', (req, res) => res.status(204).end());
@@ -113,7 +119,7 @@ function registerWebRoutes(app, appHtml) {
     }
 
     // 其他请求：返回 SPA 入口（前端路由接管）
-    res.sendFile(appHtml);
+    sendAppHtml(req, res);
   });
 }
 

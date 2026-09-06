@@ -200,13 +200,13 @@ class PathTool {
             });
 
             return weakPoints.map(p => ({
-                id: Number(p.id),
+                id: p.id ? Number(p.id) : null,
                 title: p.title,
                 subject: p.subject,
-                realMastery: masteryMap[Number(p.id)]?.mastery || p.mastery || 0,
-                trend: masteryMap[Number(p.id)]?.trend || "unknown",
-                errorCount: masteryMap[Number(p.id)]?.errorCount || 0,
-                prerequisites: prereqMap[Number(p.id)] || []
+                realMastery: p.id ? masteryMap[Number(p.id)]?.mastery || p.mastery || 0 : p.mastery || 20,
+                trend: p.id ? masteryMap[Number(p.id)]?.trend || "unknown" : "custom",
+                errorCount: p.id ? masteryMap[Number(p.id)]?.errorCount || 0 : 0,
+                prerequisites: p.id ? prereqMap[Number(p.id)] || [] : []
             }));
         }
 

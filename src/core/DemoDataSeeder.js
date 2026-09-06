@@ -503,15 +503,25 @@ async function ensureSoftwareEngineeringKnowledgeBase(pool) {
             if (!points.length) continue;
             const knowledgeId = points[0].id;
             const [existing] = await pool.query("SELECT id FROM questions WHERE question = ? LIMIT 1", [item.question]);
+            // questions 表同时承载基础考试结构（type/content/answer/options NOT NULL）
+            // 与知识库练习结构（knowledge_id/question/correct_answer/options_json），两套必填列都要填
+            const optionsJson = JSON.stringify(item.options);
             if (existing.length) {
                 await pool.query(
                     `UPDATE questions
-                     SET knowledge_id = ?, correct_answer = ?, options_json = ?, difficulty = ?, source_name = ?, source_url = ?, is_active = 1
+                     SET knowledge_id = ?, question = ?, content = ?, type = 'single',
+                         correct_answer = ?, answer = ?, options_json = ?, options = ?,
+                         difficulty = ?, subject = 'software_engineering',
+                         source_name = ?, source_url = ?, is_active = 1
                      WHERE id = ?`,
                     [
                         knowledgeId,
+                        item.question,
+                        item.question,
                         item.answer,
-                        JSON.stringify(item.options),
+                        item.answer,
+                        optionsJson,
+                        optionsJson,
                         item.difficulty,
                         "EduSmart 默认知识库",
                         `/practice?knowledge=${knowledgeId}`,
@@ -520,13 +530,16 @@ async function ensureSoftwareEngineeringKnowledgeBase(pool) {
                 );
             } else {
                 await pool.query(
-                    `INSERT INTO questions (knowledge_id, question, correct_answer, options_json, difficulty, source_name, source_url, is_active)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+                    `INSERT INTO questions (knowledge_id, question, content, type, correct_answer, answer, options_json, options, difficulty, subject, source_name, source_url, is_active)
+                     VALUES (?, ?, ?, 'single', ?, ?, ?, ?, ?, 'software_engineering', ?, ?, 1)`,
                     [
                         knowledgeId,
                         item.question,
+                        item.question,
                         item.answer,
-                        JSON.stringify(item.options),
+                        item.answer,
+                        optionsJson,
+                        optionsJson,
                         item.difficulty,
                         "EduSmart 默认知识库",
                         `/practice?knowledge=${knowledgeId}`
@@ -678,11 +691,11 @@ async function ensureQuestionData(pool) {
     await ensureCrudSchema(pool);
     await ensureExamData(pool);
     await pool.query(
-        `UPDATE questions q
-         JOIN knowledge_nodes k ON q.node_id = k.id
-         SET q.subject = k.subject
-         WHERE q.node_id IS NOT NULL
-           AND (q.subject IS NULL OR q.subject = '' OR q.subject <> k.subject)`
+        `UPDATE questions
+         SET subject = (SELECT k.subject FROM knowledge_nodes k WHERE k.id = questions.node_id)
+         WHERE node_id IS NOT NULL
+           AND (SELECT k.subject FROM knowledge_nodes k WHERE k.id = questions.node_id) IS NOT NULL
+           AND (subject IS NULL OR subject = '' OR subject <> (SELECT k.subject FROM knowledge_nodes k WHERE k.id = questions.node_id))`
     );
 
     const minQuestionCount = 320;

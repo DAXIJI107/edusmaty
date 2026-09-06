@@ -2,6 +2,7 @@ const axios = require("axios");
 const config = require("../../config");
 const LocalLlmClient = require("./LocalLlmClient");
 const aiInteractionStore = require("./AiInteractionStore");
+const { getUserBinding } = require("./UserBindingContext");
 
 class LlmGateway {
     constructor(options = {}) {
@@ -26,6 +27,18 @@ class LlmGateway {
 
     async chat({ messages, temperature, maxTokens, fallbackContent = "" } = {}) {
         const startedAt = Date.now();
+        // ① 用户在「API 绑定机器人」绑定的模型优先（全站 AI 功能自动生效）
+        const userBinding = getUserBinding();
+        if (userBinding && userBinding.baseUrl && userBinding.apiKey && userBinding.modelName) {
+            try {
+                const result = await this.chatUserBinding({ messages, temperature, maxTokens });
+                this.logInteraction({ messages, result, startedAt, status: "success" });
+                return result;
+            } catch (ubError) {
+                // 用户绑定调用失败 → 降级到系统默认链路
+                console.warn("[LlmGateway] 用户绑定模型调用失败，降级默认链路:", ubError.message);
+            }
+        }
         try {
             let result;
             if (this.provider === "spark") {
@@ -64,6 +77,45 @@ class LlmGateway {
     async chatText(options = {}) {
         const result = await this.chat(options);
         return result.content || "";
+    }
+
+    /**
+     * 使用当前用户绑定的模型（OpenAI 兼容格式）
+     * provider 返回用户填写的服务商名称，前端徽标可直接展示
+     */
+    async chatUserBinding({ messages, temperature, maxTokens } = {}) {
+        const binding = getUserBinding();
+        if (!binding) throw new Error("当前请求未携带用户模型绑定");
+        const base = String(binding.baseUrl).replace(/\/+$/, "");
+        const url = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+        const response = await axios.post(
+            url,
+            {
+                model: binding.modelName,
+                messages,
+                stream: false,
+                temperature: Number(temperature ?? 0.65),
+                max_tokens: Number(maxTokens || 2048)
+            },
+            {
+                timeout: Number(this.config.llm.local.timeoutMs || 60000),
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${binding.apiKey}`
+                }
+            }
+        );
+        return {
+            provider: binding.providerName,
+            model: binding.modelVersion ? `${binding.modelName}@${binding.modelVersion}` : binding.modelName,
+            content:
+                response.data?.choices?.[0]?.message?.content ||
+                response.data?.choices?.[0]?.delta?.content ||
+                response.data?.content ||
+                "",
+            usage: response.data?.usage || null,
+            raw: response.data
+        };
     }
 
     async chatSpark({ messages, temperature, maxTokens } = {}) {

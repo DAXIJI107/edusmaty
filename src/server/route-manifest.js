@@ -80,6 +80,7 @@ const _modules = {
   '../modules/admin': require('../modules/admin'),
   '../modules/config': require('../modules/config'),
   '../modules/supervisor': require('../modules/supervisor'),
+  '../modules/database': require('../modules/database'),
   // 会员与通知
   '../modules/membership': require('../modules/membership'),
   '../modules/notifications': require('../modules/notifications'),
@@ -95,6 +96,7 @@ const _modules = {
   // 集成
   '../modules/obsidian': require('../modules/obsidian'),
   '../modules/paper-scan': require('../modules/paper-scan'),
+  '../modules/api-binding': require('../modules/api-binding'),
   '../modules/report': require('../modules/report'),
   '../modules/iot': require('../modules/iot'),
   // 兼容旧路由
@@ -167,6 +169,7 @@ module.exports = [
   ['/api/admin', _modules['../modules/admin']],
   ['/api/config', _modules['../modules/config']],
   ['/api/supervisor', _modules['../modules/supervisor']],
+  ['/api/database', _modules['../modules/database']],
 
   // ========== 会员与通知 ==========
   ['/api/membership', _modules['../modules/membership']],
@@ -186,6 +189,7 @@ module.exports = [
   // ========== 集成 ==========
   ['/api/obsidian', _modules['../modules/obsidian']],
   ['/api/paper-scan', _modules['../modules/paper-scan']],
+  ['/api/api-binding', _modules['../modules/api-binding']],
   ['/api/report', _modules['../modules/report']],
   ['/api/iot', _modules['../modules/iot']],
 

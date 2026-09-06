@@ -237,6 +237,20 @@ const STOP_WORDS = new Set([
 const BM25_K1 = 1.2; // 词频饱和度参数
 const BM25_B = 0.75; // 文档长度归一化参数
 
+// 单字中文停用字集合：用于过滤"是什/国的/的首"这类跨词边界的虚词 n-gram（仅用于实词门控，不影响 BM25 打分）
+const STOP_CHARS = new Set(
+    [...STOP_WORDS].filter(w => w.length === 1 && /[\u4e00-\u9fa5]/.test(w))
+);
+
+// 提取查询中的实词 token：中文 n-gram 中若包含任一停用单字（如 的/是/了/在/和/都/就/吗/哪/什么）则视为虚词片段
+// 用途：BM25 排序后做覆盖门控，防止"错因是什么"之类片段靠虚词 bigram 的高 IDF 误命中
+function contentTokensOf(queryTokens) {
+    const content = queryTokens.filter(tok =>
+        /[\u4e00-\u9fa5]/.test(tok) ? ![...tok].some(ch => STOP_CHARS.has(ch)) : true
+    );
+    return content;
+}
+
 // ======================== 分词器 ========================
 /**
  * 增强版分词器：优先字典匹配 + bigram 回退
@@ -538,12 +552,20 @@ class RagSearchService {
         );
 
         // BM25 评分 + 排序
+        // 实词门控：候选片段必须至少包含一个查询实词（不含停用单字的中文 n-gram 或英文词），
+        // 防止"错因是什么？"这类片段仅靠虚词 bigram（是什/的什）的高 IDF 误命中
+        const gateTokens = contentTokensOf(queryTokens);
         const ranked = rows
             .map(row => ({
                 ...row,
                 score: scoreChunkEnhanced(row, query, queryTokens, this.stats)
             }))
-            .filter(row => row.score > 0.3)
+            .filter(row => {
+                if (row.score <= 0.3) return false;
+                if (!gateTokens.length) return true;
+                const hay = `${row.chunk_text || ""} ${row.knowledge_point || ""} ${row.course || ""} ${row.title || ""}`.toLowerCase();
+                return gateTokens.some(tok => hay.includes(tok));
+            })
             .sort((a, b) => b.score - a.score)
             .slice(0, Math.max(1, Number(limit || 5)));
 
@@ -568,7 +590,7 @@ class RagSearchService {
             url: item.url || "",
             course: item.course,
             knowledgePoint: item.knowledge_point,
-            snippet: String(item.chunk_text || "").slice(0, 300),
+            snippet: String(item.chunk_text || "").slice(0, 420),
             score: item.score,
             relevance: Math.min(1, Number((item.score / 8).toFixed(2))),
             source: {
